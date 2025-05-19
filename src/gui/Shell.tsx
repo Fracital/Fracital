@@ -2,6 +2,13 @@ import { Bars3Icon, MagnifyingGlassIcon, XMarkIcon, ArrowsPointingOutIcon, Arrow
 import { useEffect, useState, useRef } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 
+declare global {
+    interface Window {
+        $scramjet: any;
+        ScramjetController: any;
+    }
+}
+
 const Shell = () => {
     const [proxy, setProxy] = useState<"uv" | "sj">("uv");
 
@@ -18,10 +25,8 @@ const Shell = () => {
 
     const [isFullscreen, setIsFullscreen] = useState(false);
 
-    const [uvVersion, setUvVersion] = useState("v3.2.7");
-    const [sjVersion, setSjVersion] = useState("v3.2.7");
-
-    // window.$scramjet?.version
+    const [uvVersion] = useState("v3.2.7");
+    const [sjVersion] = useState(window.$scramjet.version.version);
 
     const searchHandler = (query: string) => {
         if (query.length > 0) {

@@ -6,6 +6,60 @@ import Shell from './gui/Shell';
 import Home from './views/Home';
 import Settings from './views/Settings';
 import ExternalSite from './views/ExternalSite';
+import { BareMuxConnection } from '@mercuryworkshop/bare-mux';
+
+const regSw = async () => {
+    await navigator.serviceWorker.getRegistrations().then(registrations => {
+        registrations.forEach(registration => {
+            registration.unregister()
+            .catch(error => {
+                console.error('Error unregistering service worker:', error);
+            })
+        })
+    })
+    const connection = new BareMuxConnection("/baremux/worker.js");
+    await connection.setTransport("/epoxy/index.mjs", [{ wisp: `${window.location.origin.replace(/^https?:\/\//, 'ws://')}/wisp/` }]);
+    const scramjet = new window.ScramjetController({
+        prefix: "/service/",
+        files: {
+            wasm: "/scramjet/scramjet.wasm.wasm",
+            worker: "/scramjet/scramjet.worker.js",
+            client: "/scramjet/scramjet.client.js",
+            shared: "/scramjet/scramjet.shared.js",
+            sync: "/scramjet/scramjet.sync.js",
+        },
+        defaultFlags: {
+            rewriterLogs: false,
+        },
+        codec: {
+            encode: `
+                if (!url) return Promise.resolve(url);
+                let result = "";
+	            let len = url.length;
+	                for (let i = 0; i < len; i++) {
+	                    const char = url[i];
+	                    result += i % 2 ? String.fromCharCode(char.charCodeAt(0) ^ 2) : char;
+                    }
+	            return encodeURIComponent(result);
+            `,
+            decode: `
+                if (!url) return Promise.resolve(url);
+	            url = decodeURIComponent(url);
+	            let result = "";
+	            let len = url.length;
+                for (let i = 0; i < len; i++) {
+	                const char = url[i];
+	                result += i % 2 ? String.fromCharCode(char.charCodeAt(0) ^ 2) : char;
+	            }
+                return result;
+            `,
+        }
+    });
+    scramjet.init()
+    navigator.serviceWorker.register("/uv/sw.js", { scope: "/uv/service/" })
+    navigator.serviceWorker.register("/scramjet-sw.js", { scope: '/service/' })
+}
+regSw();
 
 const App = () => {
     return (

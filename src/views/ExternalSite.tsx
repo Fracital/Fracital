@@ -11,12 +11,12 @@ const ExternalSite = () => {
 
     useEffect(() => {
         if (query) {
-            setUrl(window.origin + "/uv/service/" + XOR.encode(query));
+            setUrl(localStorage.getItem("proxy") === "sj" ? "/service/" + XOR.encode(query) : "/uv/service/" + XOR.encode(query));
         }
     }, [query]);
 
     return (
-        <iframe src={url}></iframe>
+        <iframe className="w-full h-full" src={url}></iframe>
     );
 }
 
