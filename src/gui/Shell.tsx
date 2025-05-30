@@ -1,6 +1,10 @@
-import { Bars3Icon, MagnifyingGlassIcon, XMarkIcon, ArrowsPointingOutIcon, ArrowsPointingInIcon, ChevronUpDownIcon } from "@heroicons/react/24/solid";
+import { Cog6ToothIcon, MagnifyingGlassIcon, XMarkIcon, ArrowsPointingOutIcon, ArrowsPointingInIcon, ChevronUpDownIcon, RectangleStackIcon } from "@heroicons/react/24/solid";
 import { useEffect, useState, useRef } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useLocation } from "react-router-dom";
+import { navigationEvent } from "../libs/eventBus";
+import { ShellButton } from "../components/ShellButton";
+import { useTabsStore } from "../store";
+import { createId } from "@paralleldrive/cuid2";
 
 declare global {
     interface Window {
@@ -10,20 +14,21 @@ declare global {
 }
 
 const Shell = () => {
+    const navigate = useNavigate();
+    const newTab = useTabsStore(state => state.newTab)
+    const currentTab = useTabsStore(state => state.currentTab)
+    const location = useLocation();
+
     const [proxy, setProxy] = useState<"uv" | "sj">("uv");
 
-    const navigate = useNavigate();
-    const [searchParams] = useSearchParams();
     const searchRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLInputElement>(null);
     const uvRef = useRef<HTMLDivElement>(null);
     const sjRef = useRef<HTMLDivElement>(null);
 
-    const [query, setQuery] = useState(searchParams.get("q") || "");
-    const [search, setSearch] = useState(query || "");
     const [searchFocused, setSearchFocused] = useState(false);
-
-    const [isFullscreen, setIsFullscreen] = useState(false);
+    const [hasQuery, setHasQuery] = useState(currentTab?.url || false);
+    const [fullscreen, setFullscreen] = useState<boolean>(false)
 
     const [uvVersion] = useState("v3.2.7");
     const [sjVersion] = useState(window.$scramjet.version.version);
@@ -31,21 +36,49 @@ const Shell = () => {
     const searchHandler = (query: string) => {
         if (query.length > 0) {
             // navigate("/?q=" + encodeURI(query));
-            // setQuery(query);
-            navigate("/es", {
-                state: {
-                    q: query
-                }
-            })
+            // if (isUrl(query, { lenient: true })) {
+            //     console.log("URL detected");
+            // } else {
+            //     console.log("URL not detected");
+            // }
+
+            // try {
+            //     new URL(query);
+                navigationEvent({
+                    url: query,
+                    icon: null,
+                    title: "New Tab"
+                });
+                setHasQuery(true);
+            // } catch (e) {
+            //     navigate("/es", {
+            //         state: {
+            //             search: query
+            //         }
+            //     })
+            // }
         }
     }
 
     const clearSearch = () => {
-        setQuery("");
-        setSearch("");
+        setHasQuery(false);
         inputRef.current?.blur();
+        if (inputRef.current) {
+            inputRef.current.value = "";
+        }
+        navigationEvent({
+            url: "newtab",
+            title: "New Tab",
+            icon: null
+        })
         navigate("/");
     }
+
+    useEffect(() => {
+        if (inputRef.current) {
+            inputRef.current.value = currentTab?.url || "newtab";
+        }
+    }, [])
 
     const handleProxyChange = (e: Event) => {
         const customEvent = e as CustomEvent;
@@ -74,7 +107,7 @@ const Shell = () => {
         <div className={"flex justify-between gap-2.5 p-3 rounded-xl bg-secondary inset-shadow-primary duration-200" + " " + `
             ${searchFocused ? "p-4" : "p-3"}
         `}>
-            <div className="flex items-center justify-start">
+            <div className="flex items-center justify-start gap-1.5">
                 <Link to="/" className="group cursor-pointer" onMouseDown={() => clearSearch()}>
                     <svg viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg" className="size-9 group-hover:-translate-y-1 duration-150 pointer-events-none">
                         <circle cx="64" cy="64" r="64" fill="#FB74FE"/>
@@ -82,45 +115,78 @@ const Shell = () => {
                         <path d="M51 87V41H81V51.5H62.1278V59.75H78.9222L76.5 70.25H62.1278V85L51 87Z" fill="#FFE866"/>
                     </svg>
                 </Link>
+                <div className={"flex items-center gap-1.5 duration-150" + " " + `
+                    ${location.pathname === "/" ? "opacity-0 pointer-events-none -translate-x-3" : ""}
+                `}>
+                    <span className="font-black text-xl">/</span>
+                    <span className={"font-semibold text-xl duration-150" + " " + `
+                        ${location.pathname === "/" ? "opacity-0 -translate-x-5" : ""}
+                    `}>
+                        {
+                            location.pathname === "/settings" && "Settings"
+                        }
+                        {
+                            location.pathname === "/games" && "Games"
+                        }
+                    </span>
+                </div>
             </div>
             <div className="flex items-center justify-center gap-1.5">
                 <XMarkIcon className={"size-6 text-text-secondary hover:text-text-primary stroke-current stroke-1 duration-150 cursor-pointer z-10" + " " + `
-                    ${query.length > 0 ? "" : "translate-x-2 opacity-0 duration-150 pointer-events-none"}
+                    ${hasQuery ? "" : "translate-x-2 opacity-0 duration-150 pointer-events-none"}
                 `} onMouseDown={() => clearSearch()}/>
-                <div ref={searchRef} className={"flex items-center bg-tertiary gap-1 rounded-lg cursor-text duration-150" + " " + `
+                <div ref={searchRef} className={"flex items-center bg-tertiary h-[48px] gap-1 rounded-lg cursor-text duration-150" + " " + `
                     ${searchFocused ? "inset-shadow-accent" : "inset-shadow-secondary"}
-                `}>
-                    <div className="relative flex items-center justify-start sm:w-[30rem] pl-3 z-10">
-                        <span className={"absolute font-semibold ease-in-out pointer-events-none w-max" + " " + `
-                            ${search.length > 0 ? "opacity-0 -translate-x-1 duration-100" : "opacity-100 duration-150"}
+                `} onMouseDown={() => {
+                    if (document.activeElement !== inputRef.current) {
+                        setSearchFocused(true);
+                        if (inputRef.current) {
+                            inputRef.current.focus();
+                        }
+
+                    }
+                }}>
+                    <div className="relative flex items-center justify-start sm:w-[30rem] h-full z-10">
+                        <span className={"absolute left-3 font-semibold ease-in-out pointer-events-none w-max" + " " + `
+                            ${hasQuery ? "opacity-0 -translate-x-1 duration-100" : "opacity-100 duration-150"}
                             ${searchFocused ? "text-text-primary" : "text-text-secondary"}
                         `}>Search or enter a URL</span>
-                        <input ref={inputRef} type="search" className="size-full text-text-secondary font-medium focus:outline-none focus:ring-0 z-10"
+                        <input id="input" ref={inputRef} type="text" className="size-full pl-3 text-text-secondary font-medium focus:outline-none focus:ring-0 z-10"
                         onFocus={() => {
                             setSearchFocused(true);
                         }}
                         onBlur={() => {
                             setSearchFocused(false);
                         }}
-                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-                            setSearch(e.target.value);
-                        }} value={search}
+                        onChange={() => {
+                            setHasQuery(true);
+                        }}
                         onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => {
                             if (e.key === "Enter") {
-                                searchHandler(search);
+                                if (typeof inputRef.current?.value === "string") {
+                                    searchHandler(inputRef.current?.value);
+                                }
                             }
                         }} />
                     </div>
                     <div className="p-1.5">
                         <button className="group flex items-center justify-center p-2 rounded-lg bg-primary hover:bg-accent duration-75 cursor-pointer z-20"
-                        onClick={() => searchHandler(search)}>
+                        onClick={() => {
+                            if (typeof inputRef.current?.value === "string") {
+                                console.log(inputRef.current.value);
+                                searchHandler(inputRef.current?.value);
+                            }
+                        }}>
                             <MagnifyingGlassIcon className="size-5 text-text-tertiary group-hover:text-text-primary stroke-current stroke-1 duration-75 pointer-events-none" />
                         </button>
                     </div>
                 </div>
             </div>
-            <div className="flex items-center justify-end gap-1.5">
-                <div className="group relative flex justify-center items-center min-h-5 p-2 px-3 gap-1 rounded-full bg-primary cursor-pointer duration-150" onMouseDown={() => {
+            <div className="flex items-center justify-end gap-2.5">
+                <div className={"group relative flex justify-center items-center min-h-5 p-2 px-3 gap-1 rounded-full bg-primary cursor-pointer duration-200" + " " + `
+                    shadow-[inset_0_0_0_2px_#ffffff18_,_0_0_4px_2px_#00000040]
+                    hover:shadow-[inset_0_0_0_2px_#fb74fe]
+                `} onMouseDown={() => {
                     window.dispatchEvent(new CustomEvent("proxy-change", {
                         detail: {
                             proxy: proxy === "uv" ? "sj" : "uv"
@@ -145,27 +211,40 @@ const Shell = () => {
                     </div>
                     <ChevronUpDownIcon className="size-5 text-text-tertiary group-hover:text-text-secondary stroke-current stroke-1 cursor-pointer duration-150" />
                 </div>
-                <button className="relative flex items-center justify-center text-text-secondary hover:text-text-primary size-7">
-                    <ArrowsPointingInIcon className={"absolute size-full text-current stroke-current stroke-1 cursor-pointer duration-150" + " " + `
-                        ${isFullscreen ? "" : "opacity-0 pointer-events-none"}
-                    `} onMouseDown={() => {
-                        setIsFullscreen(false);
-                        if(document.fullscreenElement) {
-                            document.exitFullscreen();
-                        }
-                    }}/>
-                    <ArrowsPointingOutIcon className={"absolute size-full text-current stroke-current stroke-1 cursor-pointer duration-150" + " " + `
-                        ${isFullscreen ? "opacity-0 pointer-events-none" : ""}
-                    `} onMouseDown={() => {
-                        setIsFullscreen(true);
-                        if(document.body) {
+                <ShellButton title={["Enter Fullscreen", "Exit Fullscreen"]} type="toggle"
+                icon={fullscreen ? [
+                    <ArrowsPointingInIcon className="size-6 text-current stroke-current stroke-0.5" />,
+                    <ArrowsPointingOutIcon className="size-6 text-current stroke-current stroke-0.5" />
+                ]: [
+                    <ArrowsPointingOutIcon className="size-6 text-current stroke-current stroke-0.5" />,
+                    <ArrowsPointingInIcon className="size-6 text-current stroke-current stroke-0.5" />
+                ]}
+                registerListeners={(toggleState) => {
+                    const handleFullscreenChange = () => {
+                        toggleState(document.fullscreenElement ? 1 : 0)
+                    }
+                    window.addEventListener("fullscreenchange", handleFullscreenChange)
+                    return () => {
+                        window.removeEventListener("fullscreenchange", handleFullscreenChange)
+                    }
+                }}
+                onClick={() => {
+                    if(document.fullscreenElement) {
+                        document.exitFullscreen()
+                    } else {
+                        if (document.body) {
                             document.body.requestFullscreen().catch((err) => {
                                 console.error("Error attempting to enable full-screen mode:", err);
-                            });
+                            })
                         }
-                    }}/>
-                </button>
-                <Bars3Icon className="size-7 text-text-secondary hover:text-text-primary stroke-current stroke-1 cursor-pointer duration-150" />
+                    }
+                }}></ShellButton>
+                <ShellButton title="Settings" type="icon" icon={<Cog6ToothIcon className="size-6" />} onClick={() => newTab({
+                    id: createId(),
+                    title: "Settings",
+                    url: "settings",
+                    icon: <Cog6ToothIcon className="size-5" />
+                })}></ShellButton>
             </div>
         </div>
     );

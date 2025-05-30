@@ -1,4 +1,4 @@
-export const XOR = {
+const XOR = {
     encode(input: string): string {
         let result = "";
         let len = input.length;
@@ -20,3 +20,5 @@ export const XOR = {
         return result;
     }
 }
+
+export default XOR;
