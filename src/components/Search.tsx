@@ -4,21 +4,23 @@ import type { TabProps } from "./Tab";
 import { useTabsStore } from "../store";
 import { navigationEvent } from "../libs/eventBus";
 import { useNavigate } from "react-router-dom";
+import { createId } from "@paralleldrive/cuid2";
 
 interface SearchProps {
-    tab: TabProps
+    tab?: TabProps
 }
 
 export const Search = ({ tab }: SearchProps) => {
     const navigate = useNavigate()
     const tabs = useTabsStore(state => state.tabs)
     const currentTab = tabs.find(tab => tab.current === true);
+    const newTab = useTabsStore(state => state.newTab)
 
     const searchRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLInputElement>(null);
 
     const [searchFocused, setSearchFocused] = useState(false);
-    const [hasQuery, setHasQuery] = useState(currentTab?.url || false);
+    const [hasQuery, setHasQuery] = useState(tab?.url || false);
 
     const searchHandler = (query: string) => {
         if (query.length > 0) {
@@ -31,12 +33,22 @@ export const Search = ({ tab }: SearchProps) => {
 
             // try {
             //     new URL(query);
-                navigationEvent({
-                    url: query,
-                    icon: null,
-                    title: "New Tab"
-                });
-                setHasQuery(true);
+                if (tabs.length < 1) {
+                    newTab({
+                        title: "New Tab",
+                        id: createId(),
+                        url: query,
+                        current: true
+                    })
+                    setHasQuery(true);
+                } else {
+                    navigationEvent({
+                        url: query,
+                        icon: null,
+                        title: "New Tab"
+                    });
+                    setHasQuery(true);
+                }
             // } catch (e) {
             //     navigate("/es", {
             //         state: {
@@ -49,7 +61,9 @@ export const Search = ({ tab }: SearchProps) => {
 
     useEffect(() => {
         if (inputRef.current) {
-            inputRef.current.value = currentTab?.url || "newtab";
+            if (tab) {
+                inputRef.current.value = currentTab?.url || "newtab";
+            }
         }
     }, [])
 
@@ -70,7 +84,7 @@ export const Search = ({ tab }: SearchProps) => {
     return (
         <div className={"flex items-center justify-center gap-1.5" + " " + `
             ${
-                tab.current ? "" : "absolute opacity-0 pointer-events-none"
+                tabs && tabs.length > 0 && tab && tab.current !== true ? "absolute opacity-0 pointer-events-none" : ""
             }
         `}>
             <XMarkIcon className={"size-6 text-text-secondary hover:text-text-primary stroke-current stroke-1 duration-150 cursor-pointer z-10" + " " + `
@@ -89,7 +103,7 @@ export const Search = ({ tab }: SearchProps) => {
             }}>
                 <div className="relative flex items-center justify-start sm:w-[30rem] h-full z-10">
                     <span className={"absolute left-3 font-semibold ease-in-out pointer-events-none w-max" + " " + `
-                        ${hasQuery ? "opacity-0 -translate-x-1 duration-100" : "opacity-100 duration-150"}
+                        ${hasQuery ? "opacity-0 -translate-x-1 duration-100" : "duration-150"}
                         ${searchFocused ? "text-text-primary" : "text-text-secondary"}
                     `}>Search or enter a URL</span>
                     <input id="input" ref={inputRef} type="text" className="size-full pl-3 text-text-secondary font-medium focus:outline-none focus:ring-0 z-10"

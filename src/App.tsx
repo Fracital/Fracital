@@ -134,12 +134,16 @@ const App = () => {
                 if (currentTab?.id) {
                     closeTab(currentTab.id)
                 }
+            } else if (e.shiftKey && e.key === "Q") {
+                tabs.forEach((tab) => {
+                    closeTab(tab.id)
+                })
             }
         }
-        window.addEventListener("keypress", handleKeys)
+        window.addEventListener("keydown", handleKeys)
 
         return () => {
-            window.removeEventListener("keypress", handleKeys)
+            window.removeEventListener("keydown", handleKeys)
         }
     })
 

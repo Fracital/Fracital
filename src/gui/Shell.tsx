@@ -89,7 +89,7 @@ const Shell = () => {
                     tabs && tabs.length > 0 ? tabs.map((tab, index) => (
                         <Search tab={tab} key={index} />
                     )) : (
-                        <Search tab={{title: "New Tab", url: "newtab", id: createId(), icon: null}}/>
+                        <Search />
                     )
                 }
             </div>
