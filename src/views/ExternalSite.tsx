@@ -1,5 +1,6 @@
-import { useEffect, useRef, type IframeHTMLAttributes } from "react";
+import { useEffect, useRef } from "react";
 import XOR from "../libs/XOR";
+import { useTabsStore } from "../store";
 
 interface ExternalSiteProps {
     url: string | undefined;
@@ -8,6 +9,9 @@ interface ExternalSiteProps {
 
 const ExternalSite: React.FC<ExternalSiteProps> = ({ url, className }) => {
     const frameRef = useRef<HTMLIFrameElement>(null)
+    const tabs =  useTabsStore(state => state.tabs)
+    const currentTab = tabs.find(tab => tab.current === true);
+    const updateTab = useTabsStore(state => state.updateTab)
 
     useEffect(() => {
         const iframe = frameRef.current;
@@ -17,31 +21,27 @@ const ExternalSite: React.FC<ExternalSiteProps> = ({ url, className }) => {
             try {
                 const contentWindow = iframe.contentWindow;
                 const contentDocument = iframe.contentDocument;
-                const input = document.querySelector<HTMLInputElement>("#input")
 
                 const rawHref = contentWindow?.location?.href ?? "";
                 const replacedHref = rawHref.replace(window.location.origin + "/uv/service", "");
                 const newUrl = XOR.decode(replacedHref) ?? iframe.src;
                 const title = contentDocument?.title ?? "New Tab";
                 const icon = (contentDocument?.querySelector("link[rel~='icon']") as HTMLLinkElement | null)?.href ?? null;
-
-                // if (input) {
-                //     input.value = newUrl;
-                // }
-                window.dispatchEvent(new CustomEvent("proxy-navigate", {
-                    detail: {
+                if (currentTab) {
+                    updateTab(currentTab.id, {
                         url: newUrl,
-                        title,
-                        icon
-                    }
-                }));
+                        title: title,
+                        icon: icon
+                    })
+                }
             } catch (err) {
-                // Cross-origin protection fallback
-                window.dispatchEvent(new CustomEvent("proxy-navigate", {
-                    detail: {
-                        url: iframe.src
-                    }
-                }));
+                if (currentTab) {
+                    updateTab(currentTab.id, {
+                        url: iframe.src,
+                        title: "New Tab",
+                        icon: null
+                    })
+                }
             }
         };
 

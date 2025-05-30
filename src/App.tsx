@@ -72,7 +72,7 @@ regSw();
 
 const App = () => {
     const tabs = useTabsStore(state => state.tabs);
-    const currentTab = useTabsStore(state => state.currentTab)
+    const currentTab = tabs.find(tab => tab.current === true);
     const tabsOpen = useTabsStore(state => state.tabsOpen)
     const setTabsOpen = useTabsStore(state => state.setTabsOpen)
     const newTab = useTabsStore(state => state.newTab)
@@ -80,6 +80,7 @@ const App = () => {
     const updateTab = useTabsStore(state => state.updateTab)
     const [url, setUrl] = useState<string | undefined>(undefined);
     const [proxy] = useState<string | undefined>(localStorage.getItem("proxy") || undefined)
+    const [mainHeight, setMainHeight] = useState<number | undefined>(document.querySelector<HTMLDivElement>("#main")?.getBoundingClientRect().height || 805)
     const [proxiedUrl, setProxied] = useState<string | undefined>();
 
     const tabsRef = useRef<HTMLDivElement>(null)
@@ -87,7 +88,7 @@ const App = () => {
     useEffect(() => {
         const handle = (e: Event) => {
             const { detail } = e as CustomEvent<detailProps>;
-            const current = useTabsStore.getState().currentTab;
+            const current = tabs.find(tab => tab.current === true);
 
             if (current && detail) {
                 console.log(detail);
@@ -101,6 +102,18 @@ const App = () => {
         window.addEventListener("proxy-navigate", handle as EventListener)
         return () => window.removeEventListener("proxy-navigate", handle as EventListener)
     }, [])
+
+    useEffect(() => {
+        const height = document.querySelector<HTMLDivElement>("#main")?.getBoundingClientRect().height
+        setMainHeight(height)
+
+        const handleWindowSize = () => {
+            const height = document.querySelector<HTMLDivElement>("#main")?.getBoundingClientRect().height;
+            setMainHeight(height);
+        };
+        window.addEventListener("resize", handleWindowSize);
+        return () => window.removeEventListener("resize", handleWindowSize);
+    })
 
     useEffect(() => {
         if (!url) return;
@@ -134,7 +147,7 @@ const App = () => {
         <div className="flex flex-col size-full gap-2.5 p-3">
             <Shell />
             <div className="flex flex-col size-full gap-[1px]">
-                <div className="relative flex size-full gap-2.5">
+                <div id="main" className="relative flex size-full gap-2.5">
                     <div className={"relative size-full bg-secondary inset-shadow-primary rounded-xl overflow-hidden"}>
                         {/* <Routes>
                             <Route path="/" element={
@@ -164,22 +177,19 @@ const App = () => {
                             )) : <Home />
                         }
                     </div>
-                    <div className={"relative h-full duration-150" + " " + `
+                    <div className={"absolute flex flex-col justify-center h-full duration-150" + " " + `
                         ${
-                            tabsOpen ? "w-60" :  "w-10"
+                            tabsOpen ? "w-60 right-1.5" :  "w-10 -right-1"
                         }
                     `}>
-                        <div ref={tabsRef} id="tabsContainer" className={"flex flex-col h-full bg-secondary inset-shadow-primary rounded-xl overflow-hidden duration-150" + " " + `
+                        <div ref={tabsRef} className={"flex flex-col h-[calc(100%-12px)] bg-secondary shadow-[0_0_16px_3px_#00000035] inset-shadow-primary overflow-hidden duration-150" + " " + `
                             ${
-                                tabsOpen ? "w-full" : "w-50"
+                                tabsOpen ? "w-full rounded-lg" : "w-50 rounded-xl"
                             }
                         `}>
                             <div style={{
-                                height: (() => {
-                                    const el = document.querySelector("#tabsContainer");
-                                    return el ? `calc(${el.getBoundingClientRect().height}px - calc(var(--spacing) * 12))` : `calc(770px - calc(var(--spacing) * 12))`;
-                                })()
-                            }} className={"relative flex w-full h-full overflow-auto gap- gap-2 pt-2 px-2 flex-col items-center duration-150"}>
+                                height: `calc(${mainHeight}px - calc(var(--spacing) * 12))`
+                            }} className={"relative flex w-full h-full overflow-auto gap- gap-2 p-2 flex-col items-center duration-150"}>
                                 {
                                     tabs.length > 0 ? tabs.map((item, index) => (
                                         <Tab title={item.title} url={item.url} id={item.id} icon={item.icon} key={index} />
@@ -202,7 +212,8 @@ const App = () => {
                                     newTab({
                                         id: createId(),
                                         title: "New Tab",
-                                        url: "newtab"
+                                        url: "newtab",
+                                        current: true
                                     })
                                 }}>
                                     <PlusIcon className="size-5 stroke-current stroke-1 duration-150" />

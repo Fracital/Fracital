@@ -8,10 +8,12 @@ export interface TabProps {
     id: string
     icon?: string | React.ReactNode | null
     history?: string[]
+    current?: boolean
 }
 
 export const Tab = ({ title, url, id, icon }: TabProps) => {
-    const currentTab = useTabsStore(state => state.currentTab)
+    const tabs = useTabsStore(state => state.tabs)
+    const currentTab = tabs.find(tab => tab.current === true);
     const setCurrentTab = useTabsStore(state => state.setCurrentTab)
     const closeTab = useTabsStore(state => state.closeTab)
 

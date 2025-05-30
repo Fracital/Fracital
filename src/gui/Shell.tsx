@@ -1,10 +1,10 @@
 import { Cog6ToothIcon, MagnifyingGlassIcon, XMarkIcon, ArrowsPointingOutIcon, ArrowsPointingInIcon, ChevronUpDownIcon, RectangleStackIcon } from "@heroicons/react/24/solid";
 import { useEffect, useState, useRef } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
-import { navigationEvent } from "../libs/eventBus";
 import { ShellButton } from "../components/ShellButton";
 import { useTabsStore } from "../store";
 import { createId } from "@paralleldrive/cuid2";
+import { Search } from "../components/Search";
 
 declare global {
     interface Window {
@@ -14,9 +14,8 @@ declare global {
 }
 
 const Shell = () => {
-    const navigate = useNavigate();
     const newTab = useTabsStore(state => state.newTab)
-    const currentTab = useTabsStore(state => state.currentTab)
+    const tabs = useTabsStore(state => state.tabs)
     const location = useLocation();
 
     const [proxy, setProxy] = useState<"uv" | "sj">("uv");
@@ -26,59 +25,13 @@ const Shell = () => {
     const uvRef = useRef<HTMLDivElement>(null);
     const sjRef = useRef<HTMLDivElement>(null);
 
+    const currentTab = tabs.find(tab => tab.current === true);
     const [searchFocused, setSearchFocused] = useState(false);
     const [hasQuery, setHasQuery] = useState(currentTab?.url || false);
     const [fullscreen, setFullscreen] = useState<boolean>(false)
 
     const [uvVersion] = useState("v3.2.7");
     const [sjVersion] = useState(window.$scramjet.version.version);
-
-    const searchHandler = (query: string) => {
-        if (query.length > 0) {
-            // navigate("/?q=" + encodeURI(query));
-            // if (isUrl(query, { lenient: true })) {
-            //     console.log("URL detected");
-            // } else {
-            //     console.log("URL not detected");
-            // }
-
-            // try {
-            //     new URL(query);
-                navigationEvent({
-                    url: query,
-                    icon: null,
-                    title: "New Tab"
-                });
-                setHasQuery(true);
-            // } catch (e) {
-            //     navigate("/es", {
-            //         state: {
-            //             search: query
-            //         }
-            //     })
-            // }
-        }
-    }
-
-    const clearSearch = () => {
-        setHasQuery(false);
-        inputRef.current?.blur();
-        if (inputRef.current) {
-            inputRef.current.value = "";
-        }
-        navigationEvent({
-            url: "newtab",
-            title: "New Tab",
-            icon: null
-        })
-        navigate("/");
-    }
-
-    useEffect(() => {
-        if (inputRef.current) {
-            inputRef.current.value = currentTab?.url || "newtab";
-        }
-    }, [])
 
     const handleProxyChange = (e: Event) => {
         const customEvent = e as CustomEvent;
@@ -108,7 +61,7 @@ const Shell = () => {
             ${searchFocused ? "p-4" : "p-3"}
         `}>
             <div className="flex items-center justify-start gap-1.5">
-                <Link to="/" className="group cursor-pointer" onMouseDown={() => clearSearch()}>
+                <Link to="/" className="group cursor-pointer">
                     <svg viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg" className="size-9 group-hover:-translate-y-1 duration-150 pointer-events-none">
                         <circle cx="64" cy="64" r="64" fill="#FB74FE"/>
                         <path fillRule="evenodd" clipRule="evenodd" d="M64 0C99.3462 0 128 28.6538 128 64C128 99.3462 99.3462 128 64 128C28.6538 128 0 99.3462 0 64C0 28.6538 28.6538 0 64 0ZM64 7C32.5198 7 7 32.5198 7 64C7 95.4802 32.5198 121 64 121C95.4802 121 121 95.4802 121 64C121 32.5198 95.4802 7 64 7Z" fill="white" fillOpacity="0.5"/>
@@ -131,56 +84,14 @@ const Shell = () => {
                     </span>
                 </div>
             </div>
-            <div className="flex items-center justify-center gap-1.5">
-                <XMarkIcon className={"size-6 text-text-secondary hover:text-text-primary stroke-current stroke-1 duration-150 cursor-pointer z-10" + " " + `
-                    ${hasQuery ? "" : "translate-x-2 opacity-0 duration-150 pointer-events-none"}
-                `} onMouseDown={() => clearSearch()}/>
-                <div ref={searchRef} className={"flex items-center bg-tertiary h-[48px] gap-1 rounded-lg cursor-text duration-150" + " " + `
-                    ${searchFocused ? "inset-shadow-accent" : "inset-shadow-secondary"}
-                `} onMouseDown={() => {
-                    if (document.activeElement !== inputRef.current) {
-                        setSearchFocused(true);
-                        if (inputRef.current) {
-                            inputRef.current.focus();
-                        }
-
-                    }
-                }}>
-                    <div className="relative flex items-center justify-start sm:w-[30rem] h-full z-10">
-                        <span className={"absolute left-3 font-semibold ease-in-out pointer-events-none w-max" + " " + `
-                            ${hasQuery ? "opacity-0 -translate-x-1 duration-100" : "opacity-100 duration-150"}
-                            ${searchFocused ? "text-text-primary" : "text-text-secondary"}
-                        `}>Search or enter a URL</span>
-                        <input id="input" ref={inputRef} type="text" className="size-full pl-3 text-text-secondary font-medium focus:outline-none focus:ring-0 z-10"
-                        onFocus={() => {
-                            setSearchFocused(true);
-                        }}
-                        onBlur={() => {
-                            setSearchFocused(false);
-                        }}
-                        onChange={() => {
-                            setHasQuery(true);
-                        }}
-                        onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => {
-                            if (e.key === "Enter") {
-                                if (typeof inputRef.current?.value === "string") {
-                                    searchHandler(inputRef.current?.value);
-                                }
-                            }
-                        }} />
-                    </div>
-                    <div className="p-1.5">
-                        <button className="group flex items-center justify-center p-2 rounded-lg bg-primary hover:bg-accent duration-75 cursor-pointer z-20"
-                        onClick={() => {
-                            if (typeof inputRef.current?.value === "string") {
-                                console.log(inputRef.current.value);
-                                searchHandler(inputRef.current?.value);
-                            }
-                        }}>
-                            <MagnifyingGlassIcon className="size-5 text-text-tertiary group-hover:text-text-primary stroke-current stroke-1 duration-75 pointer-events-none" />
-                        </button>
-                    </div>
-                </div>
+            <div className="relative">
+                {
+                    tabs && tabs.length > 0 ? tabs.map((tab, index) => (
+                        <Search tab={tab} key={index} />
+                    )) : (
+                        <Search tab={{title: "New Tab", url: "newtab", id: createId(), icon: null}}/>
+                    )
+                }
             </div>
             <div className="flex items-center justify-end gap-2.5">
                 <div className={"group relative flex justify-center items-center min-h-5 p-2 px-3 gap-1 rounded-full bg-primary cursor-pointer duration-200" + " " + `
