@@ -70,7 +70,7 @@ const regSw = async () => {
 regSw();
 
 const App = () => {
-    const [tabs, setTabs] = useState(useTabsStore(state => state.tabs));
+    const tabs = useTabsStore(state => state.tabs)
     const currentTab = tabs.find(tab => tab.current === true);
     const tabsOpen = useTabsStore(state => state.tabsOpen)
     const setTabsOpen = useTabsStore(state => state.setTabsOpen)
@@ -82,6 +82,11 @@ const App = () => {
     const [mainHeight, setMainHeight] = useState<number | undefined>(document.querySelector<HTMLDivElement>("#main")?.getBoundingClientRect().height || 805)
 
     const tabsRef = useRef<HTMLDivElement>(null)
+
+    useEffect(() => {
+        console.log("Tabs updated:", tabs);
+    }, [tabs])
+
 
     // useEffect(() => {
     //     const handle = (e: Event) => {
@@ -107,21 +112,32 @@ const App = () => {
 
         useEffect(() => {
             const handler = (e: Event) => {
+                console.log(e)
                 const detail = (e as CustomEvent<detailProps>).detail;
-                setTabs((prevTabs) => {
-                    const index = prevTabs.findIndex((t) => t.id === detail.id);
-                    if (index === -1) return prevTabs;
-    
-                    const updatedTabs = [...prevTabs];
-                    updatedTabs[index] = {
-                        ...updatedTabs[index],
-                        url: detail.url,
-                        displayUrl: detail.url,
-                        title: detail.title,
-                        icon: detail.icon,
-                    };
-                    return updatedTabs;
+
+                // update the tab with the new details
+                updateTab(detail.id, {
+                    url: detail.url,
+                    title: detail.title,
+                    icon: detail.icon,
+                    displayUrl: detail.url,
                 });
+
+
+                // setTabs((prevTabs) => {
+                //     const index = prevTabs.findIndex((t) => t.id === detail.id);
+                //     if (index === -1) return prevTabs;
+    
+                //     const updatedTabs = [...prevTabs];
+                //     updatedTabs[index] = {
+                //         ...updatedTabs[index],
+                //         url: detail.url,
+                //         displayUrl: detail.url,
+                //         title: detail.title,
+                //         icon: detail.icon,
+                //     };
+                //     return updatedTabs;
+                // });
             };
             window.addEventListener("proxy-navigate", handler);
             return () => window.removeEventListener("proxy-navigate", handler);
@@ -157,13 +173,19 @@ const App = () => {
         };
         window.addEventListener("resize", handleWindowSize);
         return () => window.removeEventListener("resize", handleWindowSize);
-    })
+    }, [])
 
     useEffect(() => {
         const handleKeys = (e: KeyboardEvent) => {
             const key = e.key.toLowerCase()
 
-            if ((platform.includes("Mac") && e.ctrlKey && key === "s") || e.altKey && key === "s") tabsOpen ? setTabsOpen(false) : setTabsOpen(true)
+            if ((platform.includes("Mac") && e.ctrlKey && key === "s") || (e.altKey && key === "s")) {
+                if (tabsOpen) {
+                    setTabsOpen(false);
+                } else {
+                    setTabsOpen(true);
+                }
+            }
             else if ((platform.includes("Mac") && e.ctrlKey && key === "t") || e.altKey && key === "t") {
                 newTab({
                     id: createId(),
@@ -204,7 +226,7 @@ const App = () => {
                         {
                             tabs.length > 0 ? tabs.map((item, index) => (
                                 item.url === "newtab" ?
-                                <Home key={index} className={"absolute inset-0" + " " + `
+                                <Home key={item.id} className={"absolute inset-0" + " " + `
                                     ${
                                         currentTab ? currentTab.id !== item.id ? "opacity-0 pointer-events-none" : "" : ""
                                     }
@@ -222,7 +244,14 @@ const App = () => {
                             )) : <Home />
                         }
                     </div>
-                    <div className={"absolute flex flex-col justify-center h-full duration-150" + " " + `
+                    <div
+                        onMouseEnter={() => {
+                            setTabsOpen(true)
+                        }}
+                        onMouseLeave={() => {
+                            setTabsOpen(false)
+                        }}
+                    className={"absolute flex flex-col justify-center h-full duration-150" + " " + `
                         ${
                             tabsOpen ? "w-60 right-1.5" :  "w-10 -right-1"
                         }
@@ -250,7 +279,7 @@ const App = () => {
                             </div>
                             <div className="flex min-max-1 w-full p-1.5 items-start justify-start gap-0.5 bg-[#ffffff10]">
                                 <div title={platform.includes("Mac") ? "Toggle Tabs ⌃ + S" : "Toggle Tabs: Alt + S"} className="flex items-center justify-center p-2 hover:bg-[#ffffff10] text-text-secondary hover:text-text-primary rounded-md cursor-pointer duration-150" onClick={() => {
-                                    tabsOpen ? setTabsOpen(false) : setTabsOpen(true)
+                                    setTabsOpen(!tabsOpen)
                                 }}>
                                     <RectangleStackIcon className="size-5 text-current stroke-current stroke-0.5 pointer-events-none" />
                                 </div>
