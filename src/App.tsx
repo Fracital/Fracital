@@ -9,7 +9,6 @@ import XOR from './libs/XOR';
 import Shell from './gui/Shell';
 
 import { Tab } from './components/Tab';
-import type { TabProps } from "./components/Tab";
 
 import Home from './views/Home';
 import Settings from './views/Settings';
@@ -71,37 +70,82 @@ const regSw = async () => {
 regSw();
 
 const App = () => {
-    const tabs = useTabsStore(state => state.tabs);
+    const [tabs, setTabs] = useState(useTabsStore(state => state.tabs));
     const currentTab = tabs.find(tab => tab.current === true);
     const tabsOpen = useTabsStore(state => state.tabsOpen)
     const setTabsOpen = useTabsStore(state => state.setTabsOpen)
     const newTab = useTabsStore(state => state.newTab)
     const closeTab = useTabsStore(state => state.closeTab)
     const updateTab = useTabsStore(state => state.updateTab)
-    const [url, setUrl] = useState<string | undefined>(undefined);
+    const [platform, setPlatform] = useState<string>("")
     const [proxy] = useState<string | undefined>(localStorage.getItem("proxy") || undefined)
     const [mainHeight, setMainHeight] = useState<number | undefined>(document.querySelector<HTMLDivElement>("#main")?.getBoundingClientRect().height || 805)
-    const [proxiedUrl, setProxied] = useState<string | undefined>();
 
     const tabsRef = useRef<HTMLDivElement>(null)
 
-    useEffect(() => {
-        const handle = (e: Event) => {
-            const { detail } = e as CustomEvent<detailProps>;
-            const current = tabs.find(tab => tab.current === true);
+    // useEffect(() => {
+    //     const handle = (e: Event) => {
+    //         const { detail } = e as CustomEvent<detailProps>;
+    //         console.log("Event received:", detail);
 
-            if (current && detail) {
-                console.log(detail);
-                updateTab(current.id, {
-                    url: detail.url,
-                    title: detail.title,
-                    icon: detail.icon
+    //         const tab = tabs.find((t) => t.id === detail.id);
+    //         if (tab) {
+    //             console.log("Updating tab:", tab.id);
+    //             updateTab(tab.id, {
+    //                 url: detail.url,
+    //                 title: detail.title,
+    //                 icon: detail.icon,
+    //                 displayUrl: detail.url
+    //             });
+    //         } else {
+    //             console.warn("Tab not found for ID:", detail.id);
+    //         }
+    //     }
+    //     window.addEventListener("proxy-navigate", handle as EventListener)
+    //     return () => window.removeEventListener("proxy-navigate", handle as EventListener)
+    // }, [])
+
+        useEffect(() => {
+            const handler = (e: Event) => {
+                const detail = (e as CustomEvent<detailProps>).detail;
+                setTabs((prevTabs) => {
+                    const index = prevTabs.findIndex((t) => t.id === detail.id);
+                    if (index === -1) return prevTabs;
+    
+                    const updatedTabs = [...prevTabs];
+                    updatedTabs[index] = {
+                        ...updatedTabs[index],
+                        url: detail.url,
+                        displayUrl: detail.url,
+                        title: detail.title,
+                        icon: detail.icon,
+                    };
+                    return updatedTabs;
                 });
-            }
+            };
+            window.addEventListener("proxy-navigate", handler);
+            return () => window.removeEventListener("proxy-navigate", handler);
+        }, []);
+
+
+    useEffect(() => {
+        let detectedPlatform = "";
+        if ('userAgentData' in navigator && navigator.userAgentData) {
+            // @ts-expect-error: userAgentData is not yet in TypeScript's Navigator type
+            detectedPlatform = navigator.userAgentData.platform || "";
+        } else if ('platform' in navigator) {
+            detectedPlatform = navigator.platform || "";
+        } else {
+            const ua = (navigator as Navigator).userAgent;
+            if (/Windows/i.test(ua)) detectedPlatform = "Windows";
+            else if (/Macintosh|Mac OS X/i.test(ua)) detectedPlatform = "Mac";
+            else if (/Linux/i.test(ua)) detectedPlatform = "Linux";
+            else if (/Android/i.test(ua)) detectedPlatform = "Android";
+            else if (/iPhone|iPad|iPod/i.test(ua)) detectedPlatform = "iOS";
+            else detectedPlatform = "Unknown";
         }
-        window.addEventListener("proxy-navigate", handle as EventListener)
-        return () => window.removeEventListener("proxy-navigate", handle as EventListener)
-    }, [])
+        setPlatform(detectedPlatform);
+    }, []);
 
     useEffect(() => {
         const height = document.querySelector<HTMLDivElement>("#main")?.getBoundingClientRect().height
@@ -116,19 +160,16 @@ const App = () => {
     })
 
     useEffect(() => {
-        if (!url) return;
-        const finalUrl = proxy === "sj" ? "/service/" + XOR.encode(url) : "/uv/service/" + XOR.encode(url);
-        setProxied(finalUrl);
-    }, [url]);
-
-    useEffect(() => {
         const handleKeys = (e: KeyboardEvent) => {
-            if (e.shiftKey && e.key === "S") tabsOpen ? setTabsOpen(false) : setTabsOpen(true)
-            else if (e.shiftKey && e.key === "T") {
+            const key = e.key.toLowerCase()
+
+            if ((platform.includes("Mac") && e.ctrlKey && key === "s") || e.altKey && key === "s") tabsOpen ? setTabsOpen(false) : setTabsOpen(true)
+            else if ((platform.includes("Mac") && e.ctrlKey && key === "t") || e.altKey && key === "t") {
                 newTab({
                     id: createId(),
                     title: "New Tab",
-                    url: "newtab"
+                    url: "newtab",
+                    displayUrl: "newtab"
                 })
             } else if (e.shiftKey && e.key === "W") {
                 if (currentTab?.id) {
@@ -190,13 +231,15 @@ const App = () => {
                             ${
                                 tabsOpen ? "w-full rounded-lg" : "w-50 rounded-xl"
                             }
-                        `}>
+                        `} onMouseDown={() => {
+                            setTabsOpen(true)
+                        }}>
                             <div style={{
                                 height: `calc(${mainHeight}px - calc(var(--spacing) * 12))`
-                            }} className={"relative flex w-full h-full overflow-auto gap- gap-2 p-2 flex-col items-center duration-150"}>
+                            }} className={"relative flex w-full h-full overflow-auto gap-2 p-2 px-3 flex-col items-center duration-200"}>
                                 {
                                     tabs.length > 0 ? tabs.map((item, index) => (
-                                        <Tab title={item.title} url={item.url} id={item.id} icon={item.icon} key={index} />
+                                        <Tab title={item.title} url={item.url} id={item.id} icon={item.icon} displayUrl={item.url} key={index} />
                                     )) :
                                     <span className={"absolute left-1/2 top-1/2 -translate-1/2 w-max font-semibold text-lg duration-150" + " " + `
                                         ${
@@ -206,18 +249,19 @@ const App = () => {
                                 }
                             </div>
                             <div className="flex min-max-1 w-full p-1.5 items-start justify-start gap-0.5 bg-[#ffffff10]">
-                                <div title="Toggle Tabs ⇧ + S" className="flex items-center justify-center p-2 hover:bg-[#ffffff10] text-text-secondary hover:text-text-primary rounded-md cursor-pointer duration-150" onClick={() => {
+                                <div title={platform.includes("Mac") ? "Toggle Tabs ⌃ + S" : "Toggle Tabs: Alt + S"} className="flex items-center justify-center p-2 hover:bg-[#ffffff10] text-text-secondary hover:text-text-primary rounded-md cursor-pointer duration-150" onClick={() => {
                                     tabsOpen ? setTabsOpen(false) : setTabsOpen(true)
                                 }}>
                                     <RectangleStackIcon className="size-5 text-current stroke-current stroke-0.5 pointer-events-none" />
                                 </div>
-                                <div title="New Tab ⇧ + T" className="flex items-center justify-center p-2 hover:bg-[#ffffff10] text-text-secondary hover:text-text-primary rounded-md cursor-pointer duration-200"
+                                <div title={platform.includes("Mac") ? "New Tab ⌃ + T" : "New Tab: Alt + T"}className="flex items-center justify-center p-2 hover:bg-[#ffffff10] text-text-secondary hover:text-text-primary rounded-md cursor-pointer duration-200"
                                 onClick={() => {
                                     newTab({
                                         id: createId(),
                                         title: "New Tab",
                                         url: "newtab",
-                                        current: true
+                                        current: true,
+                                        displayUrl: "newtab"
                                     })
                                 }}>
                                     <PlusIcon className="size-5 stroke-current stroke-1 duration-150" />

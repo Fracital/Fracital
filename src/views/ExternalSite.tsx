@@ -29,17 +29,17 @@ const ExternalSite: React.FC<ExternalSiteProps> = ({ url, className }) => {
                 const icon = (contentDocument?.querySelector("link[rel~='icon']") as HTMLLinkElement | null)?.href ?? null;
                 if (currentTab) {
                     updateTab(currentTab.id, {
-                        url: newUrl,
                         title: title,
-                        icon: icon
+                        icon: icon,
+                        displayUrl: newUrl
                     })
                 }
             } catch (err) {
                 if (currentTab) {
                     updateTab(currentTab.id, {
-                        url: iframe.src,
                         title: "New Tab",
-                        icon: null
+                        icon: null,
+                        displayUrl: "newtab"
                     })
                 }
             }
@@ -47,7 +47,7 @@ const ExternalSite: React.FC<ExternalSiteProps> = ({ url, className }) => {
 
         iframe.addEventListener("load", handleLoad);
         return () => iframe.removeEventListener("load", handleLoad);
-    }, []);
+    });
 
     return (
         <>

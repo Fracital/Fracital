@@ -88,7 +88,11 @@ const LinkCard: React.FC<LinkCardProps> = ({ title, icon, brightness, color, hre
                     </div>
                 ) : (
                     <div ref={cardRef} className="group relative flex flex-col p-3 rounded-2xl bg-(--color) overflow-hidden cursor-pointer duration-200" onMouseDown={async () => {
-                        if (href) {navigationEvent(href)}
+                        if (href) {navigationEvent({
+                            icon: icon,
+                            title: title,
+                            url: href
+                        })}
                     }}>
                         <div className="*:pointer-events-none *:select-none">
                             {edit && id !== undefined && (

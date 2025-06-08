@@ -20,14 +20,9 @@ const Shell = () => {
 
     const [proxy, setProxy] = useState<"uv" | "sj">("uv");
 
-    const searchRef = useRef<HTMLDivElement>(null);
-    const inputRef = useRef<HTMLInputElement>(null);
     const uvRef = useRef<HTMLDivElement>(null);
     const sjRef = useRef<HTMLDivElement>(null);
 
-    const currentTab = tabs.find(tab => tab.current === true);
-    const [searchFocused, setSearchFocused] = useState(false);
-    const [hasQuery, setHasQuery] = useState(currentTab?.url || false);
     const [fullscreen, setFullscreen] = useState<boolean>(false)
 
     const [uvVersion] = useState("v3.2.7");
@@ -57,9 +52,7 @@ const Shell = () => {
     }, []);
 
     return (
-        <div className={"flex justify-between gap-2.5 p-3 rounded-xl bg-secondary inset-shadow-primary duration-200" + " " + `
-            ${searchFocused ? "p-4" : "p-3"}
-        `}>
+        <div className={"flex justify-between gap-2.5 p-3 rounded-xl bg-secondary inset-shadow-primary duration-200"}>
             <div className="flex items-center justify-start gap-1.5">
                 <Link to="/" className="group cursor-pointer">
                     <svg viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg" className="size-9 group-hover:-translate-y-1 duration-150 pointer-events-none">
@@ -154,7 +147,8 @@ const Shell = () => {
                     id: createId(),
                     title: "Settings",
                     url: "settings",
-                    icon: <Cog6ToothIcon className="size-5" />
+                    icon: <Cog6ToothIcon className="size-5" />,
+                    displayUrl: "settings"
                 })}></ShellButton>
             </div>
         </div>

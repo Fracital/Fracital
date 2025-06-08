@@ -10,17 +10,22 @@ interface TabsState {
     newTab: (props: TabProps) => void
     closeTab: (id: string) => void
     updateTab: (id: string, changes: Partial<TabProps>) => void
-    getCurrentTab: () => TabProps | undefined
 }
 
 const baseId = createId()
 export const useTabsStore = create<TabsState>()((set, get) => ({
-    tabs: [{id: baseId, title: "New Tab", url: "newtab", current: true}],
+    tabs: [{
+        id: baseId,
+        title: "New Tab",
+        url: "newtab",
+        current: true,
+        displayUrl: "newtab"
+    }],
     setCurrentTab: (id: string | null) => set(state => {
         return {
             tabs: state.tabs.map(t => ({
-            ...t,
-            current: t.id === id
+                ...t,
+                current: t.id === id
             }))
         }
     }),
@@ -49,16 +54,10 @@ export const useTabsStore = create<TabsState>()((set, get) => ({
             }
         })
     },
-    updateTab: (id: string, changes: Partial<TabProps>) => set(state => {
-        const updatedTabs = state.tabs.map(tab =>
+    updateTab: (id: string, changes: Partial<TabProps>) =>
+        set((state) => ({
+            tabs: state.tabs.map((tab) =>
             tab.id === id ? { ...tab, ...changes } : tab
-        );
-        return {
-            tabs: updatedTabs
-        };
-    }),
-    getCurrentTab: () => {
-        const state = get()
-        return state.tabs.find(tab => tab.current)
-    }
+        )}
+    ))
 }))

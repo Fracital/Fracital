@@ -5,6 +5,7 @@ import { useTabsStore } from "../store";
 import { navigationEvent } from "../libs/eventBus";
 import { useNavigate } from "react-router-dom";
 import { createId } from "@paralleldrive/cuid2";
+import XOR from "../libs/XOR"
 
 interface SearchProps {
     tab?: TabProps
@@ -20,7 +21,7 @@ export const Search = ({ tab }: SearchProps) => {
     const inputRef = useRef<HTMLInputElement>(null);
 
     const [searchFocused, setSearchFocused] = useState(false);
-    const [hasQuery, setHasQuery] = useState(tab?.url || false);
+    const [hasQuery, setHasQuery] = useState(XOR.decode(tab?.displayUrl ?? "") || false);
 
     const searchHandler = (query: string) => {
         if (query.length > 0) {
@@ -38,14 +39,16 @@ export const Search = ({ tab }: SearchProps) => {
                         title: "New Tab",
                         id: createId(),
                         url: query,
-                        current: true
+                        current: true,
+                        displayUrl: query
                     })
                     setHasQuery(true);
                 } else {
                     navigationEvent({
                         url: query,
                         icon: null,
-                        title: "New Tab"
+                        title: "New Tab",
+                        id: tab?.id ?? currentTab?.id ?? ""
                     });
                     setHasQuery(true);
                 }
@@ -60,12 +63,11 @@ export const Search = ({ tab }: SearchProps) => {
     }
 
     useEffect(() => {
-        if (inputRef.current) {
-            if (tab) {
-                inputRef.current.value = currentTab?.url || "newtab";
-            }
+        if (inputRef.current && currentTab) {
+            inputRef.current.value = currentTab.url
+            setHasQuery(!!currentTab.url);
         }
-    }, [])
+    }, [currentTab]);
 
     const clearSearch = () => {
         setHasQuery(false);
@@ -76,7 +78,8 @@ export const Search = ({ tab }: SearchProps) => {
         navigationEvent({
             url: "newtab",
             title: "New Tab",
-            icon: null
+            icon: null,
+            id: createId()
         })
         navigate("/");
     }

@@ -1,3 +1,11 @@
+declare global {
+    interface Window {
+        // @ts-expect-error
+        XOR: XOR
+    }
+}
+
+
 const XOR = {
     encode(input: string): string {
         let result = "";
@@ -20,5 +28,6 @@ const XOR = {
         return result;
     }
 }
+window.XOR = XOR
 
 export default XOR;

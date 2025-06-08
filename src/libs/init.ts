@@ -1,3 +1,9 @@
+declare global {
+    interface Window {
+        Filer: Filer
+    }
+}
+
 export const quickLinks = [
     {
         title: "Github",
