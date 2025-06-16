@@ -3,11 +3,12 @@ import XOR from "../libs/XOR";
 import { useTabsStore } from "../store";
 
 interface ExternalSiteProps {
-    url: string | undefined;
+    url: string | undefined
     className?: string
+    current?: boolean
 }
 
-const ExternalSite: React.FC<ExternalSiteProps> = ({ url, className }) => {
+const ExternalSite = ({ url, className, current }: ExternalSiteProps) => {
     const frameRef = useRef<HTMLIFrameElement>(null)
     const tabs =  useTabsStore(state => state.tabs)
     const currentTab = tabs.find(tab => tab.current === true);
@@ -52,9 +53,9 @@ const ExternalSite: React.FC<ExternalSiteProps> = ({ url, className }) => {
     return (
         <>
             {
-                url !== undefined ?<iframe
+                url !== undefined ? <iframe
                     ref={frameRef}
-                    className={`w-full h-full ${className ?? ""}`}
+                    className={`w-full h-full duration-150 ${className ?? ""}` + " " + (current ? "" : "opacity-0 translate-y-3 pointer-events-none")}
                     src={url}
                     sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
                 /> : null

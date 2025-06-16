@@ -69,7 +69,7 @@ const LinkCard: React.FC<LinkCardProps> = ({ title, icon, brightness, color, hre
                             <div className="flex items-center justify-center py-5 px-22">
                                 {
                                     icon === "default" ? (
-                                        <GlobeAltIcon className="sm:size-16 size-8 text-text-secondary" />
+                                        <GlobeAltIcon className="sm:size-16 size-8 text-(--text-secondary)" />
                                     ) :
                                     typeof icon === "string" ? (<img src={icon} alt={title} className="sm:size-16 size-8" />) : (<>{icon}</>)
                                 }
@@ -88,11 +88,15 @@ const LinkCard: React.FC<LinkCardProps> = ({ title, icon, brightness, color, hre
                     </div>
                 ) : (
                     <div ref={cardRef} className="group relative flex flex-col p-3 rounded-2xl bg-(--color) overflow-hidden cursor-pointer duration-200" onMouseDown={async () => {
-                        if (href) {navigationEvent({
-                            icon: icon,
-                            title: title,
-                            url: href
-                        })}
+                        if (href) {
+                            navigationEvent({
+                                url: href,
+                                icon: icon,
+                                title: title,
+                                displayUrl: href,
+                                id: id !== undefined ? String(id) : ""
+                            });
+                        }
                     }}>
                         <div className="*:pointer-events-none *:select-none">
                             {edit && id !== undefined && (
@@ -113,7 +117,7 @@ const LinkCard: React.FC<LinkCardProps> = ({ title, icon, brightness, color, hre
                             <div className="flex items-center justify-center py-5 px-19">
                                 {
                                     icon === "default" ? (
-                                        <GlobeAltIcon className="sm:size-16 size-8 text-text-secondary group-hover:-translate-y-2 duration-200" />
+                                        <GlobeAltIcon className="sm:size-16 size-8 text-(--text-secondary) group-hover:-translate-y-2 duration-200" />
                                     ) :
                                     typeof icon === "string" ? (<img src={icon} alt={title} className="sm:size-16 size-8 group-hover:-translate-y-2 duration-200" />) : (<>{icon}</>)
                                 }

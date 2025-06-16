@@ -61,3 +61,21 @@ export const useTabsStore = create<TabsState>()((set, get) => ({
         )}
     ))
 }))
+
+export const useSettingsStore = create<{
+    settings: Record<string, any>
+    setSettings: (key: string, value: any) => void
+    getSettings: (key: string) => any
+}>((set, get) => ({
+    settings: {},
+    setSettings: (key, value) => set((state) => ({
+        settings: {
+            ...state.settings,
+            [key]: value
+        }
+    })),
+    getSettings: (key) => {
+        const settings = get().settings
+        return settings[key] !== undefined ? settings[key] : null
+    },
+}))

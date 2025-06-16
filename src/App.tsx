@@ -1,8 +1,5 @@
 import { createId } from "@paralleldrive/cuid2"
 import { useEffect, useRef, useState } from 'react'
-import { Routes, Route, Link } from 'react-router-dom';
-import { faDiscord } from '@fortawesome/free-brands-svg-icons';
-import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { RectangleStackIcon, PlusIcon } from '@heroicons/react/24/solid';
 import type { detailProps } from "./libs/eventBus";
 import XOR from './libs/XOR';
@@ -14,7 +11,9 @@ import Home from './views/Home';
 import Settings from './views/Settings';
 import ExternalSite from './views/ExternalSite';
 import { BareMuxConnection } from '@mercuryworkshop/bare-mux';
-import { useTabsStore } from './store';
+import { useSettingsStore, useTabsStore } from './store';
+import { quickLinks } from "./libs/init";
+import { initTheme } from "./libs/theme";
 
 const regSw = async () => {
     await navigator.serviceWorker.getRegistrations().then(registrations => {
@@ -80,12 +79,41 @@ const App = () => {
     const [platform, setPlatform] = useState<string>("")
     const [proxy] = useState<string | undefined>(localStorage.getItem("proxy") || undefined)
     const [mainHeight, setMainHeight] = useState<number | undefined>(document.querySelector<HTMLDivElement>("#main")?.getBoundingClientRect().height || 805)
+    const settings = useSettingsStore(state => state.settings)
+    const setSettings = useSettingsStore(state => state.setSettings)
 
     const tabsRef = useRef<HTMLDivElement>(null)
 
     useEffect(() => {
+        initTheme()
+    }, [settings.theme]);
+
+    useEffect(() => {
         console.log("Tabs updated:", tabs);
     }, [tabs])
+
+    useEffect(() => {
+        console.log(settings);
+    }, [settings]);
+
+    useEffect(() => {
+        const getSettings = async () => {
+            try {
+                const settingsData = await window.Filer.fs.promises.readFile("/settings.json", "utf-8");
+                const parsedSettings = JSON.parse(settingsData);
+                Object.entries(parsedSettings).forEach(([key, value]) => {
+                    setSettings(key, value);
+                });
+            } catch (error) {
+                console.error("Error reading settings.json:", error);
+                setSettings("theme", "default");
+                setSettings("proxy", "uv");
+                setSettings("quicklinks", quickLinks);
+                setSettings("floating-tabs", true);
+            }
+        };
+        getSettings();
+    }, [])
 
 
     // useEffect(() => {
@@ -112,8 +140,8 @@ const App = () => {
 
         useEffect(() => {
             const handler = (e: Event) => {
-                console.log(e)
                 const detail = (e as CustomEvent<detailProps>).detail;
+                console.log(detail)
 
                 // update the tab with the new details
                 updateTab(detail.id, {
@@ -127,7 +155,6 @@ const App = () => {
                 // setTabs((prevTabs) => {
                 //     const index = prevTabs.findIndex((t) => t.id === detail.id);
                 //     if (index === -1) return prevTabs;
-    
                 //     const updatedTabs = [...prevTabs];
                 //     updatedTabs[index] = {
                 //         ...updatedTabs[index],
@@ -215,7 +242,7 @@ const App = () => {
             <Shell />
             <div className="flex flex-col size-full gap-[1px]">
                 <div id="main" className="relative flex size-full gap-2.5">
-                    <div className={"relative size-full bg-secondary inset-shadow-primary rounded-xl overflow-hidden"}>
+                    <div className={"relative size-full bg-(--secondary) inset-shadow-(--inset-shadow-primary) rounded-xl overflow-hidden"}>
                         {/* <Routes>
                             <Route path="/" element={
                                 url === undefined ?
@@ -236,7 +263,7 @@ const App = () => {
                                         currentTab ? currentTab.id !== item.id ? "opacity-0 pointer-events-none" : "" : ""
                                     }
                                 `} /> :
-                                <ExternalSite key={index} url={proxy === "sj" ? "/service/" + XOR.encode(item.url) : "/uv/service/" + XOR.encode(item.url)} className={"absolute inset-0" + " " + `
+                                <ExternalSite current={currentTab?.id === item.id} key={index} url={proxy === "sj" ? "/service/" + XOR.encode(item.url) : "/uv/service/" + XOR.encode(item.url)} className={"absolute inset-0" + " " + `
                                     ${
                                         currentTab ? currentTab.id !== item.id ? "opacity-0 pointer-events-none" : "" : ""
                                     }
@@ -244,21 +271,20 @@ const App = () => {
                             )) : <Home />
                         }
                     </div>
-                    <div
-                        onMouseEnter={() => {
-                            setTabsOpen(true)
-                        }}
-                        onMouseLeave={() => {
-                            setTabsOpen(false)
-                        }}
-                    className={"absolute flex flex-col justify-center h-full duration-150" + " " + `
+                    <div className={(settings["floating-tabs"] && "absolute") + " " + "flex flex-col justify-center h-full duration-150" + " " + `
                         ${
                             tabsOpen ? "w-60 right-1.5" :  "w-10 -right-1"
                         }
                     `}>
-                        <div ref={tabsRef} className={"flex flex-col h-[calc(100%-12px)] bg-secondary shadow-[0_0_16px_3px_#00000035] inset-shadow-primary overflow-hidden duration-150" + " " + `
+                        <div ref={tabsRef} className={(settings["floating-tabs"] && "h-[calc(100%-12px)]") + " " + "flex flex-col bg-(--secondary) inset-shadow-(--inset-shadow-primary) overflow-hidden duration-150" + " " + `
                             ${
-                                tabsOpen ? "w-full rounded-lg" : "w-50 rounded-xl"
+                                tabsOpen ? "w-full" : "w-50"
+                            }
+                            ${
+                                settings["floating-tabs"] && tabsOpen ? "rounded-lg" : "rounded-xl"
+                            }
+                            ${
+                                settings["floating-tabs"] && "shadow-[0_0_16px_3px_#00000035]"
                             }
                         `} onMouseDown={() => {
                             setTabsOpen(true)
@@ -277,13 +303,17 @@ const App = () => {
                                     `}>No tabs open</span>
                                 }
                             </div>
-                            <div className="flex min-max-1 w-full p-1.5 items-start justify-start gap-0.5 bg-[#ffffff10]">
-                                <div title={platform.includes("Mac") ? "Toggle Tabs ⌃ + S" : "Toggle Tabs: Alt + S"} className="flex items-center justify-center p-2 hover:bg-[#ffffff10] text-text-secondary hover:text-text-primary rounded-md cursor-pointer duration-150" onClick={() => {
+                            <div className={"flex min-max-1 w-full p-1.5 items-start justify-start gap-0.5" + " " + `
+                                ${
+                                    settings.brightness === "dark" ? "bg-[#ffffff10]" : "bg-[#00000025]"
+                                }
+                            `}>
+                                <div title={platform.includes("Mac") ? "Toggle Tabs ⌃ + S" : "Toggle Tabs: Alt + S"} className="flex items-center justify-center p-2 hover:bg-[#ffffff10] text-(--text-secondary) hover:text-(--text-primary) rounded-md cursor-pointer duration-150" onClick={() => {
                                     setTabsOpen(!tabsOpen)
                                 }}>
                                     <RectangleStackIcon className="size-5 text-current stroke-current stroke-0.5 pointer-events-none" />
                                 </div>
-                                <div title={platform.includes("Mac") ? "New Tab ⌃ + T" : "New Tab: Alt + T"}className="flex items-center justify-center p-2 hover:bg-[#ffffff10] text-text-secondary hover:text-text-primary rounded-md cursor-pointer duration-200"
+                                <div title={platform.includes("Mac") ? "New Tab ⌃ + T" : "New Tab: Alt + T"}className="flex items-center justify-center p-2 hover:bg-[#ffffff10] text-(--text-secondary) hover:text-(--text-primary) rounded-md cursor-pointer duration-200"
                                 onClick={() => {
                                     newTab({
                                         id: createId(),
@@ -298,15 +328,6 @@ const App = () => {
                             </div>
                         </div>
                     </div>
-                </div>
-            </div>
-            <div className="flex items-center bg-secondary inset-shadow-primary rounded-md w-full overflow-hidden">
-                <Link target="_blank" to="/LICENSE" className="flex items-center h-full px-2.5 leading-none text-text-quaternary font-bold text-lg hover:bg-quaternary duration-150">© Fracital 2025</Link>
-                <div className="flex gap-1.5 p-1.5">
-                    <Link target="_blank" to="https://discord.gg/unblock" className="flex items-center gap-1.5 text-text-quaternary hover:text-text-tertiary font-bold text-lg">
-                        <FontAwesomeIcon icon={faDiscord} className="text-current duration-150" />
-                        <span className="text-current duration-150">Discord</span>
-                    </Link>
                 </div>
             </div>
         </div>

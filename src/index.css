@@ -5,25 +5,6 @@
   src: url(./assets/Inter.ttf) format("truetype");
 }
 
-@theme {
-  --color-primary: #1a1a1a;
-  --color-secondary: #232323;
-  --color-tertiary: #2a2a2a;
-  --color-quaternary: #333333;
-  --color-accent: #fb74fe;
-  --color-accent-opaque: #fc74fea5;
-  --color-text-primary: #ffffffdb;
-  --color-text-secondary: #ffffffa5;
-  --color-text-tertiary: #ffffff80;
-  --color-text-quaternary: #ffffff4d;
-  --shadow-primary: 0 0 2px 0px #00000040;
-  --shadow-accent: 0 0 2px 0px #fb74fe;
-  --inset-shadow-primary-lighter: 0 0 0 2px #ffffff20;
-  --inset-shadow-primary: 0 0 0 2px #ffffff18;
-  --inset-shadow-secondary: 0 0 0 2px #ffffff10;
-  --inset-shadow-accent: 0 0 0 2px #fb74fe;
-}
-
 @utility stroke-0.5 {
   stroke-width: 0.5;
 }
@@ -36,7 +17,6 @@ html, body {
   height: 100%;
   font-family: Inter;
   overflow-x: hidden;
-  /* color: #fc74fea5; */
 }
 
 ::selection {

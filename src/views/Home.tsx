@@ -1,7 +1,11 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import LinkCard from "../components/LinkCard";
 import { isColorBright } from "../libs/colorBright";
 import { quickLinks } from "../libs/init";
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+import { faDiscord } from "@fortawesome/free-brands-svg-icons";
+import { useSettingsStore } from "../store";
 
 export interface linkProps {
     title: string;
@@ -15,6 +19,7 @@ interface HomeProps {
 }
 
 const Home = ({ className }: HomeProps) => {
+    const settings = useSettingsStore(state => state.settings);
     const [links] = useState<linkProps[]>(
         (() => {
             const stored = window.localStorage.getItem("quicklinks");
@@ -28,7 +33,7 @@ const Home = ({ className }: HomeProps) => {
 
     return (
         <div className={"flex flex-col items-center justify-center size-full p-2" + " " + className}>
-            <div className="flex flex-col items-center justify-center gap-4">
+            <div className="flex flex-col h-full items-center justify-center gap-4">
                 <span className="text-7xl font-black text-center text-accent text-stroke">FRACITAL</span>
                 <div className="flex gap-4">
                     {
@@ -43,6 +48,17 @@ const Home = ({ className }: HomeProps) => {
                             />
                         ))
                     }
+                </div>
+            </div>
+            <div className="flex items-center w-full overflow-hidden">
+                <Link target="_blank" to="/LICENSE" className={"flex items-center h-full p-2 rounded-md leading-none text-(--text-quaternary) font-bold text-lg duration-150" + " " + `
+                    ${settings.brightness === "dark" ? "hover:bg-[#ffffff18] hover:text-(--text-secondary)" : "hover:bg-[#00000025] hover:text-(--text-secondary)"}
+                `}>© Fracital 2025</Link>
+                <div className="flex gap-1.5 p-1.5">
+                    <Link target="_blank" to="https://discord.gg/unblock" className="flex items-center gap-1.5 text-(--text-quaternary) hover:text-(--text-tertiary) font-bold text-lg">
+                        <FontAwesomeIcon icon={faDiscord} className="text-current duration-150" />
+                        <span className="text-current duration-150">Discord</span>
+                    </Link>
                 </div>
             </div>
         </div>

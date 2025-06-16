@@ -3,6 +3,7 @@ export interface detailProps {
     url: string
     icon: string | React.ReactNode | null
     id: string
+    displayUrl: string
 }
 
 export const navigationEvent = (detail: detailProps) => {
