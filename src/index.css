@@ -20,6 +20,6 @@ html, body {
 }
 
 ::selection {
-  background: var(--color-accent);
-  color: var(--color-primary);
+  background: var(--accent);
+  color: var(--primary);
 }

@@ -9,6 +9,7 @@ export interface TabProps {
     id: string
     icon?: string | React.ReactNode | null
     history?: string[]
+    index?: number
     current?: boolean
 }
 

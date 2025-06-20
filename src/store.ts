@@ -19,7 +19,8 @@ export const useTabsStore = create<TabsState>()((set, get) => ({
         title: "New Tab",
         url: "newtab",
         current: true,
-        displayUrl: "newtab"
+        displayUrl: "newtab",
+        index: 0,
     }],
     setCurrentTab: (id: string | null) => set(state => {
         return {

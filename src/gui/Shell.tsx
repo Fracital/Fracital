@@ -1,6 +1,6 @@
 import { Cog6ToothIcon, ArrowsPointingOutIcon, ArrowsPointingInIcon, ChevronUpDownIcon } from "@heroicons/react/24/solid";
 import { useEffect, useState, useRef } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { ShellButton } from "../components/ShellButton";
 import { useTabsStore } from "../store";
 import { createId } from "@paralleldrive/cuid2";
@@ -16,7 +16,6 @@ declare global {
 const Shell = () => {
     const newTab = useTabsStore(state => state.newTab)
     const tabs = useTabsStore(state => state.tabs)
-    const location = useLocation();
 
     const [proxy, setProxy] = useState<"uv" | "sj">("uv");
 
@@ -53,7 +52,7 @@ const Shell = () => {
 
     return (
         <div className={"flex justify-between gap-2.5 p-3 rounded-xl bg-(--secondary) inset-shadow-(--inset-shadow-primary) duration-200"}>
-            <div className="flex items-center justify-start gap-1.5">
+            <div className="flex items-center justify-start gap-2.5">
                 <Link to="/" className="group cursor-pointer">
                     <svg viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg" className="size-9 group-hover:-translate-y-1 duration-150 pointer-events-none">
                         <circle cx="64" cy="64" r="64" className="fill-(--logo-primary)" />
@@ -61,31 +60,18 @@ const Shell = () => {
                         <path d="M51 87V41H81V51.5H62.1278V59.75H78.9222L76.5 70.25H62.1278V85L51 87Z" className="fill-(--logo-secondary)" />
                     </svg>
                 </Link>
-                <div className={"flex items-center gap-1.5 duration-150" + " " + `
-                    ${location.pathname === "/" ? "opacity-0 pointer-events-none -translate-x-3" : ""}
-                `}>
-                    <span className="font-black text-xl">/</span>
-                    <span className={"font-semibold text-xl duration-150" + " " + `
-                        ${location.pathname === "/" ? "opacity-0 -translate-x-5" : ""}
-                    `}>
-                        {
-                            location.pathname === "/settings" && "Settings"
-                        }
-                        {
-                            location.pathname === "/games" && "Games"
-                        }
-                    </span>
+                <div className="relative flex items-center justify-center">
+                    {
+                        tabs && tabs.length > 0 ? tabs.map((tab, index) => (
+                            <Search tab={tab} key={index} />
+                        )) : (
+                            <Search />
+                        )
+                    }
                 </div>
             </div>
-            <div className="relative flex items-center justify-center">
-                {
-                    tabs && tabs.length > 0 ? tabs.map((tab, index) => (
-                        <Search tab={tab} key={index} />
-                    )) : (
-                        <Search />
-                    )
-                }
-            </div>
+            {/* <div className="relative flex items-center justify-center">
+            </div> */}
             <div className="flex items-center justify-end gap-2.5">
                 <div className={"group relative flex justify-center items-center min-h-5 p-2 px-3 gap-1 rounded-full bg-(--primary) cursor-pointer duration-200" + " " + `
                     inset-shadow-(--inset-shadow-secondary)

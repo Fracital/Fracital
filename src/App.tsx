@@ -1,6 +1,6 @@
 import { createId } from "@paralleldrive/cuid2"
 import { useEffect, useRef, useState } from 'react'
-import { RectangleStackIcon, PlusIcon } from '@heroicons/react/24/solid';
+import { RectangleStackIcon, PlusIcon, Cog6ToothIcon } from '@heroicons/react/24/solid';
 import type { detailProps } from "./libs/eventBus";
 import XOR from './libs/XOR';
 import Shell from './gui/Shell';
@@ -115,56 +115,16 @@ const App = () => {
         getSettings();
     }, [])
 
-
-    // useEffect(() => {
-    //     const handle = (e: Event) => {
-    //         const { detail } = e as CustomEvent<detailProps>;
-    //         console.log("Event received:", detail);
-
-    //         const tab = tabs.find((t) => t.id === detail.id);
-    //         if (tab) {
-    //             console.log("Updating tab:", tab.id);
-    //             updateTab(tab.id, {
-    //                 url: detail.url,
-    //                 title: detail.title,
-    //                 icon: detail.icon,
-    //                 displayUrl: detail.url
-    //             });
-    //         } else {
-    //             console.warn("Tab not found for ID:", detail.id);
-    //         }
-    //     }
-    //     window.addEventListener("proxy-navigate", handle as EventListener)
-    //     return () => window.removeEventListener("proxy-navigate", handle as EventListener)
-    // }, [])
-
         useEffect(() => {
             const handler = (e: Event) => {
                 const detail = (e as CustomEvent<detailProps>).detail;
-                console.log(detail)
 
-                // update the tab with the new details
                 updateTab(detail.id, {
                     url: detail.url,
                     title: detail.title,
                     icon: detail.icon,
                     displayUrl: detail.url,
                 });
-
-
-                // setTabs((prevTabs) => {
-                //     const index = prevTabs.findIndex((t) => t.id === detail.id);
-                //     if (index === -1) return prevTabs;
-                //     const updatedTabs = [...prevTabs];
-                //     updatedTabs[index] = {
-                //         ...updatedTabs[index],
-                //         url: detail.url,
-                //         displayUrl: detail.url,
-                //         title: detail.title,
-                //         icon: detail.icon,
-                //     };
-                //     return updatedTabs;
-                // });
             };
             window.addEventListener("proxy-navigate", handler);
             return () => window.removeEventListener("proxy-navigate", handler);
@@ -206,28 +166,66 @@ const App = () => {
         const handleKeys = (e: KeyboardEvent) => {
             const key = e.key.toLowerCase()
 
-            if ((platform.includes("Mac") && e.ctrlKey && key === "s") || (e.altKey && key === "s")) {
-                if (tabsOpen) {
-                    setTabsOpen(false);
-                } else {
-                    setTabsOpen(true);
+            if (platform.includes("Mac")) {
+                if (e.shiftKey && e.ctrlKey && key === "s") {
+                    newTab({
+                        id: createId(),
+                        title: "Settings",
+                        url: "settings",
+                        icon: <Cog6ToothIcon className="size-5" />,
+                        displayUrl: "settings"
+                    })
+                } else if (e.ctrlKey && key === "s") {
+                    if (tabsOpen) {
+                        setTabsOpen(false);
+                    } else {
+                        setTabsOpen(true);
+                    }
                 }
-            }
-            else if ((platform.includes("Mac") && e.ctrlKey && key === "t") || e.altKey && key === "t") {
-                newTab({
-                    id: createId(),
-                    title: "New Tab",
-                    url: "newtab",
-                    displayUrl: "newtab"
-                })
-            } else if (e.shiftKey && e.key === "W") {
-                if (currentTab?.id) {
-                    closeTab(currentTab.id)
+                if (e.ctrlKey && key === "t") {
+                    newTab({
+                        id: createId(),
+                        title: "New Tab",
+                        url: "newtab",
+                        displayUrl: "newtab"
+                    })
                 }
-            } else if (e.shiftKey && e.key === "Q") {
-                tabs.forEach((tab) => {
-                    closeTab(tab.id)
-                })
+                if (e.shiftKey && e.key === "W") {
+                    if (currentTab?.id) {
+                        closeTab(currentTab.id)
+                    }
+                }
+                if (e.shiftKey && e.key === "Q") {
+                    tabs.forEach((tab) => {
+                        closeTab(tab.id)
+                    })
+                }
+            } else {
+                if (e.altKey && key === "s") {
+                    if (tabsOpen) {
+                        setTabsOpen(false);
+                    } else {
+                        setTabsOpen(true);
+                    }
+                }
+                if (e.altKey && key === "t") {
+                    newTab({
+                        id: createId(),
+                        title: "New Tab",
+                        url: "newtab",
+                        displayUrl: "newtab"
+                    })
+                }
+                if (e.shiftKey && key === "w") {
+                    if (currentTab?.id) {
+                        closeTab(currentTab.id)
+                    }
+                }
+                if (e.shiftKey && key === "q") {
+                    tabs.forEach((tab) => {
+                        closeTab(tab.id)
+                    })
+                }
             }
         }
         window.addEventListener("keydown", handleKeys)
