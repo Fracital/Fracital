@@ -80,3 +80,15 @@ export const useSettingsStore = create<{
         return settings[key] !== undefined ? settings[key] : null
     },
 }))
+
+export const useSetupStore = create<{
+    step: number
+    setStep: (step: number) => void
+    isSetupComplete: boolean
+    setSetupComplete: (complete: boolean) => void
+}>((set) => ({
+    step: 0,
+    setStep: (step) => set({ step }),
+    isSetupComplete: false,
+    setSetupComplete: (complete) => set({ isSetupComplete: complete })
+}))
