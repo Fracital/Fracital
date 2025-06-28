@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, type ChangeEvent } from "react";
 import { XMarkIcon, MagnifyingGlassIcon } from "@heroicons/react/24/solid";
 import type { TabProps } from "./Tab";
 import { useTabsStore } from "../store";
@@ -95,7 +95,7 @@ export const Search = ({ tab }: SearchProps) => {
             {/* <XMarkIcon className={"size-6 text-(--text-secondary) hover:text-(--text-primary) stroke-current stroke-1 duration-150 cursor-pointer z-10" + " " + `
                 ${hasQuery ? "" : "translate-x-2 opacity-0 duration-150 pointer-events-none"}
             `} onMouseDown={() => clearSearch()}/> */}
-            <div ref={searchRef} className={"flex items-center bg-(--tertiary) h-[48px] gap-1 rounded-xl cursor-text duration-150" + " " + `
+            <div ref={searchRef} className={"flex items-center bg-(--primary) h-[48px] gap-1 rounded-xl cursor-text duration-150" + " " + `
                 ${searchFocused ? "inset-shadow-(--inset-shadow-accent)" : "inset-shadow-(--inset-shadow-secondary)"}
             `} onMouseDown={() => {
                 if (document.activeElement !== inputRef.current) {
@@ -106,20 +106,29 @@ export const Search = ({ tab }: SearchProps) => {
 
                 }
             }}>
-                <div className="relative flex items-center justify-start sm:w-[30rem] h-full z-10">
-                    <span className={"absolute left-3 font-semibold ease-in-out pointer-events-none w-max" + " " + `
+                <div className={"relative flex items-center justify-start h-full z-10 duration-150" + " " + `
+                    ${
+                        hasQuery ? "sm:w-[20rem] w-[5rem]" : "sm:w-[12.5rem] w-[5rem]"
+                    }
+                `}>
+                    <span className={"absolute left-4 font-semibold ease-in-out pointer-events-none w-max" + " " + `
                         ${hasQuery ? "opacity-0 -translate-x-1 duration-100" : "duration-150"}
                         ${searchFocused ? "text-(--text-primary)" : "text-(--text-secondary)"}
                     `}>Search or enter a URL</span>
-                    <input id="input" ref={inputRef} type="text" className="size-full pl-3 text-(--text-secondary) font-medium focus:outline-none focus:ring-0 z-10"
+                    <input id="input" ref={inputRef} type="text" className="size-full pl-4 text-(--text-secondary) font-medium focus:outline-none focus:ring-0 z-10"
                     onFocus={() => {
                         setSearchFocused(true);
                     }}
                     onBlur={() => {
                         setSearchFocused(false);
                     }}
-                    onChange={() => {
-                        setHasQuery(true);
+                    onChange={(e: ChangeEvent) => {
+                        const value = (e.target as HTMLInputElement).value;
+                        if (value !== "") {
+                            setHasQuery(true);
+                        } else {
+                            setHasQuery(false);
+                        }
                     }}
                     onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => {
                         if (e.key === "Enter") {
@@ -129,15 +138,19 @@ export const Search = ({ tab }: SearchProps) => {
                         }
                     }} />
                 </div>
-                <div className="p-1.5">
-                    <button className="group flex items-center justify-center p-2 rounded-lg bg-(--primary) hover:bg-(--accent) duration-75 cursor-pointer z-20"
+                <div className={"p-1.5" + " " + (hasQuery ? "" : "absolute")}>
+                    <button className={"group flex items-center justify-center p-2 cursor-pointer z-20" + " " + `
+                        ${
+                            hasQuery ? "" : "opacity-0 pointer-events-none"
+                        }
+                    `}
                     onClick={() => {
                         if (typeof inputRef.current?.value === "string") {
                             console.log(inputRef.current.value);
                             searchHandler(inputRef.current?.value);
                         }
                     }}>
-                        <MagnifyingGlassIcon className="size-5 text-(--text-tertiary) group-hover:text-(--text-primary) stroke-current stroke-1 duration-75 pointer-events-none" />
+                        <MagnifyingGlassIcon className="size-5 text-(--text-tertiary) group-hover:text-(--text-primary) stroke-current stroke-1 duration-150 pointer-events-none" />
                     </button>
                 </div>
             </div>

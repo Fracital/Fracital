@@ -29,7 +29,6 @@ const Steps = () => {
         {
             title: "User Settings",
             lines: [
-                "Prompting for user settings...",
                 "Please configure your preferences."
             ]
         }

@@ -1,6 +1,7 @@
 import fs from "fs";
 import path from "path";
 
+const __dirname = path.dirname(new URL(import.meta.url).pathname);
 const THEMES_DIR = path.join(__dirname, 'public', 'themes');
 const OUTPUT_FILE = path.join(THEMES_DIR, 'themes.json');
 
