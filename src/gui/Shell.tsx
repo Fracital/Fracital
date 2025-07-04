@@ -263,7 +263,7 @@ const Shell = () => {
                     icon: <Cog6ToothIcon className="size-5" />,
                     displayUrl: "settings"
                 })}></ShellButton>
-                <UserCard avatar={<UserCircleIcon className="size-8" />} id="anon" display="Quest" handle="anon" isActive={true} isDev={true} isAmplified={true} isVerified={true} />
+                <UserCard avatar={<UserCircleIcon className="size-8" />} id="anon" display="Guest" handle="anon" isActive={true} isDev={true} isAmplified={true} isVerified={true} />
             </div>
         </div>
     );

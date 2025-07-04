@@ -5,6 +5,7 @@ let styleElement: HTMLStyleElement | null = null;
 export const initTheme = async () => {
     const { getSettings, setSettings } = useSettingsStore.getState();
     const currentTheme = await getSettings("theme");
+    if (currentTheme === null) return
     const configBuffer = JSON.parse(await window.Filer.fs.promises.readFile(`/themes/${currentTheme}/index.json`, "utf8"));
     setSettings("brightness", configBuffer["brightness"]);
     await loadTheme(currentTheme);

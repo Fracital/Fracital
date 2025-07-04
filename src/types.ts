@@ -43,3 +43,10 @@ export const fileExists = async (path: string): Promise<boolean> => {
         });
     });
 }
+
+export interface COM {
+    theme: {
+        getTheme: () => any
+        setTheme: (name: string) => Promise<boolean>
+    }
+}

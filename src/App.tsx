@@ -5,6 +5,8 @@ import type { detailProps } from "./libs/eventBus";
 import XOR from './libs/XOR';
 import Shell from './gui/Shell';
 
+import { Api } from "./Api";
+
 import { Tab } from './components/Tab';
 
 import Home from './views/Home';
@@ -68,7 +70,9 @@ const regSw = async () => {
 }
 regSw();
 
+
 const App = () => {
+    Api()
     const tabs = useTabsStore(state => state.tabs)
     const currentTab = tabs.find(tab => tab.current === true);
     const tabsOpen = useTabsStore(state => state.tabsOpen)
