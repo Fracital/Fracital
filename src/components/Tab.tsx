@@ -25,7 +25,7 @@ export const Tab = ({ title, url, id, icon }: TabProps) => {
     return (
         <div data-url={url} id={id} className={"flex w-full justify-between p-3 rounded-lg duration-150" + " " + `
             ${
-                currentTab && id === currentTab.id ? "bg-(--accent-opaque) scale-105 rounded-b-md" : `${settings.brightness === "dark" ? "bg-[#ffffff10] hover:bg-[#ffffff18]" : "bg-[#00000025] hover:bg-[#0000001a]"}`
+                currentTab && id === currentTab.id ? "bg-(--accent-opaque) rounded-b-md" : `${settings.brightness === "dark" ? "bg-[#ffffff10] hover:bg-[#ffffff18]" : "bg-[#00000025] hover:bg-[#0000001a]"}`
             }
         `} onMouseDown={(e) => {
             if (e.target === closeRef.current) return
@@ -40,7 +40,7 @@ export const Tab = ({ title, url, id, icon }: TabProps) => {
                 }
             }
         }}>
-            <div className="flex w-full justify-between duration-150">
+            <div className="flex w-full justify-between items-center duration-150">
                 <div className="flex items-center gap-1.5 *:pointer-events-none">
                     {typeof icon === "string" ? (
                         <img src={icon} alt={title} className="size-5" />

@@ -50,3 +50,13 @@ export interface COM {
         setTheme: (name: string) => Promise<boolean>
     }
 }
+
+export interface SongProps {
+    title: string
+    artist: string
+    album: string
+    genre: string
+    year: string
+    cover: string | any,
+    src: string
+}

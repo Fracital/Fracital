@@ -1,21 +1,24 @@
 import { createId } from "@paralleldrive/cuid2"
-import { useEffect, useRef, useState } from 'react'
-import { RectangleStackIcon, PlusIcon, Cog6ToothIcon } from '@heroicons/react/24/solid';
+import { useEffect, useRef, useState } from "react"
+import { RectangleStackIcon, PlusIcon, Cog6ToothIcon } from "@heroicons/react/24/solid";
 import type { detailProps } from "./libs/eventBus";
-import XOR from './libs/XOR';
-import Shell from './gui/Shell';
+import XOR from "./libs/XOR";
 
 import { Api } from "./Api";
 
-import { Tab } from './components/Tab';
+import Shell from "./gui/Shell";
+import { QuickPlayer } from "./gui/QuickPlayer"
+import { Tab } from "./components/Tab";
 
-import Home from './views/Home';
-import Settings from './views/Settings';
-import ExternalSite from './views/ExternalSite';
-import { BareMuxConnection } from '@mercuryworkshop/bare-mux';
-import { useSettingsStore, useTabsStore } from './store';
+import Home from "./views/Home";
+import Settings from "./views/Settings";
+import ExternalSite from "./views/ExternalSite";
+import { BareMuxConnection } from "@mercuryworkshop/bare-mux";
+import { usePanelsStore, useSettingsStore, useTabsStore } from "./store";
 import { quickLinks } from "./libs/init";
 import { initTheme } from "./libs/theme";
+import { MusicLibrary } from "./views/Music/MusicLibrary";
+import { View } from "./gui/View";
 
 const regSw = async () => {
     await navigator.serviceWorker.getRegistrations().then(registrations => {
@@ -73,32 +76,31 @@ regSw();
 
 const App = () => {
     Api()
+    const settings = useSettingsStore(state => state.settings)
+    const setSettings = useSettingsStore(state => state.setSettings)
+
+    const currentPanel = usePanelsStore(state => state.current);
+    const setCurrentPanel = usePanelsStore(state => state.setCurrent)
+    const setPanelsOpen = usePanelsStore(state => state.setPanelsOpen)
+
     const tabs = useTabsStore(state => state.tabs)
     const currentTab = tabs.find(tab => tab.current === true);
-    const tabsOpen = useTabsStore(state => state.tabsOpen)
-    const setTabsOpen = useTabsStore(state => state.setTabsOpen)
+    const panelsOpen = usePanelsStore(state => state.panelsOpen)
     const newTab = useTabsStore(state => state.newTab)
     const closeTab = useTabsStore(state => state.closeTab)
     const updateTab = useTabsStore(state => state.updateTab)
+
     const [platform, setPlatform] = useState<string>("")
     const [proxy] = useState<string | undefined>(localStorage.getItem("proxy") || undefined)
+
     const [mainHeight, setMainHeight] = useState<number | undefined>(document.querySelector<HTMLDivElement>("#main")?.getBoundingClientRect().height || 805)
-    const settings = useSettingsStore(state => state.settings)
-    const setSettings = useSettingsStore(state => state.setSettings)
+    const [shellHeight, setShellHeight] = useState<number | undefined>(document.querySelector<HTMLDivElement>("#shell")?.getBoundingClientRect().height || 72)
 
     const tabsRef = useRef<HTMLDivElement>(null)
 
     useEffect(() => {
         initTheme()
     }, [settings.theme]);
-
-    useEffect(() => {
-        console.log("Tabs updated:", tabs);
-    }, [tabs])
-
-    useEffect(() => {
-        console.log(settings);
-    }, [settings]);
 
     useEffect(() => {
         const getSettings = async () => {
@@ -119,20 +121,20 @@ const App = () => {
         getSettings();
     }, [])
 
-        useEffect(() => {
-            const handler = (e: Event) => {
-                const detail = (e as CustomEvent<detailProps>).detail;
+    useEffect(() => {
+        const handler = (e: Event) => {
+            const detail = (e as CustomEvent<detailProps>).detail;
 
-                updateTab(detail.id, {
-                    url: detail.url,
-                    title: detail.title,
-                    icon: detail.icon,
-                    displayUrl: detail.url,
-                });
-            };
-            window.addEventListener("proxy-navigate", handler);
-            return () => window.removeEventListener("proxy-navigate", handler);
-        }, []);
+            updateTab(detail.id, {
+                url: detail.url,
+                title: detail.title,
+                icon: detail.icon,
+                displayUrl: detail.url,
+            });
+        };
+        window.addEventListener("proxy-navigate", handler);
+        return () => window.removeEventListener("proxy-navigate", handler);
+    }, []);
 
 
     useEffect(() => {
@@ -155,12 +157,16 @@ const App = () => {
     }, []);
 
     useEffect(() => {
-        const height = document.querySelector<HTMLDivElement>("#main")?.getBoundingClientRect().height
-        setMainHeight(height)
+        const mainHeight = document.querySelector<HTMLDivElement>("#main")?.getBoundingClientRect().height
+        setMainHeight(mainHeight)
+        const shellHeight = document.querySelector<HTMLDivElement>("#shell")?.getBoundingClientRect().height;
+        setShellHeight(shellHeight)
 
         const handleWindowSize = () => {
-            const height = document.querySelector<HTMLDivElement>("#main")?.getBoundingClientRect().height;
-            setMainHeight(height);
+            const mainHeight = document.querySelector<HTMLDivElement>("#main")?.getBoundingClientRect().height;
+            setMainHeight(mainHeight);
+            const shellHeight = document.querySelector<HTMLDivElement>("#shell")?.getBoundingClientRect().height;
+            setShellHeight(shellHeight)
         };
         window.addEventListener("resize", handleWindowSize);
         return () => window.removeEventListener("resize", handleWindowSize);
@@ -180,10 +186,10 @@ const App = () => {
                         displayUrl: "settings"
                     })
                 } else if (e.ctrlKey && key === "s") {
-                    if (tabsOpen) {
-                        setTabsOpen(false);
+                    if (panelsOpen) {
+                        setPanelsOpen(false);
                     } else {
-                        setTabsOpen(true);
+                        setPanelsOpen(true);
                     }
                 }
                 if (e.ctrlKey && key === "t") {
@@ -194,22 +200,22 @@ const App = () => {
                         displayUrl: "newtab"
                     })
                 }
-                if (e.shiftKey && e.key === "W") {
+                if (e.ctrlKey && key === "w") {
                     if (currentTab?.id) {
                         closeTab(currentTab.id)
                     }
                 }
-                if (e.shiftKey && e.key === "Q") {
+                if (e.ctrlKey && key === "q") {
                     tabs.forEach((tab) => {
                         closeTab(tab.id)
                     })
                 }
             } else {
                 if (e.altKey && key === "s") {
-                    if (tabsOpen) {
-                        setTabsOpen(false);
+                    if (panelsOpen) {
+                        setPanelsOpen(false);
                     } else {
-                        setTabsOpen(true);
+                        setPanelsOpen(true);
                     }
                 }
                 if (e.altKey && key === "t") {
@@ -220,12 +226,12 @@ const App = () => {
                         displayUrl: "newtab"
                     })
                 }
-                if (e.shiftKey && key === "w") {
+                if (e.altKey && key === "w") {
                     if (currentTab?.id) {
                         closeTab(currentTab.id)
                     }
                 }
-                if (e.shiftKey && key === "q") {
+                if (e.altKey && key === "q") {
                     tabs.forEach((tab) => {
                         closeTab(tab.id)
                     })
@@ -243,7 +249,7 @@ const App = () => {
         <div className="flex flex-col size-full gap-2.5 p-3">
             <Shell />
             <div className="flex flex-col size-full gap-[1px]">
-                <div id="main" className="relative flex size-full gap-2.5">
+                <div id="main" className="relative flex size-full gap-2.5" style={{height: `calc(100% - calc(${shellHeight}px + calc(var(--spacing) * 2.5))`}}>
                     <div className={"relative size-full bg-(--secondary) inset-shadow-(--inset-shadow-primary) rounded-xl overflow-hidden"}>
                         {/* <Routes>
                             <Route path="/" element={
@@ -253,47 +259,72 @@ const App = () => {
                             <Route path="/settings" element={<Settings />} />
                         </Routes> */}
                         {
-                            tabs.length > 0 ? tabs.map((item, index) => (
-                                item.url === "newtab" ?
-                                <Home key={item.id} className={"absolute inset-0" + " " + `
-                                    ${
-                                        currentTab ? currentTab.id !== item.id ? "opacity-0 pointer-events-none" : "" : ""
+                            tabs.length > 0 ? tabs.map((item, index) => {
+                                if (item.url === "newtab") {
+                                    return (
+                                        <Home key={item.id} className={"absolute inset-0 duration-150" + " " + `
+                                            ${
+                                                currentTab ? currentTab.id !== item.id ? "opacity-0 translate-y-2 pointer-events-none" : "" : ""
+                                            }
+                                        `} />
+                                    );
+                                } else if (item.url.includes("fr://")) {
+                                    const page = item.url.replace("fr://", "").split("?")[0];
+                                    if (page === "settings") {
+                                        return (
+                                            <>
+                                                {currentTab && <View key={item.id} id={item.id}><Settings /></View>}
+                                            </>
+                                        );
+                                    } else if (page === "music") {
+                                        const query = item.url.includes("?") ? item.url.split("?")[1] : undefined;
+
+                                        return (
+                                            <>
+                                                {currentTab && <View key={item.id} id={item.id}><MusicLibrary query={query}/></View>}
+                                            </>
+                                        )
                                     }
-                                `} /> :
-                                item.url === "settings" ? <Settings className={"absolute inset-0" + " " + `
-                                    ${
-                                        currentTab ? currentTab.id !== item.id ? "opacity-0 pointer-events-none" : "" : ""
-                                    }
-                                `} /> :
-                                <ExternalSite current={currentTab?.id === item.id} key={index} url={proxy === "sj" ? "/service/" + XOR.encode(item.url) : "/uv/service/" + XOR.encode(item.url)} className={"absolute inset-0" + " " + `
-                                    ${
-                                        currentTab ? currentTab.id !== item.id ? "opacity-0 pointer-events-none" : "" : ""
-                                    }
-                                `} />
-                            )) : <Home />
+                                } else {
+                                    return (
+                                        <ExternalSite
+                                            current={currentTab?.id === item.id}
+                                            key={index}
+                                            url={proxy === "sj" ? "/service/" + XOR.encode(item.url) : "/uv/service/" + XOR.encode(item.url)}
+                                            className={"absolute inset-0" + " " + `
+                                                ${
+                                                    currentTab ? currentTab.id !== item.id ? "opacity-0 pointer-events-none" : "" : ""
+                                                }
+                                            `}
+                                        />
+                                    );
+                                }
+                            }) : <Home />
                         }
                     </div>
-                    <div className={(settings["floating-tabs"] && "absolute") + " " + "flex flex-col justify-center h-full duration-150" + " " + `
+                    <div className={(settings["floating-tabs"] && "absolute") + " " + "flex flex-col h-full gap-2.5 duration-150" + " " + `
                         ${
-                            tabsOpen ? "w-60 right-1.5" :  "w-10 -right-1"
+                            settings["floating-tabs"] === true ? panelsOpen ? "w-60 right-1.5" : "w-10 -right-1" : panelsOpen ? "w-78 right-1.5" : "w-10 -right-1"
                         }
-                    `}>
-                        <div ref={tabsRef} className={(settings["floating-tabs"] && "h-[calc(100%-12px)]") + " " + "flex flex-col bg-(--secondary) inset-shadow-(--inset-shadow-primary) overflow-hidden duration-150" + " " + `
+                    `} onMouseDown={() => {setPanelsOpen(true)}}>
+                        {/* tabs panel */}
+                        <div ref={tabsRef} className={"flex flex-col bg-(--secondary) inset-shadow-(--inset-shadow-primary) overflow-hidden duration-150" + " " + `
                             ${
-                                tabsOpen ? "w-full" : "w-50"
+                                currentPanel === "tabs" ? "h-2/3" : "h-1/3"
                             }
                             ${
-                                settings["floating-tabs"] && tabsOpen ? "rounded-lg" : "rounded-xl"
+                                panelsOpen ? "w-full" : "w-50"
+                            }
+                            ${
+                                settings["floating-tabs"] && panelsOpen ? "rounded-lg" : "rounded-xl"
                             }
                             ${
                                 settings["floating-tabs"] && "shadow-[0_0_16px_3px_#00000035]"
                             }
                         `} onMouseDown={() => {
-                            setTabsOpen(true)
+                            setCurrentPanel("tabs")
                         }}>
-                            <div style={{
-                                height: `calc(${mainHeight}px - calc(var(--spacing) * 12))`
-                            }} className={"relative flex w-full h-full overflow-auto gap-2 p-2 px-3 flex-col items-center duration-200"}>
+                            <div className={"relative flex w-full h-full overflow-auto gap-2 p-2 flex-col items-center duration-200"}>
                                 {
                                     tabs.length > 0 ? tabs.map((item, index) => (
                                         <Tab title={item.title} url={item.url} id={item.id} icon={item.icon} displayUrl={item.url} key={index} />
@@ -311,7 +342,7 @@ const App = () => {
                                 }
                             `}>
                                 <div title={platform.includes("Mac") ? "Toggle Tabs ⌃ + S" : "Toggle Tabs: Alt + S"} className="flex items-center justify-center p-2 hover:bg-[#ffffff10] text-(--text-secondary) hover:text-(--text-primary) rounded-md cursor-pointer duration-150" onClick={() => {
-                                    setTabsOpen(!tabsOpen)
+                                    setPanelsOpen(!panelsOpen)
                                 }}>
                                     <RectangleStackIcon className="size-5 text-current stroke-current stroke-0.5 pointer-events-none" />
                                 </div>
@@ -329,6 +360,13 @@ const App = () => {
                                 </div>
                             </div>
                         </div>
+                        <QuickPlayer className={`
+                            ${
+                                currentPanel === "quickplayer" ? "h-2/3" : "h-1/3"
+                            }
+                        `} panelsOpen={panelsOpen} onMouseDown={() => {
+                            setCurrentPanel("quickplayer")
+                        }} />
                     </div>
                 </div>
             </div>

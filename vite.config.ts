@@ -10,6 +10,9 @@ import { server as wisp } from '@mercuryworkshop/wisp-js/server'
 
 // https://vite.dev/config/
 export default defineConfig({
+  optimizeDeps: {
+    include: ['music-metadata'],
+  },
   plugins: [
     react(),
     tailwindcss(),

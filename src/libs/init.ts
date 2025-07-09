@@ -87,6 +87,9 @@ export const init = async () => {
         await window.Filer.fs.promises.writeFile("/themes/greyscale/index.css", greyTheme);
         console.log("%cFracital%c: %cinit%c() -> %cdirectory%c /themes created with default themes", "color: #fb74fe", "color: #ff7b72", "color: #c7a1f2", "color: #79c0ff", "color: #56d364", "color: #e2b340");
     }
+    if (!await dirExists("/music")) {
+        await window.Filer.fs.promises.mkdir("/music");
+    }
 
     // console.log("%cFracital%c: %cinit%c()", "color: #fb74fe", "color: #ff7b72", "color: #c7a1f2", "color: #79c0ff");
     // if (!window.localStorage.getItem("quicklinks")) {

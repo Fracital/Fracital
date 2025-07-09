@@ -19,25 +19,38 @@ interface UserProps {
     display: string;
     handle: string;
     avatar: string | React.ReactNode;
-    isDev: boolean;
-    isActive: boolean;
-    isVerified: boolean;
-    isAmplified: boolean;
 }
 
-export const UserCard = ({ id, display, handle, avatar, isAmplified, isVerified, isDev }: UserProps) => {
+export const UserCard = ({ id, display, handle, avatar }: UserProps) => {
     const [contextOpen, setContextOpen] = useState<boolean>(false)
+
     const settings = useSettingsStore(state => state.settings)
+    const [isAmplified, setIsAmplified] = useState<boolean>(false)
+    const [isVerified, setIsVerified] = useState<boolean>(false)
+    const [isDev, setIsDev] = useState<boolean>(false)
+
+    const accountRef = useRef<HTMLDivElement>(null)
+    const menuRef = useRef<HTMLDivElement>(null)
+
+    useEffect(() => {
+        const handleElseClick = (e: MouseEvent) => {
+            if (e.target !== menuRef.current && e.target !== accountRef.current) {
+                setContextOpen(false)
+            }
+        }
+
+        window.addEventListener("mousedown", handleElseClick)
+    }, [])
 
     return (
         <>
             <div className="relative flex flex-col gap-2.5 h-[28px]" onClick={() => {
-                setContextOpen((prev) => !prev)
+                contextOpen === true ? setContextOpen(false) : setContextOpen(true)
             }}>
-                <div className="group flex gap-2.5 items-center cursor-pointer" title={display + "\n@" + handle}>
+                <div ref={accountRef} className="group flex gap-2.5 items-center cursor-pointer *:pointer-events-none" title={display + "\n@" + handle}>
                     <ChevronDownIcon className={"text-(--text-tertiary) group-hover:text-(--text-primary) size-5 stroke-2 stroke-current group-hover:translate-y-0.5 pointer-events-none duration-200" + " " + `
                         ${
-                            contextOpen ? "-rotate-180 group-hover:rotate-[-165deg] group-active:rotate-[-140deg]" : "group-hover:rotate-[-15deg] group-active:rotate-[-30deg]"
+                            contextOpen ? "-rotate-180" : ""
                         }
                     `} />
                     <Suspense fallback={<UserCircleIcon className="size-7 text-(--text-secondary) pointer-events-none" />}>
@@ -48,7 +61,7 @@ export const UserCard = ({ id, display, handle, avatar, isAmplified, isVerified,
                         }
                     </Suspense>
                 </div>
-                <div className={"absolute flex flex-col items-center gap-1 top-[calc(28px+28px)] -right-3 bg-(--secondary) shadow-[0_0_8px_1px_#00000035] inset-shadow-(--inset-shadow-secondary) rounded-xl z-10 duration-150 overflow-hidden" + " " + `
+                <div ref={menuRef} className={"absolute flex flex-col items-center gap-1 top-[calc(28px+28px)] -right-3 bg-(--secondary) shadow-[0_0_8px_1px_#00000035] inset-shadow-(--inset-shadow-secondary) rounded-xl z-10 duration-150 overflow-hidden" + " " + `
                     ${
                         contextOpen ? "" : "-translate-y-2 opacity-0 pointer-events-none"
                     }
@@ -91,8 +104,8 @@ export const UserCard = ({ id, display, handle, avatar, isAmplified, isVerified,
                             <ArrowLeftStartOnRectangleIcon className="size-5.5 stroke-0.5 stroke-current group-active:scale-125 group-hover:scale-110 pointer-events-none duration-150" />
                         </button>
                     </div>
-                    <div className="flex p-1.5 pt-0">
-                        <div className={"flex justify-between items-center gap-6 w-full p-0.5 rounded-lg bg-(--tertiary) overflow-hidden" + " " + `
+                    <div className="flex p-1.5 pt-0 w-full">
+                        <div className={"flex justify-between items-center gap-6 w-full rounded-lg bg-(--tertiary) overflow-hidden" + " " + `
                             ${
                                 settings.brightness === "light" ? "" : ""
                             }
@@ -129,6 +142,11 @@ export const UserCard = ({ id, display, handle, avatar, isAmplified, isVerified,
                                                 settings.brightness === "light" ? "text-[#eef370] hover:bg-[#ffffff30]" : "text-[#dbe050] hover:bg-[#ffffff18]"
                                             }
                                         `} title="Developer: null items" />
+                                    )
+                                }
+                                {
+                                    !(isVerified && isAmplified && isDev) && (
+                                        <span className="text-xs font-medium text-[#ffffff68] cursor-default pr-1.5">No Badges</span>
                                     )
                                 }
                             </div>
@@ -178,7 +196,7 @@ const Shell = () => {
     }, []);
 
     return (
-        <div className={"flex justify-between gap-2.5 p-3 rounded-xl bg-(--secondary) inset-shadow-(--inset-shadow-primary) duration-200"}>
+        <div id="shell" className={"flex justify-between gap-2.5 p-3 rounded-xl bg-(--secondary) inset-shadow-(--inset-shadow-primary) duration-200"}>
             <div className="flex items-center justify-start gap-2.5">
                 <Link to="/" className="group cursor-pointer">
                     <svg viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg" className="size-9 group-hover:-translate-y-1 duration-150 pointer-events-none">
@@ -259,11 +277,11 @@ const Shell = () => {
                 <ShellButton title="Settings" type="icon" icon={<Cog6ToothIcon className="size-6" />} onClick={() => newTab({
                     id: createId(),
                     title: "Settings",
-                    url: "settings",
+                    url: "fr://settings",
                     icon: <Cog6ToothIcon className="size-5" />,
-                    displayUrl: "settings"
+                    displayUrl: "fr://settings"
                 })}></ShellButton>
-                <UserCard avatar={<UserCircleIcon className="size-8" />} id="anon" display="Guest" handle="anon" isActive={true} isDev={true} isAmplified={true} isVerified={true} />
+                <UserCard avatar={<UserCircleIcon className="size-8" />} id="anon" display="Guest" handle="anon" />
             </div>
         </div>
     );

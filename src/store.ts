@@ -2,18 +2,27 @@ import { create } from "zustand"
 import type { TabProps } from "./components/Tab"
 import { createId } from "@paralleldrive/cuid2"
 
-interface TabsState {
+export const usePanelsStore = create<{
+    panelsOpen: boolean
+    current: "tabs" | "quickplayer"
+    setCurrent: (panel: "tabs" | "quickplayer") => void
+    setPanelsOpen: (open: boolean) => void
+}>()((set) => ({
+    panelsOpen: false,
+    current: "tabs",
+    setCurrent: (panel: "tabs" | "quickplayer") => set({current: panel}),
+    setPanelsOpen: (open: boolean) => set({ panelsOpen: open }),
+}))
+
+const baseId = createId()
+export const useTabsStore = create<{
     tabs: TabProps[]
     setCurrentTab: (id: string | null) => void
     tabsOpen: boolean
-    setTabsOpen: (open: boolean) => void
     newTab: (props: TabProps) => void
     closeTab: (id: string) => void
     updateTab: (id: string, changes: Partial<TabProps>) => void
-}
-
-const baseId = createId()
-export const useTabsStore = create<TabsState>()((set, get) => ({
+}>()((set, get) => ({
     tabs: [{
         id: baseId,
         title: "New Tab",
@@ -31,7 +40,6 @@ export const useTabsStore = create<TabsState>()((set, get) => ({
         }
     }),
     tabsOpen: false,
-    setTabsOpen: (open: boolean) => set({ tabsOpen: open }),
     newTab: (props: TabProps) => {
         set(state => ({
             tabs: state.tabs.map(tab => ({ ...tab, current: false })).concat({ ...props, current: true })
@@ -91,4 +99,47 @@ export const useSetupStore = create<{
     setStep: (step) => set({ step }),
     isSetupComplete: false,
     setSetupComplete: (complete) => set({ isSetupComplete: complete })
+}))
+
+export const useMusicStore = create<{
+    currentTrack: {
+        name: string
+        artists: string[]
+        releaseDate: string | Date
+        album: string
+        explicit: boolean
+        cover: string
+    }
+    tracks: Record<string, any>
+    queue: Record<string, any>
+    addTrack: (id: string) => void
+    removeTrack: (id: string) => void
+}>((set, get) => ({
+    currentTrack: {
+        name: "stay another day",
+        artists: ["Jenny Rejects"],
+        releaseDate: "2025",
+        album: "stay another day",
+        explicit: true,
+        cover: "https://i.imgur.com/kf0Mavx.jpeg"
+    },
+    tracks: [
+        {
+            name: "stay another day",
+            artists: ["Jenny Rejects"],
+            releaseDate: "2025",
+            album: "stay another day",
+            explicit: false
+        },
+        {
+            name: "My Flaws Burn Through My Skin Like Demonic Flames from Hell",
+            artists: "$uicideBoy$",
+            releaseDate: "2015",
+            album: "I No Longer Feel the Razor Guarding My Heel",
+            explicit: true
+        }
+    ],
+    queue: {},
+    addTrack: () => {},
+    removeTrack: () => {}
 }))
