@@ -249,7 +249,7 @@ const App = () => {
         <div className="flex flex-col size-full gap-2.5 p-3">
             <Shell />
             <div className="flex flex-col size-full gap-[1px]">
-                <div id="main" className="relative flex size-full gap-2.5" style={{height: `calc(100% - calc(${shellHeight}px + calc(var(--spacing) * 2.5))`}}>
+                <div id="main" className="relative flex size-full gap-2.5" style={{height: (settings["floating-tabs"] ? "100%" : `calc(100% - calc(${shellHeight}px + calc(var(--spacing) * 2.5))`)}}>
                     <div className={"relative size-full bg-(--secondary) inset-shadow-(--inset-shadow-primary) rounded-xl overflow-hidden"}>
                         {/* <Routes>
                             <Route path="/" element={
@@ -268,8 +268,8 @@ const App = () => {
                                             }
                                         `} />
                                     );
-                                } else if (item.url.includes("fr://")) {
-                                    const page = item.url.replace("fr://", "").split("?")[0];
+                                } else if (item.url.includes("about:")) {
+                                    const page = item.url.replace("about:", "").split("?")[0];
                                     if (page === "settings") {
                                         return (
                                             <>
@@ -302,9 +302,9 @@ const App = () => {
                             }) : <Home />
                         }
                     </div>
-                    <div className={(settings["floating-tabs"] && "absolute") + " " + "flex flex-col h-full gap-2.5 duration-150" + " " + `
+                    <div className={(settings["floating-tabs"] && "absolute py-2") + " " + "flex flex-col h-full gap-2.5 duration-150" + " " + `
                         ${
-                            settings["floating-tabs"] === true ? panelsOpen ? "w-60 right-1.5" : "w-10 -right-1" : panelsOpen ? "w-78 right-1.5" : "w-10 -right-1"
+                            settings["floating-tabs"] === true ? panelsOpen ? "w-60 right-2" : "w-10 -right-1" : panelsOpen ? "w-78 right-2" : "w-10 -right-1"
                         }
                     `} onMouseDown={() => {setPanelsOpen(true)}}>
                         {/* tabs panel */}
@@ -341,11 +341,6 @@ const App = () => {
                                     settings.brightness === "dark" ? "bg-[#ffffff10]" : "bg-[#00000025]"
                                 }
                             `}>
-                                <div title={platform.includes("Mac") ? "Toggle Tabs ⌃ + S" : "Toggle Tabs: Alt + S"} className="flex items-center justify-center p-2 hover:bg-[#ffffff10] text-(--text-secondary) hover:text-(--text-primary) rounded-md cursor-pointer duration-150" onClick={() => {
-                                    setPanelsOpen(!panelsOpen)
-                                }}>
-                                    <RectangleStackIcon className="size-5 text-current stroke-current stroke-0.5 pointer-events-none" />
-                                </div>
                                 <div title={platform.includes("Mac") ? "New Tab ⌃ + T" : "New Tab: Alt + T"}className="flex items-center justify-center p-2 hover:bg-[#ffffff10] text-(--text-secondary) hover:text-(--text-primary) rounded-md cursor-pointer duration-200"
                                 onClick={() => {
                                     newTab({

@@ -1,5 +1,6 @@
 import { create } from "zustand"
 import type { TabProps } from "./components/Tab"
+import type { Track } from "./types"
 import { createId } from "@paralleldrive/cuid2"
 
 export const usePanelsStore = create<{
@@ -101,45 +102,53 @@ export const useSetupStore = create<{
     setSetupComplete: (complete) => set({ isSetupComplete: complete })
 }))
 
-export const useMusicStore = create<{
-    currentTrack: {
-        name: string
-        artists: string[]
-        releaseDate: string | Date
-        album: string
-        explicit: boolean
-        cover: string
-    }
-    tracks: Record<string, any>
-    queue: Record<string, any>
-    addTrack: (id: string) => void
+interface MusicStore {
+    src: string;
+    currentTrack: Track | null;
+    queue: Track[];
+
+    addTrack: (track: Track) => void;
     removeTrack: (id: string) => void
-}>((set, get) => ({
-    currentTrack: {
-        name: "stay another day",
-        artists: ["Jenny Rejects"],
-        releaseDate: "2025",
-        album: "stay another day",
-        explicit: true,
-        cover: "https://i.imgur.com/kf0Mavx.jpeg"
+    setCurrentTrack: (track: Track | null) => void
+
+    playNext: () => void;
+    playPrev: () => void;
+}
+
+export const useMusicStore = create<MusicStore>((set, get) => ({
+    src: "",
+    currentTrack: null,
+    queue: [],
+
+    addTrack: (track) => {
+        set(state => ({
+            queue: [...state.queue, track]
+        }));
     },
-    tracks: [
-        {
-            name: "stay another day",
-            artists: ["Jenny Rejects"],
-            releaseDate: "2025",
-            album: "stay another day",
-            explicit: false
-        },
-        {
-            name: "My Flaws Burn Through My Skin Like Demonic Flames from Hell",
-            artists: "$uicideBoy$",
-            releaseDate: "2015",
-            album: "I No Longer Feel the Razor Guarding My Heel",
-            explicit: true
-        }
-    ],
-    queue: {},
-    addTrack: () => {},
-    removeTrack: () => {}
+    removeTrack: (id) => {
+        set(state => ({
+            queue: state.queue.filter(track => track.id !== id)
+        }));
+    },
+    setCurrentTrack: (track) => {
+        set({ currentTrack: track, src: track?.src || "" });
+    },
+
+    playNext: () => {
+        const { queue, currentTrack } = get();
+        if (!currentTrack || queue.length === 0) return;
+
+        const index = queue.findIndex((t) => t.id === currentTrack.id);
+        const next = queue[index + 1];
+        if (next) set({ currentTrack: next });
+    },
+
+    playPrev: () => {
+        const { queue, currentTrack } = get();
+        if (!currentTrack || queue.length === 0) return;
+
+        const index = queue.findIndex((t) => t.id === currentTrack.id);
+        const prev = queue[index - 1];
+        if (prev) set({ currentTrack: prev });
+    },
 }))

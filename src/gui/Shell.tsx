@@ -61,7 +61,7 @@ export const UserCard = ({ id, display, handle, avatar }: UserProps) => {
                         }
                     </Suspense>
                 </div>
-                <div ref={menuRef} className={"absolute flex flex-col items-center gap-1 top-[calc(28px+28px)] -right-3 bg-(--secondary) shadow-[0_0_8px_1px_#00000035] inset-shadow-(--inset-shadow-secondary) rounded-xl z-10 duration-150 overflow-hidden" + " " + `
+                <div ref={menuRef} className={"absolute flex flex-col items-center gap-1 top-[calc(20px+28px)] -right-3 bg-(--secondary) shadow-[0_0_8px_1px_#00000035] inset-shadow-(--inset-shadow-secondary) rounded-xl z-10 duration-150 overflow-hidden" + " " + `
                     ${
                         contextOpen ? "" : "-translate-y-2 opacity-0 pointer-events-none"
                     }
@@ -196,7 +196,7 @@ const Shell = () => {
     }, []);
 
     return (
-        <div id="shell" className={"flex justify-between gap-2.5 p-3 rounded-xl bg-(--secondary) inset-shadow-(--inset-shadow-primary) duration-200"}>
+        <div id="shell" className={"flex justify-between gap-2.5 p-1 rounded-xl duration-200"}>
             <div className="flex items-center justify-start gap-2.5">
                 <Link to="/" className="group cursor-pointer">
                     <svg viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg" className="size-9 group-hover:-translate-y-1 duration-150 pointer-events-none">
@@ -218,7 +218,7 @@ const Shell = () => {
             {/* <div className="relative flex items-center justify-center">
             </div> */}
             <div className="flex items-center justify-end gap-2.5">
-                <div className={"group relative flex justify-center items-center min-h-5 p-2 px-3 gap-1 rounded-full bg-(--primary) cursor-pointer duration-200" + " " + `
+                <div className={"group relative flex justify-center items-center min-h-5 p-2 px-3 gap-1 rounded-full bg-(--secondary) cursor-pointer duration-200" + " " + `
                     inset-shadow-(--inset-shadow-secondary)
                     hover:inset-shadow-[0_0_0_2px_var(--accent)]
                 `} onMouseDown={() => {
@@ -277,9 +277,9 @@ const Shell = () => {
                 <ShellButton title="Settings" type="icon" icon={<Cog6ToothIcon className="size-6" />} onClick={() => newTab({
                     id: createId(),
                     title: "Settings",
-                    url: "fr://settings",
+                    url: "about:settings",
                     icon: <Cog6ToothIcon className="size-5" />,
-                    displayUrl: "fr://settings"
+                    displayUrl: "about:settings"
                 })}></ShellButton>
                 <UserCard avatar={<UserCircleIcon className="size-8" />} id="anon" display="Guest" handle="anon" />
             </div>

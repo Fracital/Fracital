@@ -60,3 +60,15 @@ export interface SongProps {
     cover: string | any,
     src: string
 }
+
+export interface Track {
+    id: string;
+    title: string;
+    artists: string | string[];
+    album: string;
+    genre: string;
+    year: string | Date;
+    cover: string;
+    explicit: boolean;
+    src?: string;
+}
