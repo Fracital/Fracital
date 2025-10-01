@@ -126,7 +126,7 @@ export const ShellButton = ({ type, icon, title, registerListeners, onClick }: B
     }
 
     return (
-        <button title={Array.isArray(title) ? title[currentState] : title} className={"flex items-center justify-center p-2 rounded-lg bg-(--secondary) text-(--text-secondary) hover:text-(--text-primary) cursor-pointer duration-200" +" " +
+        <button title={Array.isArray(title) ? title[currentState] : title} className={"flex items-center justify-center p-2 rounded-lg bg-(--primary) text-(--text-secondary) hover:text-(--text-primary) cursor-pointer duration-200" +" " +
             `
                 inset-shadow-(--inset-shadow-secondary)
                 hover:inset-shadow-[0_0_0_2px_var(--accent)]

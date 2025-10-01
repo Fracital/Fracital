@@ -1,5 +1,4 @@
 import { useEffect, useState, useRef } from "react"
-import { useSettingsStore } from "../store";
 
 export interface MenuItem {
     title: string;
@@ -14,7 +13,6 @@ interface MenuProps {
 }
 
 export const ContextMenu= ({ items, position, onClose }: MenuProps) => {
-    const settings = useSettingsStore(state => state.settings)
     const menuRef = useRef<HTMLDivElement>(null);
     const itemsRef = useRef<HTMLDivElement>(null)
     const [adjustedPos, setAdjustedPos] = useState(position);
@@ -72,11 +70,7 @@ export const ContextMenu= ({ items, position, onClose }: MenuProps) => {
         style={{ top: adjustedPos.y, left: adjustedPos.x }}>
             <div ref={itemsRef} className="flex flex-col translate-y-4 opacity-0 duration-500">
                 {items.map((item, i) => (
-                    <div key={i} className={"group flex items-center justify-between gap-5 leading-none pl-3 p-2.5 text-sm rounded-md cursor-pointer duration-150" + " " + `
-                        ${
-                            settings.brightness === "dark" ? "text-(--text-secondary) hover:text-(--text-primary) hover:bg-[#ffffff10]" : "text-(--text-secondary) hover:text-(--text-primary) hover:bg-[#00000018]"
-                        }
-                    `}
+                    <div key={i} className="group flex items-center justify-between gap-5 leading-none pl-3 p-2.5 text-sm text-[#ffffffad] hover:text-[#ffffffdf] hover:bg-[#ffffff10] rounded-md cursor-pointer duration-150"
                     onClick={() => {
                         item.onClick();
                         onClose();

@@ -149,9 +149,9 @@ export const QuickPlayer = ({ tabsOpen, className }: QuickPlayerProps) => {
                                         newTab({
                                             id: createId(),
                                             title: "Music Library",
-                                            url: "about:music",
+                                            url: "fr://music",
                                             current: true,
-                                            displayUrl: "about:music"
+                                            displayUrl: "fr://music"
                                         })
                                     }}>
                                         <PlayIcon className="size-5 text-current stroke-current stroke-0.5 pointer-events-none" />
@@ -170,9 +170,9 @@ export const QuickPlayer = ({ tabsOpen, className }: QuickPlayerProps) => {
                                     newTab({
                                         id: createId(),
                                         title: "Music Library",
-                                        url: "about:music?upload",
+                                        url: "fr://music?upload",
                                         current: true,
-                                        displayUrl: "about:music",
+                                        displayUrl: "fr://music",
                                         icon: <MusicalNoteIcon className="size-5" />
                                     })
                                 }}>
@@ -183,9 +183,9 @@ export const QuickPlayer = ({ tabsOpen, className }: QuickPlayerProps) => {
                                     newTab({
                                         id: createId(),
                                         title: "Music Library",
-                                        url: "about:music",
+                                        url: "fr://music",
                                         current: true,
-                                        displayUrl: "about:music",
+                                        displayUrl: "fr://music",
                                         icon: <MusicalNoteIcon className="size-5" />
                                     })
                                 }}>

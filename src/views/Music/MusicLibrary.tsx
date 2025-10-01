@@ -1,11 +1,10 @@
 import { useEffect, useRef, useState } from "react"
 import { useMusicStore, useSettingsStore } from "../../store";
-import { ArrowUpOnSquareIcon, BookmarkIcon, RectangleGroupIcon, PlusIcon, MinusIcon } from "@heroicons/react/24/solid";
+import { ArrowUpOnSquareIcon, BookmarkIcon, RectangleGroupIcon, PlusIcon } from "@heroicons/react/24/solid";
 import { PlayIcon, EllipsisHorizontalIcon } from "@heroicons/react/24/solid";
 import type { Track } from "../../types";
 import { parseBlob } from 'music-metadata';
 import { createId } from "@paralleldrive/cuid2";
-import { ContextMenu, type MenuItem } from "../../components/ContextMenu"
 
 interface MusicLibraryProps {
     query: string | undefined
@@ -75,21 +74,12 @@ export const MusicLibrary = ({ query }: MusicLibraryProps) => {
     const settings = useSettingsStore(state => state.settings)
     const setCurrentTrack = useMusicStore(state => state.setCurrentTrack)
     const currentTrack = useMusicStore(state => state.currentTrack)
-    const addTrack = useMusicStore(state => state.addTrack)
-    const removeTrack = useMusicStore(state => state.removeTrack)
     const [page, setpage] = useState<string | "library" | "upload" | "saves">(query ? query : "library")
 
     const [filename, setFileName] = useState<string>("")
     const albumCoverRef = useRef<HTMLImageElement>(null)
     const [albumCover, setAlbumCover] = useState<boolean | string>(false)
     const [audio, setAudio] = useState<boolean | null>(null)
-
-    const [contextMenu, setContextMenu] = useState<{
-        x: number;
-        y: number;
-        visible: boolean;
-        items: MenuItem[];
-    } | null>(null);
 
     const audioRef = useRef<HTMLInputElement>(null)
     const titleRef = useRef<HTMLInputElement>(null)
@@ -188,30 +178,13 @@ export const MusicLibrary = ({ query }: MusicLibraryProps) => {
                 <div className="flex flex-wrap gap-2">
                     {
                         library.length === 0 ? (
-                            <span className={"text-lg" + " " + `
-                                ${
-                                    settings.brightness === "dark" ? "text-[#ffffff80]" : "text-[#00000088]"
-                                }
-                            `}>No songs found.</span>
+                            <span className="text-lg text-[#ffffff80]">No songs found.</span>
                         ) : library.map((song, index) => (
-                            <div key={index} className="flex items-center gap-2 p-2.5 max-w-[22rem] w-max rounded-xl bg-[#ffffff10] hover:bg-[#ffffff18] duration-150"
+                            <div key={index} className="flex items-center gap-2 p-2.5 w-max rounded-xl bg-[#ffffff10] hover:bg-[#ffffff18] duration-150"
                             onClick={(e: React.MouseEvent<HTMLElement>) => {
                                 if ((e.target as HTMLElement).id === "options") return;
                                 if (currentTrack === song) return;
                                 setCurrentTrack(song);
-                                const audio = document.getElementById("audio") as HTMLAudioElement;
-                                if (audio) {
-                                    audio.autoplay = true;
-                                    setTimeout(() => {
-                                        if (audioRef.current) {
-                                            audio.autoplay = false;
-                                        }
-                                    }, 100);
-                                }
-                                audio.play().catch(err => {
-                                    console.error("Failed to play audio:", err);
-                                });
-                                removeTrack(song.id);
                             }}>
                                 <img src={song.cover} alt={song.title} className="size-15 rounded-lg" />
                                 <div className="flex flex-col gap-1 justify-center pr-2">
@@ -221,32 +194,7 @@ export const MusicLibrary = ({ query }: MusicLibraryProps) => {
                                 <div id="play" title="Play track" className="flex items-center justify-center p-2 bg-[#ffffff10] hover:bg-[#ffffff18] rounded-full cursor-pointer duration-150">
                                     <PlayIcon id="play" className="size-5 pointer-events-none" />
                                 </div>
-                                <div id="options" title="Track options" className="flex items-center justify-center p-2 bg-[#ffffff10] hover:bg-[#ffffff18] rounded-full cursor-pointer duration-150" onClick={(e) => {
-                                    e.stopPropagation();
-                                    e.preventDefault();
-
-                                    const items: MenuItem[] = [
-                                        {
-                                            title: "Add to queue",
-                                            icon: <PlusIcon className="size-5 stroke-current stroke-1" />,
-                                            onClick: () => {
-                                                addTrack(song)
-                                            }
-                                        },
-                                        {
-                                            title: "Remove from queue",
-                                            icon: <MinusIcon className="size-5 stroke-current stroke-1" />,
-                                            onClick: () => {}
-                                        }
-                                    ]
-
-                                    setContextMenu({
-                                        x: e.clientX,
-                                        y: e.clientY,
-                                        visible: true,
-                                        items: items,
-                                    });
-                                }}>
+                                <div id="options" title="Track options" className="flex items-center justify-center p-2 bg-[#ffffff10] hover:bg-[#ffffff18] rounded-full cursor-pointer duration-150">
                                     <EllipsisHorizontalIcon id="options" className="size-5 stroke-current stroke-1 pointer-events-none" />
                                 </div>
                             </div>
@@ -454,13 +402,6 @@ export const MusicLibrary = ({ query }: MusicLibraryProps) => {
                         </div>
                     ))
                 }
-                {contextMenu?.visible && (
-                    <ContextMenu
-                        items={contextMenu.items}
-                        position={{ x: contextMenu.x, y: contextMenu.y }}
-                        onClose={() => setContextMenu(null)}
-                    />
-                )}
             </div>
         </div>
     )

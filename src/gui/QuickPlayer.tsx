@@ -18,9 +18,6 @@ export const QuickPlayer = ({ panelsOpen, className, onMouseDown }: QuickPlayerP
     const queue = useMusicStore(state => state.queue)
     const addTrack = useMusicStore(state => state.addTrack)
     const removeTrack = useMusicStore(state => state.removeTrack)
-    const setCurrentTrack = useMusicStore(state => state.setCurrentTrack)
-    const playNext = useMusicStore(state => state.playNext)
-    const playPrev = useMusicStore(state => state.playPrev)
     const newTab = useTabsStore(state => state.newTab)
 
     const [platform, setPlatform] = useState<string>("")
@@ -119,15 +116,6 @@ export const QuickPlayer = ({ panelsOpen, className, onMouseDown }: QuickPlayerP
         setCurrentTime(newTime);
     };
 
-    const handlePlayPause = (state: boolean) => {
-        if (state) {
-            audioRef.current?.play()
-        } else {
-            audioRef.current?.pause();
-        }
-        setIsPlaying(state);
-    }
-
     const handleMouseDown = (e: React.MouseEvent) => {
         setIsDragging(true);
         handleSeek(e.clientX);
@@ -160,7 +148,7 @@ export const QuickPlayer = ({ panelsOpen, className, onMouseDown }: QuickPlayerP
     return (
         <div className={className && (className + " ") + "relative flex flex-col duration-150" + " " + `
             ${
-                settings["floating-tabs"] ? "w-full" : (panelsOpen ? "w-78" : "w-88")
+                panelsOpen ? "w-78" : "w-10"
             }
         `}>
             <div className={"flex flex-col justify-center h-full duration-150" + " " + `
@@ -168,7 +156,7 @@ export const QuickPlayer = ({ panelsOpen, className, onMouseDown }: QuickPlayerP
                     panelsOpen ? "w-full left-0" : "w-88 -left-77"
                 }
             `}>
-                <div ref={musicRef} className={(settings["floating-tabs"] && "h-full") + " " + "flex flex-col w-full bg-(--secondary) inset-shadow-(--inset-shadow-primary) overflow-hidden duration-150" + " " + `
+                <div ref={musicRef} className={(settings["floating-tabs"] && "h-[calc(100%-12px)]") + " " + "flex flex-col w-full bg-(--secondary) inset-shadow-(--inset-shadow-primary) overflow-hidden duration-150" + " " + `
                     ${
                         panelsOpen ? "w-full" : "w-88"
                     }
@@ -185,50 +173,26 @@ export const QuickPlayer = ({ panelsOpen, className, onMouseDown }: QuickPlayerP
                         <div className="flex flex-col items-start">
                             {
                                 currentTrack ?
-                                <h1 className={"ml-1.5 mt-1.5 text-2xl font-bold" + " " + `
-                                    ${
-                                        settings.brightness === "dark" ? "text-(--text-secondary)" : "text-(--text-secondary)"
-                                    }
-                                `}>Current playing</h1> :
-                                <h1 className={"ml-1.5 mt-1.5 text-2xl font-bold" + " " + `
-                                    ${
-                                        settings.brightness === "dark" ? "text-(--text-secondary)" : "text-(--text-secondary)"
-                                    }
-                                `}>Nothing playing</h1>
+                                <h1 className="ml-1.5 mt-1.5 text-2xl font-bold text-[#ffffff]">Current playing</h1> :
+                                <h1 className="ml-1.5 mt-1.5 text-2xl font-bold text-[#ffffff97]">Nothing playing</h1>
                             }
                             {
                                 currentTrack &&
-                                <div className={"flex items-center justify-between gap-2.5 p-1.5 w-full rounded-lg duration-150" + " " + `
-                                    ${
-                                        settings.brightness === "dark" ? "hover:bg-[#ffffff28]" : "hover:bg-[#00000030]"
-                                    }
-                                `}>
+                                <div className="flex items-center justify-between gap-2.5 p-1.5 w-full rounded-lg hover:bg-[#ffffff28] duration-150">
                                     <div className="flex items-center gap-2.5">
                                         <img className="size-10 rounded-md" src={currentTrack.cover} alt={currentTrack.title} />
                                         <div className="flex flex-col gap-1">
-                                            <h1 className="text-md font-semibold leading-none cursor-pointer hover:underline">{currentTrack.title.length > 18 ? currentTrack.title.slice(0, 16) + "..." : currentTrack.title}</h1>
+                                            <h1 className="text-md font-semibold leading-none cursor-pointer hover:underline">{currentTrack.title}</h1>
                                             {
                                                 Array.isArray(currentTrack.artists) && currentTrack.artists.length > 1 ? (
                                                     <div className="flex gap-1.5">
                                                         {
-                                                            currentTrack.explicit && <span className={"flex justify-center items-center size-5 text-xs font-bold rounded-sm" + " " + `
-                                                                ${
-                                                                    settings.brightness === "dark" ? "bg-[#ffffff46]" : "bg-[#00000046]"
-                                                                }
-                                                            `}>E</span>
+                                                            currentTrack.explicit && <span className="flex justify-center items-center size-5 text-xs font-bold rounded-sm bg-[#ffffff46]">E</span>
                                                         }
                                                         <div className="flex lg:flex-row flex-col gap-0.5">
                                                             {currentTrack.artists.map((artist, index) => (
-                                                                <div key={index} className={"flex justify-center items-center w-max" + " " + `
-                                                                    ${
-                                                                        settings.brightness === "dark" ? "text-[#ffffff6a]" : "text-[#00000088]"
-                                                                    }
-                                                                `}>
-                                                                    <span className={"text-xs leading-none cursor-pointer duration-150" + " " + `
-                                                                        ${
-                                                                            settings.brightness === "dark" ? "hover:text-[#ffffffc4]" : "hover:text-[#000000c4]"
-                                                                        }
-                                                                    `} key={index}>
+                                                                <div key={index} className="flex justify-center items-center text-[#ffffff6a] w-max">
+                                                                    <span className="text-xs leading-none hover:text-[#ffffffc4] cursor-pointer duration-150" key={index}>
                                                                         {artist}
                                                                     </span>
                                                                     {index < currentTrack.artists.length - 1 && <span>,</span>}
@@ -236,30 +200,11 @@ export const QuickPlayer = ({ panelsOpen, className, onMouseDown }: QuickPlayerP
                                                             ))}
                                                         </div>
                                                     </div>
-                                                ) : <div className="flex items-center gap-1.5">
-                                                    {
-                                                        currentTrack.explicit && <span className={"flex justify-center items-center size-5 text-xs font-bold rounded-sm" + " " + `
-                                                            ${
-                                                                settings.brightness === "dark" ? "bg-[#ffffff46]" : "bg-[#00000046]"
-                                                            }
-                                                        `}>E</span>
-                                                    }
-                                                    <h2 className={"text-sm leading-none cursor-pointer duration-150" + " " + `
-                                                        ${
-                                                            settings.brightness === "dark" ? "text-(--text-secondary) hover:text-(--text-primary)" : "text-(--text-secondary) hover:text-(--text-primary)"
-                                                        }
-                                                    `}>
-                                                        {currentTrack.artists[0]}
-                                                    </h2>
-                                                </div>
+                                                ) : <h2 className="text-sm leading-none text-[#ffffff6a] hover:text-[#ffffffc4] cursor-pointer duration-150">{currentTrack.artists[0]}</h2>
                                             }
                                         </div>
                                     </div>
-                                    <EllipsisHorizontalIcon className={"size-6 mr-2 stroke-current stroke-1.5 cursor-pointer duration-150" + " " + `
-                                        ${
-                                            settings.brightness === "dark" ? "text-(--text-secondary) hover:text-(--text-primary)" : "text-(--text-secondary) hover:text-(--text-primary)"
-                                        }
-                                    `} onClick={(e) => {
+                                    <EllipsisHorizontalIcon className="size-6 mr-2 text-[#ffffffac] hover:text-[#ffffff] stroke-current stroke-1.5 cursor-pointer duration-150" onClick={(e) => {
                                         e.preventDefault();
                                         e.stopPropagation();
 
@@ -268,20 +213,13 @@ export const QuickPlayer = ({ panelsOpen, className, onMouseDown }: QuickPlayerP
                                                 title: "Add to queue",
                                                 icon: <PlusIcon className="size-5 stroke-current stroke-1" />,
                                                 onClick: () => {
-                                                    addTrack(currentTrack);
+                                                    console.log("hello");
                                                 }
                                             },
                                             {
                                                 title: "Remove from queue",
                                                 icon: <MinusIcon className="size-5 stroke-current stroke-1" />,
-                                                onClick: () => {
-                                                    setCurrentTrack(null);
-                                                    removeTrack(currentTrack.id);
-                                                    if (audioRef.current) {
-                                                        audioRef.current.src = "";
-                                                    }
-                                                    setIsPlaying(false);
-                                                }
+                                                onClick: () => {}
                                             }
                                         ]
 
@@ -296,32 +234,12 @@ export const QuickPlayer = ({ panelsOpen, className, onMouseDown }: QuickPlayerP
                             }
                         </div>
                         {
-                            queue.length > 0 &&
+                            queue &&
                             <div className="flex flex-col items-start">
-                                <h1 className={"ml-1.5 mt-1.5 text-2xl font-bold" + " " + `
-                                    ${
-                                        settings.brightness === "dark" ? "text-(--text-secondary)" : "text-(--text-secondary)"
-                                    }
-                                `}>Queue</h1>
+                                <h1 className="ml-1.5 mt-1.5 text-2xl font-bold text-[#ffffff]">Queue</h1>
                                 {
                                     queue.map((song, index) => (
-                                        <div key={index} className={"flex items-center justify-between gap-2.5 p-1.5 w-full rounded-lg duration-150" + " " + `
-                                            ${
-                                                settings.brightness === "dark" ? "hover:bg-[#ffffff28]" : "hover:bg-[#00000030]"
-                                            }
-                                        `} onClick={() => {
-                                            setCurrentTrack(song);
-                                            if (audioRef.current) {
-                                                audioRef.current.autoplay = true;
-                                                setTimeout(() => {
-                                                    if (audioRef.current) {
-                                                        audioRef.current.autoplay = false;
-                                                    }
-                                                }, 100);
-                                            }
-                                            handlePlayPause(true);
-                                            removeTrack(song.id);
-                                        }}>
+                                        <div className="flex items-center justify-between gap-2.5 p-1.5 w-full rounded-lg hover:bg-[#ffffff28] duration-150">
                                             <div className="flex items-center gap-2.5">
                                                 <img className="size-10 rounded-md" src={song.cover} alt={song.title} />
                                                 <div className="flex flex-col gap-1">
@@ -330,24 +248,12 @@ export const QuickPlayer = ({ panelsOpen, className, onMouseDown }: QuickPlayerP
                                                         Array.isArray(song.artists) && song.artists.length > 1 ? (
                                                             <div className="flex gap-1.5">
                                                                 {
-                                                                    song.explicit && <span className={"flex justify-center items-center size-5 text-xs font-bold rounded-sm" + " " + `
-                                                                        ${
-                                                                            settings.brightness === "dark" ? "bg-[#ffffff46]" : "bg-[#00000046]"
-                                                                        }
-                                                                    `}>E</span>
+                                                                    song.explicit && <span className="flex justify-center items-center size-5 text-xs font-bold rounded-sm bg-[#ffffff46]">E</span>
                                                                 }
                                                                 <div className="flex lg:flex-row flex-col gap-0.5">
                                                                     {song.artists.map((artist, index) => (
-                                                                        <div key={index} className={"flex justify-center items-center w-max" + " " + `
-                                                                            ${
-                                                                                settings.brightness === "dark" ? "text-(--text-secondary)" : "text-(--text-secondary)"
-                                                                            }
-                                                                        `}>
-                                                                            <span className={"text-xs leading-none cursor-pointer duration-150" + " " + `
-                                                                                ${
-                                                                                    settings.brightness === "dark" ? "hover:text-(--text-primary)" : "hover:text-(--text-primary)"
-                                                                                }
-                                                                            `} key={index}>
+                                                                        <div key={index} className="flex justify-center items-center text-[#ffffff6a] w-max">
+                                                                            <span className="text-xs leading-none hover:text-[#ffffffc4] cursor-pointer duration-150" key={index}>
                                                                                 {artist}
                                                                             </span>
                                                                             {index < song.artists.length - 1 && <span>,</span>}
@@ -355,47 +261,26 @@ export const QuickPlayer = ({ panelsOpen, className, onMouseDown }: QuickPlayerP
                                                                     ))}
                                                                 </div>
                                                             </div>
-                                                        ) : <div className="flex items-center gap-1.5">
-                                                            {
-                                                                song.explicit && <span className={"flex justify-center items-center size-5 text-xs font-bold rounded-sm" + " " + `
-                                                                    ${
-                                                                        settings.brightness === "dark" ? "bg-[#ffffff46]" : "bg-[#00000046]"
-                                                                    }
-                                                                `}>E</span>
-                                                            }
-                                                            <h2 className={"text-sm leading-none cursor-pointer duration-150" + " " + `
-                                                                ${
-                                                                    settings.brightness === "dark" ? "text-(--text-secondary) hover:text-[#ffffffc4]" : "text-(--text-secondary) hover:text-(--text-primary)"
-                                                                }
-                                                            `}>
-                                                                {song.artists[0]}
-                                                            </h2>
-                                                        </div>
+                                                        ) : <h2 className="text-sm leading-none text-[#ffffff6a] hover:text-[#ffffffc4] cursor-pointer duration-150">{song.artists[0]}</h2>
                                                     }
                                                 </div>
                                             </div>
-                                            <EllipsisHorizontalIcon className={"size-6 mr-2 stroke-current stroke-1.5 cursor-pointer duration-150" + " " + `
-                                                ${
-                                                    settings.brightness === "dark" ? "text-(--text-secondary) hover:text-(--text-primary)" : "text-(--text-secondary) hover:text-(--text-primary)"
-                                                }
-                                            `} onClick={(e) => {
+                                            <EllipsisHorizontalIcon className="size-6 mr-2 text-[#ffffffac] hover:text-[#ffffff] stroke-current stroke-1.5 cursor-pointer duration-150" onClick={(e) => {
                                                 e.preventDefault();
                                                 e.stopPropagation();
 
                                                 const items: MenuItem[] = [
                                                     {
                                                         title: "Add to queue",
-                                                        icon: <PlusIcon className="size-5 stroke-current stroke-1" />,
+                                                        icon: null,
                                                         onClick: () => {
                                                             console.log("hello");
                                                         }
                                                     },
                                                     {
                                                         title: "Remove from queue",
-                                                        icon: <MinusIcon className="size-5 stroke-current stroke-1" />,
-                                                        onClick: () => {
-                                                            removeTrack(song.id);
-                                                        }
+                                                        icon: null,
+                                                        onClick: () => {}
                                                     }
                                                 ]
 
@@ -412,52 +297,25 @@ export const QuickPlayer = ({ panelsOpen, className, onMouseDown }: QuickPlayerP
                             </div>
                         }
                     </div>
-                    <audio ref={audioRef} src={currentTrack?.src} className="hidden" id="audio"
-                    onPlay={() => {
-                        setIsPlaying(true)
-                        removeTrack(currentTrack?.id || "");
-                    }}
-                    onPause={() => setIsPlaying(false)}
-                    onEnded={() => {
-                        if (queue.length === 0) {
-                            setCurrentTrack(null);
-                            setIsPlaying(false);
-                            if (audioRef.current) {
-                                audioRef.current.src = "";
-                            }
-                            return;
-                        }
-                        playNext();
-                        handlePlayPause(true);
-                        if (audioRef.current) {
-                            audioRef.current.currentTime = 0;
-                            audioRef.current.src = currentTrack?.src || "";
-                            setCurrentTime(0);
-                            setDuration(audioRef.current?.duration || 0);
-                            audioRef.current.autoplay = true;
-                            setTimeout(() => {
-                                if (audioRef.current) {
-                                    audioRef.current.autoplay = false;
-                                }
-                            }, 100);
-                        }
-                    }}
-                    onTimeUpdate={() => setCurrentTime(audioRef.current?.currentTime || 0)}
-                    onLoadedMetadata={() => setDuration(audioRef.current?.duration || 0)} />
-                    <div className={"relative flex justify-center items-center p-2.5 gap-2 w-full" + " " + `
-                        ${
-                            currentTrack ? "h-max" : "h-0 translate-20"
-                        }
-                    `}>
-                        <span className="font-medium">{formatTime(currentTime)}</span>
-                        <span ref={seekbarRef} className="w-full h-2 rounded-full overflow-hidden bg-(--text-tertiary) hover:h-2.5 cursor-pointer duration-150"
-                        onMouseDown={handleMouseDown}
-                        onClick={(e) => handleSeek(e.clientX)}>
-                            <span style={{ width: `var(--current, 0%)` }} className={"flex bg-(--text-primary) h-full"}></span>
-                        </span>
-                        <span className="font-medium">{formatTime(duration)}</span>
-                    </div>
                     <div>
+                        <div className="relative flex justify-center items-center h-9">
+                            <audio ref={audioRef} src={currentTrack?.src} className="hidden"
+                            onTimeUpdate={() => setCurrentTime(audioRef.current?.currentTime || 0)}
+                            onLoadedMetadata={() => setDuration(audioRef.current?.duration || 0)}/>
+                            <div className={"absolute flex p-2.5 gap-2 w-full items-center" + " " + `
+                                ${
+                                    currentTrack ? "" : "-bottom-20"
+                                }
+                            `}>
+                                <span className="font-medium">{formatTime(currentTime)}</span>
+                                <span ref={seekbarRef} className="w-full h-2 bg-[#ffffff80] rounded-full overflow-hidden hover:h-2.5 cursor-pointer duration-150"
+                                onMouseDown={handleMouseDown}
+                                onClick={(e) => handleSeek(e.clientX)}>
+                                    <span style={{ width: `var(--current, 0%)` }} className="flex h-full bg-white"></span>
+                                </span>
+                                <span className="font-medium">{formatTime(duration)}</span>
+                            </div>
+                        </div>
                         <div className={"flex min-max-1 w-full p-1.5 items-start justify-between gap-0.5" + " " + `
                             ${
                                 settings.brightness === "dark" ? "bg-[#ffffff10]" : "bg-[#00000025]"
@@ -477,6 +335,7 @@ export const QuickPlayer = ({ panelsOpen, className, onMouseDown }: QuickPlayerP
                                             audioRef.current?.pause();
                                             setIsPlaying(false);
                                         }
+                                        console.log(audioRef.current);
                                     }}>
                                         {
                                             isPlaying === false ?
