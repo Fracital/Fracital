@@ -18,12 +18,19 @@ export const usePanelsStore = create<{
 const baseId = createId()
 export const useTabsStore = create<{
     tabs: TabProps[]
+    groups: { id: string; name: string; icon?: string, accent?: string }[]
     setCurrentTab: (id: string | null) => void
     tabsOpen: boolean
     newTab: (props: TabProps) => void
     closeTab: (id: string) => void
     updateTab: (id: string, changes: Partial<TabProps>) => void
+    newGroup: (id: string | null, name: string, icon?: string) => void
+    addTabToGroup: (groupId: string, tab: TabProps) => void
+    moveTabRelative: (draggedId: string, targetId: string, placeBefore: boolean) => void
+    closeGroup: (id: string) => void
+    updateGroup: (id: string, changes: Partial<{ id: string; name: string; icon?: string, accent?: string}>) => void
 }>()((set, get) => ({
+    groups: [],
     tabs: [{
         id: baseId,
         title: "New Tab",
@@ -42,9 +49,12 @@ export const useTabsStore = create<{
     }),
     tabsOpen: false,
     newTab: (props: TabProps) => {
+        const id = props.id ?? createId();
+        const tabWithId: TabProps = { ...props, id, current: true } as TabProps;
         set(state => ({
-            tabs: state.tabs.map(tab => ({ ...tab, current: false })).concat({ ...props, current: true })
-        }))
+            tabs: state.tabs.map(tab => ({ ...tab, current: false })).concat(tabWithId as TabProps & { current: boolean })
+        }));
+
     },
     closeTab: (id: string) => {
         set(state => {
@@ -59,6 +69,7 @@ export const useTabsStore = create<{
                         : { ...tab, current: false }
                 )
             }
+
             return {
                 tabs: newTabs
             }
@@ -67,9 +78,49 @@ export const useTabsStore = create<{
     updateTab: (id: string, changes: Partial<TabProps>) =>
         set((state) => ({
             tabs: state.tabs.map((tab) =>
-            tab.id === id ? { ...tab, ...changes } : tab
-        )}
-    ))
+                tab.id === id ? { ...tab, ...changes } : tab
+            )
+        })
+    ),
+    moveTabRelative: (draggedId: string, targetId: string, placeBefore: boolean) => set((state) => {
+        const tabs = [...state.tabs];
+        const from = tabs.findIndex(t => t.id === draggedId);
+        if (from === -1) return { tabs };
+        const item = tabs.splice(from, 1)[0];
+        let to = tabs.findIndex(t => t.id === targetId);
+        if (to === -1) {
+            // append to end
+            tabs.push(item);
+            return { tabs };
+        }
+        if (!placeBefore) to = to + 1;
+        tabs.splice(to, 0, item);
+        return { tabs };
+    }),
+    newGroup: (id: string | null, name: string, icon?: string) => set((state) => ({
+        groups: [...state.groups, { id: id ?? createId(), name, icon }]
+    })),
+    addTabToGroup: (groupId: string, tab: TabProps) => set((state) => {
+        const tabId = tab.id ?? createId();
+
+        const tabExists = state.tabs.some(t => t.id === tabId);
+        const newTabs = tabExists ? state.tabs : state.tabs.concat({ ...tab, id: tabId });
+
+        const updatedTabs = newTabs.map(t => t.id === tabId ? { ...t, groupId } : t);
+
+        return {
+            tabs: updatedTabs
+        }
+    }),
+    closeGroup: (id: string) => set((state) => ({
+        groups: state.groups.filter(group => group.id !== id),
+        tabs: state.tabs.map(tab => tab.groupId === id ? { ...tab, groupId: undefined } : tab)
+    })),
+    updateGroup: (id: string, changes: Partial<{ id: string; name: string; icon?: string}>) => set((state) => ({
+        groups: state.groups.map((group) =>
+            group.id === id ? { ...group, ...changes } : group
+        )
+    }))
 }))
 
 export const useSettingsStore = create<{
@@ -122,7 +173,10 @@ export const useMusicStore = create<MusicStore>((set, get) => ({
 
     addTrack: (track) => {
         set(state => ({
-            queue: [...state.queue, track]
+            queue: [...state.queue, {
+                ...track,
+                id: typeof track.id === "string" && track.id.length > 0 ? createId() : createId()
+            }]
         }));
     },
     removeTrack: (id) => {
@@ -131,7 +185,7 @@ export const useMusicStore = create<MusicStore>((set, get) => ({
         }));
     },
     setCurrentTrack: (track) => {
-        set({ currentTrack: track, src: track?.src || "" });
+    set({ currentTrack: track ? { ...track, id: typeof track.id === "string" && track.id.length > 0 ? createId() : createId() } : null, src: track?.src || "" });
     },
 
     playNext: () => {

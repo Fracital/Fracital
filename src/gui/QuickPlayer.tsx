@@ -1,6 +1,6 @@
 import { createId } from "@paralleldrive/cuid2"
 import { useEffect, useRef, useState } from "react"
-import { QueueListIcon, MusicalNoteIcon, PlusIcon, HeartIcon, BookmarkIcon, MinusIcon } from "@heroicons/react/24/solid"
+import { QueueListIcon, MusicalNoteIcon, PlusIcon, HeartIcon, BookmarkIcon, MinusIcon, ArrowUturnLeftIcon, ShoppingBagIcon } from "@heroicons/react/24/solid"
 import { HeartIcon as HeartOutline } from "@heroicons/react/24/outline"
 import { PlayIcon, PauseIcon, EllipsisHorizontalIcon } from "@heroicons/react/24/solid"
 import { useMusicStore, useSettingsStore, useTabsStore } from "../store"
@@ -148,6 +148,7 @@ export const QuickPlayer = ({ panelsOpen, className, onMouseDown }: QuickPlayerP
     return (
         <div className={className && (className + " ") + "relative flex flex-col duration-150" + " " + `
             ${
+                settings["floating-tabs"] === true ? "w-full" :
                 panelsOpen ? "w-78" : "w-10"
             }
         `}>
@@ -173,8 +174,16 @@ export const QuickPlayer = ({ panelsOpen, className, onMouseDown }: QuickPlayerP
                         <div className="flex flex-col items-start">
                             {
                                 currentTrack ?
-                                <h1 className="ml-1.5 mt-1.5 text-2xl font-bold text-[#ffffff]">Current playing</h1> :
-                                <h1 className="ml-1.5 mt-1.5 text-2xl font-bold text-[#ffffff97]">Nothing playing</h1>
+                                <h1 className={"ml-1.5 mt-1.5 text-2xl font-bold" + " " + `
+                                    ${
+                                        settings.brightness === "dark" ? "text-[#ffffff]" : "text-[#000000]"
+                                    }
+                                `}>Currently playing</h1> :
+                                <h1 className={"ml-1.5 mt-1.5 text-2xl font-bold" + " " + `
+                                    ${
+                                        settings.brightness === "dark" ? "text-[#ffffff97]" : "text-[#00000097]"
+                                    }
+                                `}>Nothing playing</h1>
                             }
                             {
                                 currentTrack &&
@@ -182,7 +191,11 @@ export const QuickPlayer = ({ panelsOpen, className, onMouseDown }: QuickPlayerP
                                     <div className="flex items-center gap-2.5">
                                         <img className="size-10 rounded-md" src={currentTrack.cover} alt={currentTrack.title} />
                                         <div className="flex flex-col gap-1">
-                                            <h1 className="text-md font-semibold leading-none cursor-pointer hover:underline">{currentTrack.title}</h1>
+                                            <h1 title={currentTrack.title} className={"text-md font-semibold leading-none" + " " + `
+                                                ${
+                                                    settings.brightness === "dark" ? "text-[#ffffff]" : "text-[#000000]"
+                                                }
+                                            `}>{currentTrack.title.length > 18 ? currentTrack.title.slice(0, 22) + "..." : currentTrack.title}</h1>
                                             {
                                                 Array.isArray(currentTrack.artists) && currentTrack.artists.length > 1 ? (
                                                     <div className="flex gap-1.5">
@@ -191,8 +204,12 @@ export const QuickPlayer = ({ panelsOpen, className, onMouseDown }: QuickPlayerP
                                                         }
                                                         <div className="flex lg:flex-row flex-col gap-0.5">
                                                             {currentTrack.artists.map((artist, index) => (
-                                                                <div key={index} className="flex justify-center items-center text-[#ffffff6a] w-max">
-                                                                    <span className="text-xs leading-none hover:text-[#ffffffc4] cursor-pointer duration-150" key={index}>
+                                                                <div key={index} className={"flex justify-center items-center w-max" + " " + `
+                                                                    ${
+                                                                        settings.brightness === "dark" ? "text-[#ffffff6a]" : "text-[#0000006a]"
+                                                                    }
+                                                                `}>
+                                                                    <span className="text-xs leading-none duration-150" key={index}>
                                                                         {artist}
                                                                     </span>
                                                                     {index < currentTrack.artists.length - 1 && <span>,</span>}
@@ -200,11 +217,19 @@ export const QuickPlayer = ({ panelsOpen, className, onMouseDown }: QuickPlayerP
                                                             ))}
                                                         </div>
                                                     </div>
-                                                ) : <h2 className="text-sm leading-none text-[#ffffff6a] hover:text-[#ffffffc4] cursor-pointer duration-150">{currentTrack.artists[0]}</h2>
+                                                ) : <h2 className={"text-sm leading-none cursor-pointer duration-150" + " " + `
+                                                    ${
+                                                        settings.brightness === "dark" ? "text-[#ffffff6a]" : "text-[#0000006a]"
+                                                    }
+                                                `}>{currentTrack.artists[0]}</h2>
                                             }
                                         </div>
                                     </div>
-                                    <EllipsisHorizontalIcon className="size-6 mr-2 text-[#ffffffac] hover:text-[#ffffff] stroke-current stroke-1.5 cursor-pointer duration-150" onClick={(e) => {
+                                    <EllipsisHorizontalIcon className={"size-6 mr-2 stroke-current stroke-1.5 cursor-pointer duration-150" + " " + `
+                                        ${
+                                            settings.brightness === "dark" ? "text-[#ffffffac] hover:text-[#ffffff]" : "text-[#000000ac] hover:text-[#000000]"
+                                        }
+                                    `} onClick={(e) => {
                                         e.preventDefault();
                                         e.stopPropagation();
 
@@ -213,15 +238,31 @@ export const QuickPlayer = ({ panelsOpen, className, onMouseDown }: QuickPlayerP
                                                 title: "Add to queue",
                                                 icon: <PlusIcon className="size-5 stroke-current stroke-1" />,
                                                 onClick: () => {
-                                                    console.log("hello");
+                                                    addTrack(currentTrack);
                                                 }
                                             },
                                             {
-                                                title: "Remove from queue",
-                                                icon: <MinusIcon className="size-5 stroke-current stroke-1" />,
-                                                onClick: () => {}
+                                                title: "Restart track",
+                                                icon: <ArrowUturnLeftIcon className="size-5 stroke-current stroke-1" />,
+                                                onClick: () => {
+                                                    setCurrentTime(0);
+                                                    if (audioRef.current) {
+                                                        audioRef.current.pause();
+                                                        audioRef.current.currentTime = 0;
+                                                    }
+                                                }
                                             }
                                         ]
+
+                                        if (queue.filter(track => track.id === currentTrack.id).length > 1) {
+                                            items.push({
+                                                title: "Remove instances from queue",
+                                                icon: <MinusIcon className="size-5 stroke-current stroke-1" />,
+                                                onClick: () => {
+                                                    removeTrack(currentTrack.id);
+                                                }
+                                            });
+                                        }
 
                                         setContextMenu({
                                             x: e.clientX,
@@ -236,14 +277,25 @@ export const QuickPlayer = ({ panelsOpen, className, onMouseDown }: QuickPlayerP
                         {
                             queue &&
                             <div className="flex flex-col items-start">
-                                <h1 className="ml-1.5 mt-1.5 text-2xl font-bold text-[#ffffff]">Queue</h1>
+                                {
+                                    queue.length > 0 &&
+                                    <h1 className={"ml-1.5 mt-1.5 text-2xl font-bold" + " " + `
+                                        ${
+                                            settings.brightness === "dark" ? "text-[#ffffff]" : "text-[#000000]"
+                                        }
+                                    `}>Queue</h1>
+                                }
                                 {
                                     queue.map((song, index) => (
-                                        <div className="flex items-center justify-between gap-2.5 p-1.5 w-full rounded-lg hover:bg-[#ffffff28] duration-150">
+                                        <div key={song.id} className="flex items-center justify-between gap-2.5 p-1.5 w-full rounded-lg hover:bg-[#ffffff28] duration-150">
                                             <div className="flex items-center gap-2.5">
                                                 <img className="size-10 rounded-md" src={song.cover} alt={song.title} />
                                                 <div className="flex flex-col gap-1">
-                                                    <h1 title={song.title} className="text-md font-semibold leading-none cursor-pointer hover:underline">{song.title.length > 18 ? song.title.slice(0, 16) + "..." : song.title}</h1>
+                                                    <h1 title={song.title} className={"text-md font-semibold leading-none" + " " + `
+                                                        ${
+                                                            settings.brightness === "dark" ? "text-[#ffffff]" : "text-[#000000]"
+                                                        }
+                                                    `}>{song.title.length > 18 ? song.title.slice(0, 22) + "..." : song.title}</h1>
                                                     {
                                                         Array.isArray(song.artists) && song.artists.length > 1 ? (
                                                             <div className="flex gap-1.5">
@@ -252,8 +304,12 @@ export const QuickPlayer = ({ panelsOpen, className, onMouseDown }: QuickPlayerP
                                                                 }
                                                                 <div className="flex lg:flex-row flex-col gap-0.5">
                                                                     {song.artists.map((artist, index) => (
-                                                                        <div key={index} className="flex justify-center items-center text-[#ffffff6a] w-max">
-                                                                            <span className="text-xs leading-none hover:text-[#ffffffc4] cursor-pointer duration-150" key={index}>
+                                                                        <div key={index} className={"flex justify-center items-center w-max" + " " + `
+                                                                            ${
+                                                                                settings.brightness === "dark" ? "text-[#ffffff6a]" : "text-[#0000006a]"
+                                                                            }
+                                                                        `}>
+                                                                            <span className="text-xs leading-none duration-150" key={index}>
                                                                                 {artist}
                                                                             </span>
                                                                             {index < song.artists.length - 1 && <span>,</span>}
@@ -261,11 +317,19 @@ export const QuickPlayer = ({ panelsOpen, className, onMouseDown }: QuickPlayerP
                                                                     ))}
                                                                 </div>
                                                             </div>
-                                                        ) : <h2 className="text-sm leading-none text-[#ffffff6a] hover:text-[#ffffffc4] cursor-pointer duration-150">{song.artists[0]}</h2>
+                                                        ) : <h2 className={"text-sm leading-none cursor-pointer duration-150" + " " + `
+                                                            ${
+                                                                settings.brightness === "dark" ? "text-[#ffffff6a]" : "text-[#0000006a]"
+                                                            }
+                                                        `}>{song.artists[0]}</h2>
                                                     }
                                                 </div>
                                             </div>
-                                            <EllipsisHorizontalIcon className="size-6 mr-2 text-[#ffffffac] hover:text-[#ffffff] stroke-current stroke-1.5 cursor-pointer duration-150" onClick={(e) => {
+                                            <EllipsisHorizontalIcon className={"size-6 mr-2 stroke-current stroke-1.5 cursor-pointer duration-150" + " " + `
+                                                ${
+                                                    settings.brightness === "dark" ? "text-[#ffffffac] hover:text-[#ffffff]" : "text-[#000000ac] hover:text-[#000000]"
+                                                }
+                                            `} onClick={(e) => {
                                                 e.preventDefault();
                                                 e.stopPropagation();
 
@@ -274,13 +338,15 @@ export const QuickPlayer = ({ panelsOpen, className, onMouseDown }: QuickPlayerP
                                                         title: "Add to queue",
                                                         icon: null,
                                                         onClick: () => {
-                                                            console.log("hello");
+                                                            addTrack(song);
                                                         }
                                                     },
                                                     {
                                                         title: "Remove from queue",
                                                         icon: null,
-                                                        onClick: () => {}
+                                                        onClick: () => {
+                                                            removeTrack(song.id);
+                                                        }
                                                     }
                                                 ]
 

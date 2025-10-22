@@ -6,12 +6,11 @@ interface ExternalSiteProps {
     url: string | undefined
     className?: string
     current?: boolean
+    id: string
 }
 
-const ExternalSite = ({ url, className, current }: ExternalSiteProps) => {
+const ExternalSite = ({ url, className, current, id }: ExternalSiteProps) => {
     const frameRef = useRef<HTMLIFrameElement>(null)
-    const tabs =  useTabsStore(state => state.tabs)
-    const currentTab = tabs.find(tab => tab.current === true);
     const updateTab = useTabsStore(state => state.updateTab)
 
     useEffect(() => {
@@ -28,16 +27,16 @@ const ExternalSite = ({ url, className, current }: ExternalSiteProps) => {
                 const newUrl = XOR.decode(replacedHref) ?? iframe.src;
                 const title = contentDocument?.title ?? "New Tab";
                 const icon = (contentDocument?.querySelector("link[rel~='icon']") as HTMLLinkElement | null)?.href ?? null;
-                if (currentTab) {
-                    updateTab(currentTab.id, {
+                if (id) {
+                    updateTab(id, {
                         title: title,
                         icon: icon,
                         displayUrl: newUrl
                     })
                 }
             } catch (err) {
-                if (currentTab) {
-                    updateTab(currentTab.id, {
+                if (id) {
+                    updateTab(id, {
                         title: "New Tab",
                         icon: null,
                         displayUrl: "newtab"
@@ -45,10 +44,9 @@ const ExternalSite = ({ url, className, current }: ExternalSiteProps) => {
                 }
             }
         };
-
         iframe.addEventListener("load", handleLoad);
         return () => iframe.removeEventListener("load", handleLoad);
-    });
+    }, [url, updateTab, id]);
 
     return (
         <>

@@ -1,6 +1,6 @@
 import { createId } from "@paralleldrive/cuid2"
 import { useEffect, useRef, useState } from "react"
-import { RectangleStackIcon, PlusIcon, Cog6ToothIcon } from "@heroicons/react/24/solid";
+import { RectangleStackIcon, PlusIcon, Cog6ToothIcon, ChevronLeftIcon, ChevronRightIcon, IdentificationIcon, EllipsisVerticalIcon, XMarkIcon } from "@heroicons/react/24/solid";
 import type { detailProps } from "./libs/eventBus";
 import XOR from "./libs/XOR";
 
@@ -19,6 +19,7 @@ import { quickLinks } from "./libs/init";
 import { initTheme } from "./libs/theme";
 import { MusicLibrary } from "./views/Music/MusicLibrary";
 import { View } from "./gui/View";
+import TabGroup from "./components/TabGroup";
 
 const regSw = async () => {
     await navigator.serviceWorker.getRegistrations().then(registrations => {
@@ -84,8 +85,12 @@ const App = () => {
     const setPanelsOpen = usePanelsStore(state => state.setPanelsOpen)
 
     const tabs = useTabsStore(state => state.tabs)
+    const groups = useTabsStore(state => state.groups)
     const currentTab = tabs.find(tab => tab.current === true);
+    const setCurrentTab = useTabsStore(state => state.setCurrentTab)
     const panelsOpen = usePanelsStore(state => state.panelsOpen)
+
+    const newGroup = useTabsStore(state => state.newGroup)
     const newTab = useTabsStore(state => state.newTab)
     const closeTab = useTabsStore(state => state.closeTab)
     const updateTab = useTabsStore(state => state.updateTab)
@@ -115,7 +120,7 @@ const App = () => {
                 setSettings("theme", "default");
                 setSettings("proxy", "uv");
                 setSettings("quicklinks", quickLinks);
-                setSettings("floating-tabs", true);
+                setSettings("floating-tabs", false);
             }
         };
         getSettings();
@@ -171,6 +176,20 @@ const App = () => {
         window.addEventListener("resize", handleWindowSize);
         return () => window.removeEventListener("resize", handleWindowSize);
     }, [])
+
+    const nextTab = () => {
+        const currentIndex = tabs.findIndex(tab => tab.current);
+        if (currentIndex !== -1) {
+            setCurrentTab(tabs[(currentIndex + 1) % tabs.length].id);
+        }
+    }
+
+    const prevTab = () => {
+        const currentIndex = tabs.findIndex(tab => tab.current);
+        if (currentIndex !== -1) {
+            setCurrentTab(tabs[(currentIndex - 1 + tabs.length) % tabs.length].id);
+        }
+    }
 
     useEffect(() => {
         const handleKeys = (e: KeyboardEvent) => {
@@ -237,6 +256,13 @@ const App = () => {
                     })
                 }
             }
+            if (e.shiftKey && e.key.toLowerCase() === "arrowup") {
+                e.preventDefault();
+                prevTab();
+            } else if (e.shiftKey && e.key.toLowerCase() === "arrowdown") {
+                e.preventDefault();
+                nextTab();
+            }
         }
         window.addEventListener("keydown", handleKeys)
 
@@ -250,16 +276,13 @@ const App = () => {
             <Shell />
             <div className="flex flex-col size-full gap-[1px]">
                 <div id="main" className="relative flex size-full gap-2.5" style={{height: (settings["floating-tabs"] ? "100%" : `calc(100% - calc(${shellHeight}px + calc(var(--spacing) * 2.5))`)}}>
-                    <div className={"relative size-full bg-(--secondary) inset-shadow-(--inset-shadow-primary) rounded-xl overflow-hidden"}>
-                        {/* <Routes>
-                            <Route path="/" element={
-                                url === undefined ?
-                                <Home /> : <ExternalSite url={proxiedUrl} />
-                            } />
-                            <Route path="/settings" element={<Settings />} />
-                        </Routes> */}
-                        {
-                            tabs.length > 0 ? tabs.map((item, index) => {
+                    <div className={"relative size-full bg-(--secondary) inset-shadow-(--inset-shadow-primary) rounded-xl overflow-hidden" + " " + `
+                        ${
+                            settings
+                        }
+                    `}>
+                                {
+                                    tabs.length > 0 ? tabs.map((item, index) => {
                                 if (item.url === "newtab") {
                                     return (
                                         <Home key={item.id} className={"absolute inset-0 duration-150" + " " + `
@@ -285,11 +308,12 @@ const App = () => {
                                             </>
                                         )
                                     }
-                                } else {
+                                    } else {
                                     return (
                                         <ExternalSite
+                                            id={item.id}
                                             current={currentTab?.id === item.id}
-                                            key={index}
+                                            key={item.id}
                                             url={proxy === "sj" ? "/service/" + XOR.encode(item.url) : "/uv/service/" + XOR.encode(item.url)}
                                             className={"absolute inset-0" + " " + `
                                                 ${
@@ -306,9 +330,27 @@ const App = () => {
                         ${
                             settings["floating-tabs"] === true ? panelsOpen ? "w-60 right-2" : "w-10 -right-1" : panelsOpen ? "w-78 right-2" : "w-10 -right-1"
                         }
-                    `} onMouseDown={() => {setPanelsOpen(true)}}>
+                    `}>
+                        <div className="flex w-full h-max p-1.5 py-2 gap-2 items-center justify-between bg-(--secondary) hover:bg-(--tertiary) inset-shadow-(--inset-shadow-primary) rounded-lg *:pointer-events-none cursor-pointer duration-150"
+                        title={panelsOpen ? "Close Panels" : "Open Panels"}
+                        onMouseDown={() => {
+                            panelsOpen ? setPanelsOpen(false) :
+                            setPanelsOpen(true)
+                        }}>
+                            <ChevronLeftIcon className={"size-6 stroke-2 stroke-current" + " " + `
+                                ${panelsOpen ? "opacity-0" : "opacity-100"}
+                            `} />
+                            {
+                                panelsOpen && (
+                                    <>
+                                        <span className="font-semibold">Close Panels</span>
+                                        <ChevronRightIcon className="size-6 stroke-2 stroke-current" />
+                                    </>
+                                )
+                            }
+                        </div>
                         {/* tabs panel */}
-                        <div ref={tabsRef} className={"flex flex-col bg-(--secondary) inset-shadow-(--inset-shadow-primary) overflow-hidden duration-150" + " " + `
+                        <div ref={tabsRef} className={"flex flex-col bg-(--secondary) inset-shadow-(--inset-shadow-primary) rounded-xl overflow-hidden duration-150" + " " + `
                             ${
                                 currentPanel === "tabs" ? "h-2/3" : "h-1/3"
                             }
@@ -316,42 +358,118 @@ const App = () => {
                                 panelsOpen ? "w-full" : "w-50"
                             }
                             ${
-                                settings["floating-tabs"] && panelsOpen ? "rounded-lg" : "rounded-xl"
-                            }
-                            ${
                                 settings["floating-tabs"] && "shadow-[0_0_16px_3px_#00000035]"
                             }
                         `} onMouseDown={() => {
+                            setPanelsOpen(true)
                             setCurrentPanel("tabs")
                         }}>
-                            <div className={"relative flex w-full h-full overflow-auto gap-2 p-2 flex-col items-center duration-200"}>
-                                {
-                                    tabs.length > 0 ? tabs.map((item, index) => (
-                                        <Tab title={item.title} url={item.url} id={item.id} icon={item.icon} displayUrl={item.url} key={index} />
-                                    )) :
-                                    <span className={"absolute left-1/2 top-1/2 -translate-1/2 w-max font-semibold text-lg duration-150" + " " + `
-                                        ${
-                                            tabs.length < 0 ? "opacity-0" : ""
+                            <div className={"relative flex w-full h-full overflow-auto gap-2 p-2 flex-col items-stretch duration-200"}
+                                onDragOver={(e) => {
+                                    e.preventDefault();
+                                    const el = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null;
+                                    const tabEl = el?.closest('[data-url][id]') as HTMLElement | null;
+                                    if (tabEl && tabEl.id) {
+                                        const rect = tabEl.getBoundingClientRect();
+                                        const y = e.clientY - rect.top;
+                                        const placeBefore = y < rect.height / 2;
+                                        return;
+                                    }
+                                    const groupHeader = el?.closest('[data-group-id]') as HTMLElement | null;
+                                    if (groupHeader) { return; }
+                                    const groupWrapper = el?.closest('[data-group-wrapper]') as HTMLElement | null;
+                                    if (groupWrapper) { return; }
+                                }}
+                                onDrop={(e) => {
+                                    e.preventDefault();
+                                    const draggedId = e.dataTransfer.getData('text/tab-id');
+                                    if (!draggedId) return;
+
+                                    const el = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null;
+                                    if (!el) { updateTab(draggedId, { groupId: undefined }); return; }
+
+                                    const tabEl = el.closest('[data-url][id]') as HTMLElement | null;
+                                    if (tabEl && tabEl.id) {
+                                        const targetId = tabEl.id;
+                                        if (targetId === draggedId) return;
+                                        const targetTab = tabs.find(t => t.id === targetId);
+                                        const targetGroupId = targetTab?.groupId;
+                                        const rect = tabEl.getBoundingClientRect();
+                                        const y = e.clientY - rect.top;
+                                        const placeBefore = y < rect.height / 2;
+                                        updateTab(draggedId, { groupId: targetGroupId });
+                                        useTabsStore.getState().moveTabRelative(draggedId, targetId, placeBefore);
+                                        return;
+                                    }
+
+                                    const groupHeader = el.closest('[data-group-id]') as HTMLElement | null;
+                                    const groupWrapper = el.closest('[data-group-wrapper]') as HTMLElement | null;
+                                    const gid = groupHeader?.getAttribute('data-group-id') || groupWrapper?.getAttribute('data-group-wrapper');
+                                    if (gid) {
+                                        updateTab(draggedId, { groupId: gid });
+                                        const groupTabs = tabs.filter(t => t.groupId === gid);
+                                        if (groupTabs.length > 0) {
+                                            const lastId = groupTabs[groupTabs.length - 1].id;
+                                            useTabsStore.getState().moveTabRelative(draggedId, lastId, false);
                                         }
-                                    `}>No tabs open</span>
+                                        return;
+                                    }
+
+                                    updateTab(draggedId, { groupId: undefined });
+                                }}
+                            >
+                                {
+                                    groups.length > 0 && groups.map((group) => (
+                                        <TabGroup key={group.id} id={group.id} name={group.name} icon={group.icon} />
+                                    ))
+                                }
+                                {
+                                    (() => {
+                                        const ungrouped = tabs.filter(t => !t.groupId);
+                                        if (tabs.length === 0) {
+                                            return (
+                                                <span className={"absolute left-1/2 top-1/2 -translate-1/2 w-max font-semibold text-lg duration-150" + " " + `
+                                                    ${
+                                                        tabs.length < 0 ? "opacity-0" : ""
+                                                    }
+                                                `}>No tabs open</span>
+                                            )
+                                        }
+
+                                        return ungrouped.length > 0 ? ungrouped.map((item) => (
+                                            <Tab title={item.title} url={item.url} id={item.id} icon={item.icon} displayUrl={item.url} key={item.id} />
+                                        )) : null
+                                    })()
                                 }
                             </div>
-                            <div className={"flex min-max-1 w-full p-1.5 items-start justify-start gap-0.5" + " " + `
+                            <div className={"flex min-max-1 w-full p-1.5 items-start justify-between gap-0.5" + " " + `
                                 ${
                                     settings.brightness === "dark" ? "bg-[#ffffff10]" : "bg-[#00000025]"
                                 }
                             `}>
-                                <div title={platform.includes("Mac") ? "New Tab ⌃ + T" : "New Tab: Alt + T"}className="flex items-center justify-center p-2 hover:bg-[#ffffff10] text-(--text-secondary) hover:text-(--text-primary) rounded-md cursor-pointer duration-200"
-                                onClick={() => {
-                                    newTab({
-                                        id: createId(),
-                                        title: "New Tab",
-                                        url: "newtab",
-                                        current: true,
-                                        displayUrl: "newtab"
-                                    })
-                                }}>
-                                    <PlusIcon className="size-5 stroke-current stroke-1 duration-150" />
+                                <div className="flex gap-0.5">
+                                    <button title={platform.includes("Mac") ? "New Tab ⌃ + T" : "New Tab: Alt + T"}className="flex items-center justify-center p-2 hover:bg-[#ffffff10] text-(--text-secondary) hover:text-(--text-primary) rounded-md cursor-pointer duration-200"
+                                    onClick={() => {
+                                        newTab({
+                                            id: createId(),
+                                            title: "New Tab",
+                                            url: "newtab",
+                                            current: true,
+                                            displayUrl: "newtab"
+                                        })
+                                    }}>
+                                        <PlusIcon className="size-5 stroke-current stroke-1 duration-150" />
+                                    </button>
+                                    <button title={platform.includes("Mac") ? "New Group ⌃ + T" : "New Group: Alt + T"}className="flex items-center justify-center p-2 hover:bg-[#ffffff10] text-(--text-secondary) hover:text-(--text-primary) rounded-md cursor-pointer duration-200"
+                                    onClick={() => {
+                                        const groupId = createId();
+                                        newGroup(groupId, `Group ${groups.length + 1}`)
+                                    }}>
+                                        <RectangleStackIcon className="size-4.5 duration-150" />
+                                        <PlusIcon className="size-3 stroke-current stroke-1 duration-150" />
+                                    </button>
+                                </div>
+                                <div className="flex gap-0.5 items-center h-full">
                                 </div>
                             </div>
                         </div>
@@ -360,6 +478,7 @@ const App = () => {
                                 currentPanel === "quickplayer" ? "h-2/3" : "h-1/3"
                             }
                         `} panelsOpen={panelsOpen} onMouseDown={() => {
+                            setPanelsOpen(true)
                             setCurrentPanel("quickplayer")
                         }} />
                     </div>

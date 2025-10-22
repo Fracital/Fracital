@@ -1,4 +1,4 @@
-import { Cog6ToothIcon, ArrowsPointingOutIcon, ArrowsPointingInIcon, ChevronUpDownIcon, ChevronDownIcon, UserCircleIcon, ArrowLeftStartOnRectangleIcon, InformationCircleIcon, LifebuoyIcon, UserIcon } from "@heroicons/react/24/solid";
+import { Cog6ToothIcon, ArrowsPointingOutIcon, ArrowsPointingInIcon, ChevronUpDownIcon, ChevronDownIcon, UserCircleIcon, ArrowLeftStartOnRectangleIcon, InformationCircleIcon, LifebuoyIcon, UserIcon, HomeIcon, ArrowPathIcon, ArrowLeftIcon, ArrowRightIcon } from "@heroicons/react/24/solid";
 import { FireIcon, WrenchScrewdriverIcon, CheckBadgeIcon } from "@heroicons/react/24/solid"
 import { Suspense, useEffect, useState, useRef } from "react";
 import { Link } from "react-router-dom";
@@ -61,7 +61,7 @@ export const UserCard = ({ id, display, handle, avatar }: UserProps) => {
                         }
                     </Suspense>
                 </div>
-                <div ref={menuRef} className={"absolute flex flex-col items-center gap-1 top-[calc(20px+28px)] -right-3 bg-(--secondary) shadow-[0_0_8px_1px_#00000035] inset-shadow-(--inset-shadow-secondary) rounded-xl z-10 duration-150 overflow-hidden" + " " + `
+                <div ref={menuRef} className={"absolute flex flex-col items-center gap-1 top-[calc(20px+28px)] -right-3 bg-(--secondary) inset-shadow-(--inset-shadow-secondary) rounded-xl z-10 duration-150 overflow-hidden" + " " + `
                     ${
                         contextOpen ? "" : "-translate-y-2 opacity-0 pointer-events-none"
                     }
@@ -162,6 +162,8 @@ const Shell = () => {
     const newTab = useTabsStore(state => state.newTab)
     const tabs = useTabsStore(state => state.tabs)
 
+    const settings = useSettingsStore(state => state.settings)
+
     const [proxy, setProxy] = useState<"uv" | "sj">("uv");
 
     const uvRef = useRef<HTMLDivElement>(null);
@@ -181,6 +183,7 @@ const Shell = () => {
         }
     };
 
+
     useEffect(() => {
         const storedProxy = window.localStorage.getItem("proxy");
         if (storedProxy === "sj" || storedProxy === "uv") {
@@ -198,13 +201,51 @@ const Shell = () => {
     return (
         <div id="shell" className={"flex justify-between gap-2.5 p-1 rounded-xl duration-200"}>
             <div className="flex items-center justify-start gap-2.5">
-                <Link to="/" className="group cursor-pointer">
-                    <svg viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg" className="size-9 group-hover:-translate-y-1 duration-150 pointer-events-none">
-                        <circle cx="64" cy="64" r="64" className="fill-(--logo-primary)" />
-                        <path fillRule="evenodd" clipRule="evenodd" d="M64 0C99.3462 0 128 28.6538 128 64C128 99.3462 99.3462 128 64 128C28.6538 128 0 99.3462 0 64C0 28.6538 28.6538 0 64 0ZM64 7C32.5198 7 7 32.5198 7 64C7 95.4802 32.5198 121 64 121C95.4802 121 121 95.4802 121 64C121 32.5198 95.4802 7 64 7Z" fill="white" fillOpacity="0.5"/>
-                        <path d="M51 87V41H81V51.5H62.1278V59.75H78.9222L76.5 70.25H62.1278V85L51 87Z" className="fill-(--logo-secondary)" />
-                    </svg>
-                </Link>
+                <div className="flex items-center justify-center gap-0.5">
+                    <button className="group relative flex items-center justify-center mr-1 cursor-pointer" title={`Home - Go to the homepage`} onMouseDown={() => {
+                        const currentTab = useTabsStore.getState().tabs.find(tab => tab.current);
+                        if (currentTab) {
+                            useTabsStore.getState().updateTab(currentTab.id, {
+                                url: "newtab",
+                                displayUrl: "newtab",
+                                title: "New Tab",
+                                icon: null
+                            });
+                        }
+                    }}>
+                        <svg viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg" className="size-9 group-hover:-translate-y-1 group-hover:opacity-0 duration-150 pointer-events-none">
+                            <circle cx="64" cy="64" r="64" className="fill-(--logo-primary)" />
+                            <path fillRule="evenodd" clipRule="evenodd" d="M64 0C99.3462 0 128 28.6538 128 64C128 99.3462 99.3462 128 64 128C28.6538 128 0 99.3462 0 64C0 28.6538 28.6538 0 64 0ZM64 7C32.5198 7 7 32.5198 7 64C7 95.4802 32.5198 121 64 121C95.4802 121 121 95.4802 121 64C121 32.5198 95.4802 7 64 7Z" fill="white" fillOpacity="0.5"/>
+                            <path d="M51 87V41H81V51.5H62.1278V59.75H78.9222L76.5 70.25H62.1278V85L51 87Z" className="fill-(--logo-secondary)" />
+                        </svg>
+                        <HomeIcon className={"absolute size-7 text-(--text-secondary) opacity-0 translate-y-1 group-hover:text-(--text-primary) group-hover:opacity-100 group-hover:translate-y-0 pointer-events-none duration-150" + " " + `
+                            ${
+                                settings.brightness === "light" ? "text-(--text-secondary)" : "text-(--text-primary)"
+                            }
+                        `} />
+                    </button>
+                    {/* <button className={"group size-8 p-1 rounded-md cursor-pointer duration-150" + " " + `
+                        ${
+                            settings.brightness === "light" ? "text-(--text-tertiary) hover:text-(--text-primary) hover:bg-[#00000018]" : "text-(--text-primary) hover:text-(--text-secondary) hover:bg-[#ffffff10]"
+                        }
+                    `} title="Refresh Page">
+                        <ArrowPathIcon className={"size-full stroke-current stroke-1 text-(--text-tertiary) cursor-pointer group-hover:text-(--text-primary) group-hover:rotate-180 duration-300"}/>
+                    </button> */}
+                    {/* <button className={"group size-8 p-1 rounded-md cursor-pointer duration-150" + " " + `
+                        ${
+                            settings.brightness === "light" ? "text-(--text-tertiary) hover:text-(--text-primary) hover:bg-[#00000018]" : "text-(--text-primary) hover:text-(--text-secondary) hover:bg-[#ffffff10]"
+                        }
+                    `} title="Go back">
+                        <ArrowLeftIcon className={"size-full stroke-current stroke-1 text-(--text-tertiary) cursor-pointer group-hover:text-(--text-primary) duration-300"}/>
+                    </button>
+                    <button className={"group size-8 p-1 rounded-md cursor-pointer duration-150" + " " + `
+                        ${
+                            settings.brightness === "light" ? "text-(--text-tertiary) hover:text-(--text-primary) hover:bg-[#00000018]" : "text-(--text-primary) hover:text-(--text-secondary) hover:bg-[#ffffff10]"
+                        }
+                    `} title="Go forward">
+                        <ArrowRightIcon className={"size-full stroke-current stroke-1 text-(--text-tertiary) cursor-pointer group-hover:text-(--text-primary) duration-300"}/>
+                    </button> */}
+                </div>
                 <div className="relative flex items-center justify-center">
                     {
                         tabs && tabs.length > 0 ? tabs.map((tab, index) => (
@@ -281,7 +322,13 @@ const Shell = () => {
                     icon: <Cog6ToothIcon className="size-5" />,
                     displayUrl: "about:settings"
                 })}></ShellButton>
-                <UserCard avatar={<UserCircleIcon className="size-8" />} id="anon" display="Guest" handle="anon" />
+                <UserCard avatar={
+                    <UserCircleIcon className={"size-8" + " " + `
+                        ${
+                            settings.brightness === "light" ? "text-(--text-secondary)" : "text-(--text-primary)"
+                        }
+                    `} />
+                } id="anon" display="Guest" handle="anon" />
             </div>
         </div>
     );

@@ -168,7 +168,6 @@ const Settings = ({ className }: SettingsProps) => {
                         const links = stored ? JSON.parse(stored) : [];
                         links.push(newLink);
                         window.localStorage.setItem("quicklinks", JSON.stringify(links));
-                        window.location.reload();
                     }}>
                         <div className="*:pointer-events-none *:select-none">
                             <div className="flex items-center justify-center py-5 px-22">

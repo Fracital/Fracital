@@ -14,7 +14,6 @@ const Steps = () => {
     const [typingDone, setTypingDone] = useState(false);
     const [themeOptions, setThemeOptions] = useState<string[]>(["default"]);
 
-    // Sections: each with a title and lines
     const fsSections = [
         {
             title: "Filesystem Build",
@@ -47,9 +46,6 @@ const Steps = () => {
         if (!showFsLines) return;
         const fetchThemes = async () => {
             try {
-                // Use Node.js require.context or dynamic import is not available in browser, so use static import for Vite/CRA
-                // But for Node, you can use fs, but here we simulate with a static list
-                // In a real Node context, use fs.readdirSync(path).filter(f => f.endsWith('.css'))
                 const themeFiles = [
                     "default.css",
                     "amber.css",
@@ -71,7 +67,6 @@ const Steps = () => {
     const section = sections[currentIndex];
     const isUserSettings = section.title === "User Settings";
 
-    // Handler for form submission
     const handleUserSettingsSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         setFormComplete(true);

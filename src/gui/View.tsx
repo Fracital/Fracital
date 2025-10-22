@@ -1,3 +1,4 @@
+import { useEffect } from "react"
 import type { TabProps } from "../components/Tab"
 import { useTabsStore } from "../store"
 

@@ -30,7 +30,7 @@ export const init = async () => {
             theme: "default",
             proxy: "uv",
             quicklinks: JSON.stringify(quickLinks),
-            "floating-tabs": true
+            "floating-tabs": false
         }, null, 4));
     } else {
         console.log("%cFracital%c: %cinit%c() -> %csettings.json%c already exists", "color: #fb74fe", "color: #ff7b72", "color: #c7a1f2", "color: #79c0ff", "color: #56d364", "color: #e2b340");
@@ -86,6 +86,7 @@ export const init = async () => {
         }));
         await window.Filer.fs.promises.writeFile("/themes/greyscale/index.css", greyTheme);
         console.log("%cFracital%c: %cinit%c() -> %cdirectory%c /themes created with default themes", "color: #fb74fe", "color: #ff7b72", "color: #c7a1f2", "color: #79c0ff", "color: #56d364", "color: #e2b340");
+        window.location.reload();
     }
     if (!await dirExists("/music")) {
         await window.Filer.fs.promises.mkdir("/music");

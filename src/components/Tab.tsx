@@ -9,8 +9,12 @@ export interface TabProps {
     id: string
     icon?: string | React.ReactNode | null
     history?: string[]
+    historyIndex?: number
+    historyLength?: number
+    historyPosition?: 'start' | 'middle' | 'end'
     index?: number
     current?: boolean
+    groupId?: string
 }
 
 export const Tab = ({ title, url, id, icon }: TabProps) => {
@@ -23,7 +27,29 @@ export const Tab = ({ title, url, id, icon }: TabProps) => {
     const closeRef = useRef<SVGSVGElement>(null)
 
     return (
-        <div data-url={url} id={id} className={"flex w-full justify-between p-3 rounded-lg duration-150" + " " + `
+        <div draggable
+            onDragStart={(e) => {
+                e.dataTransfer.setData('text/tab-id', id);
+                try { e.dataTransfer.effectAllowed = 'move'; } catch {}
+            }}
+            onDragOver={(e) => { e.preventDefault(); }}
+            onDrop={(e) => {
+                e.preventDefault();
+                const draggedId = e.dataTransfer.getData('text/tab-id');
+                if (!draggedId || draggedId === id) return;
+                const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                const y = e.clientY - rect.top;
+                const placeBefore = y < rect.height / 2;
+                const targetTab = useTabsStore.getState().tabs.find(t => t.id === id);
+                const targetGroupId = targetTab?.groupId;
+                if (targetGroupId !== undefined) {
+                    useTabsStore.getState().updateTab(draggedId, { groupId: targetGroupId });
+                } else {
+                    useTabsStore.getState().updateTab(draggedId, { groupId: undefined });
+                }
+                useTabsStore.getState().moveTabRelative(draggedId, id, placeBefore);
+            }}
+            data-url={url} id={id} className={"flex w-full justify-between p-3 rounded-md duration-150" + " " + `
             ${
                 currentTab && id === currentTab.id ? "bg-(--accent-opaque) rounded-b-md" : `${settings.brightness === "dark" ? "bg-[#ffffff10] hover:bg-[#ffffff18]" : "bg-[#00000025] hover:bg-[#0000001a]"}`
             }

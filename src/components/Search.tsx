@@ -95,7 +95,7 @@ export const Search = ({ tab }: SearchProps) => {
             {/* <XMarkIcon className={"size-6 text-(--text-secondary) hover:text-(--text-primary) stroke-current stroke-1 duration-150 cursor-pointer z-10" + " " + `
                 ${hasQuery ? "" : "translate-x-2 opacity-0 duration-150 pointer-events-none"}
             `} onMouseDown={() => clearSearch()}/> */}
-            <div ref={searchRef} className={"flex items-center bg-(--primary) h-[48px] gap-1 rounded-xl cursor-text duration-150" + " " + `
+            <div ref={searchRef} className={"flex items-center bg-(--secondary) h-[48px] gap-1 rounded-xl cursor-text duration-150" + " " + `
                 ${searchFocused ? "inset-shadow-(--inset-shadow-accent)" : "inset-shadow-(--inset-shadow-secondary)"}
             `} onMouseDown={() => {
                 if (document.activeElement !== inputRef.current) {
@@ -138,13 +138,13 @@ export const Search = ({ tab }: SearchProps) => {
                         }
                     }} />
                 </div>
-                <div className={"p-1.5" + " " + (hasQuery ? "" : "absolute")}>
-                    <button className={"group flex items-center justify-center p-2 cursor-pointer z-20" + " " + `
-                        ${
-                            hasQuery ? "" : "opacity-0 pointer-events-none"
-                        }
-                    `}
+                <div className={"p-1.5"}>
+                    <button className={"group flex items-center justify-center p-2 cursor-pointer z-20"}
                     onClick={() => {
+                        if (inputRef.current?.value === "") {
+                            inputRef.current?.focus();
+                            return;
+                        }
                         if (typeof inputRef.current?.value === "string") {
                             console.log(inputRef.current.value);
                             searchHandler(inputRef.current?.value);

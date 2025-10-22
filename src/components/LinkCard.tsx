@@ -59,7 +59,6 @@ const LinkCard: React.FC<LinkCardProps> = ({ title, icon, brightness, color, hre
                                     const links = stored ? JSON.parse(stored) : [];
                                     links.splice(id, 1);
                                     window.localStorage.setItem("quicklinks", JSON.stringify(links));
-                                    window.location.reload();
                                 }}>
                                     <TrashIcon className="size-6" />
                                 </button>
@@ -119,7 +118,7 @@ const LinkCard: React.FC<LinkCardProps> = ({ title, icon, brightness, color, hre
                                     icon === "default" ? (
                                         <GlobeAltIcon className="sm:size-16 size-8 text-(--text-secondary) group-hover:-translate-y-2 duration-200" />
                                     ) :
-                                    typeof icon === "string" ? (<img src={icon} alt={title} className="sm:size-16 size-8 group-hover:-translate-y-2 duration-200" />) : (<>{icon}</>)
+                                    typeof icon === "string" ? (<img src={icon} alt={title} className="sm:size-16 size-8 min-w-10 group-hover:-translate-y-2 duration-200" />) : (<>{icon}</>)
                                 }
                             </div>
                             <div className="flex w-full justify-center">
