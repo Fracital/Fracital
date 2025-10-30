@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from "react"
 import { useMusicStore, useSettingsStore } from "../../store";
-import { ArrowUpOnSquareIcon, BookmarkIcon, RectangleGroupIcon, PlusIcon } from "@heroicons/react/24/solid";
+import { ArrowUpOnSquareIcon, BookmarkIcon, RectangleGroupIcon, PlusIcon, MusicalNoteIcon } from "@heroicons/react/24/solid";
 import { PlayIcon, EllipsisHorizontalIcon } from "@heroicons/react/24/solid";
 import type { Track } from "../../types";
 import { parseBlob } from 'music-metadata';
 import { createId } from "@paralleldrive/cuid2";
+import { ContextMenu, type MenuItem } from "../../components/ContextMenu";
 
 interface MusicLibraryProps {
     query: string | undefined
@@ -73,8 +74,13 @@ export const readTags = async (file: File): Promise<AudioTags | false> => {
 export const MusicLibrary = ({ query }: MusicLibraryProps) => {
     const settings = useSettingsStore(state => state.settings)
     const setCurrentTrack = useMusicStore(state => state.setCurrentTrack)
+    const addTrack = useMusicStore(state => state.addTrack)
+    const removeTrack = useMusicStore(state => state.removeTrack)
+    const playNext = useMusicStore(state => state.playNext)
+
     const currentTrack = useMusicStore(state => state.currentTrack)
     const [page, setpage] = useState<string | "library" | "upload" | "saves">(query ? query : "library")
+    const [contextMenu, setContextMenu] = useState<null | { x: number; y: number; visible: boolean; items: MenuItem[] }>(null);
 
     const [filename, setFileName] = useState<string>("")
     const albumCoverRef = useRef<HTMLImageElement>(null)
@@ -141,7 +147,7 @@ export const MusicLibrary = ({ query }: MusicLibraryProps) => {
                             // @ts-expect-error
                             year: tagsFromJson.year || "Unknown Year",
                             // @ts-expect-error
-                            cover: tagsFromJson.cover || "https://i.imgur.com/kf0Mavx.jpeg",
+                            cover: tagsFromJson.cover || null,
                             explicit: false,
                             src: blobUrl,
                         };
@@ -161,6 +167,21 @@ export const MusicLibrary = ({ query }: MusicLibraryProps) => {
                 console.error("Failed to read music directory:", err);
             }
         };
+
+        var watcher = Filer.fs.watch("/music", { recursive: true }, () => {
+            console.log("change");
+            readLibrary();
+            watcher.close();
+            intervalId = window.setTimeout(() => {
+                // re-establish watcher after a short delay to avoid multiple triggers
+                readLibrary();
+                watcher = Filer.fs.watch("/music", { recursive: true }, () => {
+                    console.log("change");
+                    readLibrary();
+                    watcher.close();
+                });
+            }, 1000);
+        })
 
         readLibrary();
 
@@ -186,7 +207,13 @@ export const MusicLibrary = ({ query }: MusicLibraryProps) => {
                                 if (currentTrack === song) return;
                                 setCurrentTrack(song);
                             }}>
-                                <img src={song.cover} alt={song.title} className="size-15 rounded-lg" />
+                                {
+                                    song.cover ?
+                                    <img src={song.cover} className="size-12 rounded-md object-cover" /> :
+                                    <div className="size-12 rounded-md bg-(--primary) flex items-center justify-center text-(--text-tertiary) font-bold">
+                                        <MusicalNoteIcon className="size-6 text-current" />
+                                    </div>
+                                }
                                 <div className="flex flex-col gap-1 justify-center pr-2">
                                     <span className="text-xl font-medium">{song.title}</span>
                                     <span className="text-md text-[#ffffff88]">{song.artists}</span>
@@ -194,19 +221,36 @@ export const MusicLibrary = ({ query }: MusicLibraryProps) => {
                                 <div id="play" title="Play track" className="flex items-center justify-center p-2 bg-[#ffffff10] hover:bg-[#ffffff18] rounded-full cursor-pointer duration-150">
                                     <PlayIcon id="play" className="size-5 pointer-events-none" />
                                 </div>
-                                <div id="options" title="Track options" className="flex items-center justify-center p-2 bg-[#ffffff10] hover:bg-[#ffffff18] rounded-full cursor-pointer duration-150">
+                                <div id="options" title="Track options" className="flex items-center justify-center p-2 bg-[#ffffff10] hover:bg-[#ffffff18] rounded-full cursor-pointer duration-150" onClick={(e) => {
+                                    const rect = (e.target as HTMLElement).getBoundingClientRect();
+                                    const x = rect.left;
+                                    const y = rect.bottom;
+                                    console.log(rect);
+
+                                    const items: MenuItem[] = [
+                                        {
+                                            title: "Play",
+                                            onClick: () => {
+                                                setCurrentTrack(song);
+                                            },
+                                            icon: null
+                                        },
+                                        {
+                                            title: "Add to Queue",
+                                            onClick: () => {
+                                                addTrack(song);
+                                            },
+                                            icon: null
+                                        }
+                                    ];
+
+                                    setContextMenu({ x, y, visible: true, items });
+                                }}>
                                     <EllipsisHorizontalIcon id="options" className="size-5 stroke-current stroke-1 pointer-events-none" />
                                 </div>
                             </div>
                         ))
                     }
-                </div>
-            </div>
-        ),
-        "saves": (
-            <div className="flex flex-col gap-2">
-                <h1 className="text-3xl font-bold">Saves</h1>
-                <div className="flex gap-2">
                 </div>
             </div>
         ),
@@ -379,13 +423,6 @@ export const MusicLibrary = ({ query }: MusicLibraryProps) => {
                     <TabItem
                         currentPage={page}
                         setPage={setpage}
-                        icon={<BookmarkIcon className="size-6 text-current duration-150" />}
-                        name="Saves"
-                        pageKey="saves"
-                    />
-                    <TabItem
-                        currentPage={page}
-                        setPage={setpage}
                         icon={<ArrowUpOnSquareIcon className="size-6 text-current duration-150" />}
                         name="Upload"
                         pageKey="upload"
@@ -403,6 +440,9 @@ export const MusicLibrary = ({ query }: MusicLibraryProps) => {
                     ))
                 }
             </div>
+            {contextMenu?.visible && (
+                <ContextMenu items={contextMenu.items} position={{ x: contextMenu.x, y: contextMenu.y }} onClose={() => setContextMenu(null)} />
+            )}
         </div>
     )
 }

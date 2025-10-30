@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react"
 import { RectangleStackIcon, PlusIcon, Cog6ToothIcon, ChevronLeftIcon, ChevronRightIcon, IdentificationIcon, EllipsisVerticalIcon, XMarkIcon } from "@heroicons/react/24/solid";
 import type { detailProps } from "./libs/eventBus";
 import XOR from "./libs/XOR";
+import { useLocation } from "react-router-dom";
 
 import { Api } from "./Api";
 
@@ -13,6 +14,8 @@ import { Tab } from "./components/Tab";
 import Home from "./views/Home";
 import Settings from "./views/Settings";
 import ExternalSite from "./views/ExternalSite";
+import Files from "./views/Files/Files";
+
 import { BareMuxConnection } from "@mercuryworkshop/bare-mux";
 import { usePanelsStore, useSettingsStore, useTabsStore } from "./store";
 import { quickLinks } from "./libs/init";
@@ -20,6 +23,7 @@ import { initTheme } from "./libs/theme";
 import { MusicLibrary } from "./views/Music/MusicLibrary";
 import { View } from "./gui/View";
 import TabGroup from "./components/TabGroup";
+import { Login } from "./views/Login";
 
 const regSw = async () => {
     await navigator.serviceWorker.getRegistrations().then(registrations => {
@@ -77,6 +81,9 @@ const App = () => {
     Api()
     const settings = useSettingsStore(state => state.settings)
     const setSettings = useSettingsStore(state => state.setSettings)
+
+    const location = useLocation()
+    const pathname = location.pathname.replace("/", "")
 
     const currentPanel = usePanelsStore(state => state.current);
     const setCurrentPanel = usePanelsStore(state => state.setCurrent)
@@ -190,6 +197,16 @@ const App = () => {
     }
 
     useEffect(() => {
+        if (currentTab && (pathname === "account" || pathname === "login" || pathname === "register")) {
+            updateTab(currentTab.id, {
+                displayUrl: pathname != "account" ? `about:account?${pathname}` : "about:account",
+                title: "Account Management",
+                url: pathname != "account" ? `about:account?${pathname}` : "about:account"
+            })
+        }
+    }, [location.pathname])
+
+    useEffect(() => {
         const handleKeys = (e: KeyboardEvent) => {
             const key = e.key.toLowerCase()
 
@@ -279,8 +296,8 @@ const App = () => {
                             settings
                         }
                     `}>
-                                {
-                                    tabs.length > 0 ? tabs.map((item, index) => {
+                        {
+                            tabs.length > 0 ? tabs.map((item, index) => {
                                 if (item.url === "newtab") {
                                     return (
                                         <Home key={item.id} className={"absolute inset-0 duration-150" + " " + `
@@ -305,8 +322,21 @@ const App = () => {
                                                 {currentTab && <View key={item.id} id={item.id}><MusicLibrary query={query}/></View>}
                                             </>
                                         )
+                                    } else if (page === "files") {
+                                        const query = item.url.includes("?") ? item.url.split("?")[1] : undefined;
+                                        return (
+                                            <>
+                                                {currentTab && <View key={item.id} id={item.id}><Files query={query} /></View>}
+                                            </>
+                                        )
+                                    } else if (page === "account") {
+                                        return (
+                                            <>
+                                                {currentTab && <View key={item.id} id={item.id}><Login query={pathname} /></View>}
+                                            </>
+                                        )
                                     }
-                                    } else {
+                                } else {
                                     return (
                                         <ExternalSite
                                             id={item.id}
@@ -324,12 +354,22 @@ const App = () => {
                             }) : <Home />
                         }
                     </div>
-                    <div className={(settings["floating-tabs"] && "absolute py-2") + " " + "flex flex-col h-full gap-2.5 duration-150" + " " + `
+                    <div className={(settings["floating-tabs"] && "absolute py-2") + " " + "flex flex-col h-full duration-150" + " " + `
                         ${
                             settings["floating-tabs"] === true ? panelsOpen ? "w-60 right-2" : "w-10 -right-1" : panelsOpen ? "w-78 right-2" : "w-10 -right-1"
                         }
+                        ${
+                            settings["floating-tabs"] ? "gap-2" : "gap-2.5"
+                        }
                     `}>
-                        <div className="flex w-full h-max p-1.5 py-2 gap-2 items-center justify-between bg-(--secondary) hover:bg-(--tertiary) inset-shadow-(--inset-shadow-primary) rounded-lg *:pointer-events-none cursor-pointer duration-150"
+                        <div className={"flex w-full h-max p-1.5 py-2 gap-2 items-center justify-between bg-(--secondary) hover:bg-(--tertiary) inset-shadow-(--inset-shadow-primary) *:pointer-events-none cursor-pointer duration-150" + " " + `
+                            ${
+                                settings["floating-tabs"] && panelsOpen ? "rounded-lg" : "rounded-xl"
+                            }
+                            ${
+                                settings["floating-tabs"] && panelsOpen ? "shadow-[0_0_16px_3px_#00000035]" : ""
+                            }
+                        `}
                         title={panelsOpen ? "Close Panels" : "Open Panels"}
                         onMouseDown={() => {
                             panelsOpen ? setPanelsOpen(false) :
@@ -348,12 +388,15 @@ const App = () => {
                             }
                         </div>
                         {/* tabs panel */}
-                        <div ref={tabsRef} className={"flex flex-col bg-(--secondary) inset-shadow-(--inset-shadow-primary) rounded-xl overflow-hidden duration-150" + " " + `
+                        <div ref={tabsRef} className={"flex flex-col bg-(--secondary) inset-shadow-(--inset-shadow-primary) overflow-hidden duration-150" + " " + `
                             ${
                                 currentPanel === "tabs" ? "h-2/3" : "h-1/3"
                             }
                             ${
                                 panelsOpen ? "w-full" : "w-50"
+                            }
+                            ${
+                                settings["floating-tabs"] && panelsOpen ? "rounded-lg" : "rounded-xl"
                             }
                             ${
                                 settings["floating-tabs"] && "shadow-[0_0_16px_3px_#00000035]"

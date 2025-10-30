@@ -16,6 +16,7 @@ export const QuickPlayer = ({ panelsOpen, className, onMouseDown }: QuickPlayerP
     const settings = useSettingsStore(state => state.settings)
     const currentTrack = useMusicStore(state => state.currentTrack)
     const queue = useMusicStore(state => state.queue)
+    const setCurrentTrack = useMusicStore(state => state.setCurrentTrack)
     const addTrack = useMusicStore(state => state.addTrack)
     const removeTrack = useMusicStore(state => state.removeTrack)
     const newTab = useTabsStore(state => state.newTab)
@@ -40,14 +41,15 @@ export const QuickPlayer = ({ panelsOpen, className, onMouseDown }: QuickPlayerP
         items: MenuItem[];
     } | null>(null);
 
-    // useEffect(() => {
-    //     if (currentTrack?.src && audioRef.current) {
-    //         audioRef.current.src = currentTrack.src;
-    //         audioRef.current.play().catch(() => {
-    //             // Optional: handle autoplay block or manual start
-    //         });
-    //     }
-    // }, [currentTrack]);
+    useEffect(() => {
+        if (currentTrack?.src && audioRef.current) {
+            audioRef.current.src = currentTrack.src;
+            audioRef.current.play().catch(() => {
+                // Optional: handle autoplay block or manual start
+            });
+            setIsPlaying(true);
+        }
+    }, [currentTrack]);
 
     useEffect(() => {
         let detectedPlatform = "";
@@ -157,7 +159,7 @@ export const QuickPlayer = ({ panelsOpen, className, onMouseDown }: QuickPlayerP
                     panelsOpen ? "w-full left-0" : "w-88 -left-77"
                 }
             `}>
-                <div ref={musicRef} className={(settings["floating-tabs"] && "h-[calc(100%-12px)]") + " " + "flex flex-col w-full bg-(--secondary) inset-shadow-(--inset-shadow-primary) overflow-hidden duration-150" + " " + `
+                <div ref={musicRef} className={"flex flex-col w-full bg-(--secondary) inset-shadow-(--inset-shadow-primary) overflow-hidden duration-150" + " " + `
                     ${
                         panelsOpen ? "w-full" : "w-88"
                     }
@@ -189,13 +191,26 @@ export const QuickPlayer = ({ panelsOpen, className, onMouseDown }: QuickPlayerP
                                 currentTrack &&
                                 <div className="flex items-center justify-between gap-2.5 p-1.5 w-full rounded-lg hover:bg-[#ffffff28] duration-150">
                                     <div className="flex items-center gap-2.5">
-                                        <img className="size-10 rounded-md" src={currentTrack.cover} alt={currentTrack.title} />
+                                        {
+                                            currentTrack.cover &&
+                                            <img className="size-10 rounded-md" src={currentTrack.cover} alt={currentTrack.title} />
+                                        }
+                                        {
+                                            !currentTrack.cover &&
+                                            <div className={"size-10 rounded-md flex justify-center items-center bg-(--primary) text-(--text-secondary) font-bold" + " " + `
+                                                ${
+                                                    settings.brightness === "dark" ? "text-[#ffffff6a]" : "text-[#0000006a]"
+                                                }
+                                            `}>
+                                                <MusicalNoteIcon className="size-6" />
+                                            </div>
+                                        }
                                         <div className="flex flex-col gap-1">
                                             <h1 title={currentTrack.title} className={"text-md font-semibold leading-none" + " " + `
                                                 ${
                                                     settings.brightness === "dark" ? "text-[#ffffff]" : "text-[#000000]"
                                                 }
-                                            `}>{currentTrack.title.length > 18 ? currentTrack.title.slice(0, 22) + "..." : currentTrack.title}</h1>
+                                            `}>{currentTrack.title.length > 22 ? currentTrack.title.slice(0, 22) + "..." : currentTrack.title}</h1>
                                             {
                                                 Array.isArray(currentTrack.artists) && currentTrack.artists.length > 1 ? (
                                                     <div className="flex gap-1.5">
@@ -287,15 +302,31 @@ export const QuickPlayer = ({ panelsOpen, className, onMouseDown }: QuickPlayerP
                                 }
                                 {
                                     queue.map((song, index) => (
-                                        <div key={song.id} className="flex items-center justify-between gap-2.5 p-1.5 w-full rounded-lg hover:bg-[#ffffff28] duration-150">
+                                        <div key={song.id} className="flex items-center justify-between gap-2.5 p-1.5 w-full rounded-lg hover:bg-[#ffffff28] duration-150" onClick={() => {
+                                            setCurrentTrack(song);
+                                            removeTrack(song.id);
+                                        }}>
                                             <div className="flex items-center gap-2.5">
-                                                <img className="size-10 rounded-md" src={song.cover} alt={song.title} />
+                                                {
+                                                    song.cover &&
+                                                    <img className="size-10 rounded-md" src={song.cover} alt={song.title} />
+                                                }
+                                                {
+                                                    !song.cover &&
+                                                    <div className={"size-10 rounded-md flex justify-center items-center bg-(--primary) text-(--text-secondary) font-bold" + " " + `
+                                                        ${
+                                                            settings.brightness === "dark" ? "text-[#ffffff6a]" : "text-[#0000006a]"
+                                                        }
+                                                    `}>
+                                                        <MusicalNoteIcon className="size-6" />
+                                                    </div>
+                                                }
                                                 <div className="flex flex-col gap-1">
                                                     <h1 title={song.title} className={"text-md font-semibold leading-none" + " " + `
                                                         ${
                                                             settings.brightness === "dark" ? "text-[#ffffff]" : "text-[#000000]"
                                                         }
-                                                    `}>{song.title.length > 18 ? song.title.slice(0, 22) + "..." : song.title}</h1>
+                                                    `}>{song.title.length > 22 ? song.title.slice(0, 22) + "..." : song.title}</h1>
                                                     {
                                                         Array.isArray(song.artists) && song.artists.length > 1 ? (
                                                             <div className="flex gap-1.5">
@@ -317,7 +348,7 @@ export const QuickPlayer = ({ panelsOpen, className, onMouseDown }: QuickPlayerP
                                                                     ))}
                                                                 </div>
                                                             </div>
-                                                        ) : <h2 className={"text-sm leading-none cursor-pointer duration-150" + " " + `
+                                                        ) : <h2 className={"text-sm leading-none duration-150" + " " + `
                                                             ${
                                                                 settings.brightness === "dark" ? "text-[#ffffff6a]" : "text-[#0000006a]"
                                                             }
@@ -401,7 +432,6 @@ export const QuickPlayer = ({ panelsOpen, className, onMouseDown }: QuickPlayerP
                                             audioRef.current?.pause();
                                             setIsPlaying(false);
                                         }
-                                        console.log(audioRef.current);
                                     }}>
                                         {
                                             isPlaying === false ?

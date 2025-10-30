@@ -33,6 +33,7 @@ export const Search = ({ tab }: SearchProps) => {
             }
             const makeUrl = (q: string) => {
                 if (/^[a-zA-Z][a-zA-Z0-9+\-.]*:\/\//.test(q)) return q;
+                if (q.includes("about:")) return q;
                 if (q.startsWith("www.")) return `https://${q}`;
                 if (q.includes(".") || q.includes(":")) return `https://${q}`;
                 return q;

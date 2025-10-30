@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { RectangleGroupIcon, PaintBrushIcon, PlusIcon, TrashIcon, ScaleIcon } from "@heroicons/react/24/solid";
+import { RectangleGroupIcon, PaintBrushIcon, PlusIcon, TrashIcon, ScaleIcon, Cog6ToothIcon } from "@heroicons/react/24/solid";
 import { CheckCircleIcon } from "@heroicons/react/24/outline";
 import LinkCard from "../components/LinkCard";
 import { isColorBright } from "../libs/colorBright";

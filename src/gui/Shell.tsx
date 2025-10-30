@@ -1,4 +1,4 @@
-import { Cog6ToothIcon, ArrowsPointingOutIcon, ArrowsPointingInIcon, ChevronUpDownIcon, ChevronDownIcon, UserCircleIcon, ArrowLeftStartOnRectangleIcon, InformationCircleIcon, LifebuoyIcon, UserIcon, HomeIcon, ArrowPathIcon, ArrowLeftIcon, ArrowRightIcon } from "@heroicons/react/24/solid";
+import { Cog6ToothIcon, ArrowsPointingOutIcon, ArrowsPointingInIcon, ChevronUpDownIcon, ChevronDownIcon, UserCircleIcon, ArrowLeftStartOnRectangleIcon, InformationCircleIcon, LifebuoyIcon, UserIcon, HomeIcon, ArrowPathIcon, ArrowLeftIcon, ArrowRightIcon, FolderArrowDownIcon, FolderIcon } from "@heroicons/react/24/solid";
 import { FireIcon, WrenchScrewdriverIcon, CheckBadgeIcon } from "@heroicons/react/24/solid"
 import { Suspense, useEffect, useState, useRef } from "react";
 import { Link } from "react-router-dom";
@@ -315,6 +315,13 @@ const Shell = () => {
                         }
                     }
                 }}></ShellButton>
+                <ShellButton title="File Manager" type="icon" icon={<FolderIcon className="size-6" />} onClick={() => newTab({
+                    id: createId(),
+                    title: "File Manager",
+                    url: "about:files",
+                    icon: <FolderIcon className="size-5" />,
+                    displayUrl: "about:files"
+                })}></ShellButton>
                 <ShellButton title="Settings" type="icon" icon={<Cog6ToothIcon className="size-6" />} onClick={() => newTab({
                     id: createId(),
                     title: "Settings",
@@ -322,13 +329,13 @@ const Shell = () => {
                     icon: <Cog6ToothIcon className="size-5" />,
                     displayUrl: "about:settings"
                 })}></ShellButton>
-                <UserCard avatar={
+                {/* <UserCard avatar={
                     <UserCircleIcon className={"size-8" + " " + `
                         ${
                             settings.brightness === "light" ? "text-(--text-secondary)" : "text-(--text-primary)"
                         }
                     `} />
-                } id="anon" display="Guest" handle="anon" />
+                } id="anon" display="Guest" handle="anon" /> */}
             </div>
         </div>
     );

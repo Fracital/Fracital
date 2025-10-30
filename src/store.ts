@@ -153,7 +153,7 @@ export const useSetupStore = create<{
     setSetupComplete: (complete) => set({ isSetupComplete: complete })
 }))
 
-interface MusicStore {
+export const useMusicStore = create<{
     src: string;
     currentTrack: Track | null;
     queue: Track[];
@@ -162,11 +162,10 @@ interface MusicStore {
     removeTrack: (id: string) => void
     setCurrentTrack: (track: Track | null) => void
 
+    playTrack: (track: Track) => void;
     playNext: () => void;
     playPrev: () => void;
-}
-
-export const useMusicStore = create<MusicStore>((set, get) => ({
+}>((set, get) => ({
     src: "",
     currentTrack: null,
     queue: [],
@@ -185,9 +184,11 @@ export const useMusicStore = create<MusicStore>((set, get) => ({
         }));
     },
     setCurrentTrack: (track) => {
-    set({ currentTrack: track ? { ...track, id: typeof track.id === "string" && track.id.length > 0 ? createId() : createId() } : null, src: track?.src || "" });
+        set({ currentTrack: track ? { ...track, id: typeof track.id === "string" && track.id.length > 0 ? createId() : createId() } : null, src: track?.src || "" });
     },
-
+    playTrack: (track) => {
+        set({ currentTrack: track, src: track.src });
+    },
     playNext: () => {
         const { queue, currentTrack } = get();
         if (!currentTrack || queue.length === 0) return;
@@ -196,7 +197,6 @@ export const useMusicStore = create<MusicStore>((set, get) => ({
         const next = queue[index + 1];
         if (next) set({ currentTrack: next });
     },
-
     playPrev: () => {
         const { queue, currentTrack } = get();
         if (!currentTrack || queue.length === 0) return;
@@ -206,3 +206,53 @@ export const useMusicStore = create<MusicStore>((set, get) => ({
         if (prev) set({ currentTrack: prev });
     },
 }))
+
+interface FileEntry {
+    name: string;
+    path: string;
+    isDirectory: boolean;
+    children?: FileEntry[];
+}
+
+const debounce = <T extends (...args: any[]) => void>(fn: T, delay: number) => {
+    let timer: ReturnType<typeof setTimeout>
+    return (...args: Parameters<T>) => {
+        clearTimeout(timer)
+        timer = setTimeout(() => fn(...args), delay)
+    }
+}
+
+export const useFilesStore = create<{
+    currentDirectory: string;
+    fileTree: FileEntry[] | null;
+    setCurrentDirectory: (path: string) => void;
+    setFileTree: (tree: any) => void;
+}>((set, get) => {
+    const debouncedReadDir = debounce(async (path: string) => {
+        try {
+            const dir = await Filer.fs.promises.readdir(path)
+            const entries: FileEntry[] = await Promise.all(dir.map(async (name: string) => {
+                const fullPath = path.endsWith("/") ? path + name : path + "/" + name
+                const stat = await Filer.fs.promises.stat(fullPath)
+                return {
+                    name,
+                    path: fullPath,
+                    isDirectory: stat.isDirectory()
+                }
+            }))
+
+            set({ fileTree: entries })
+        } catch (err) {
+            console.error("Failed to read directory:", err)
+        }
+    }, 300)
+    return {
+        currentDirectory: "/",
+        setCurrentDirectory: async (path) => {
+            set({ currentDirectory: path });
+            debouncedReadDir(path);
+        },
+        fileTree: null,
+        setFileTree: (tree) => set({ fileTree: tree })
+    }
+})

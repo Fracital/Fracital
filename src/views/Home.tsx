@@ -5,7 +5,7 @@ import { isColorBright } from "../libs/colorBright";
 import { quickLinks } from "../libs/init";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faDiscord } from "@fortawesome/free-brands-svg-icons";
-import { PlusIcon } from "@heroicons/react/24/solid";
+import { PlusIcon, GlobeAltIcon } from "@heroicons/react/24/solid";
 import { useSettingsStore } from "../store";
 
 export interface linkProps {
