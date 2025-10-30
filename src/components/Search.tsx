@@ -25,47 +25,52 @@ export const Search = ({ tab }: SearchProps) => {
 
     const searchHandler = (query: string) => {
         if (query.length > 0) {
-            // navigate("/?q=" + encodeURI(query));
-            // if (isUrl(query, { lenient: true })) {
-            //     console.log("URL detected");
-            // } else {
-            //     console.log("URL not detected");
-            // }
-
-            // try {
-            //     new URL(query);
-                if (tabs.length < 1) {
-                    newTab({
-                        title: "New Tab",
-                        id: createId(),
-                        url: query,
-                        current: true,
-                        displayUrl: query
-                    })
-                    setHasQuery(true);
-                } else {
-                    navigationEvent({
-                        url: query,
-                        icon: null,
-                        title: "New Tab",
-                        displayUrl: query,
-                        id: tab?.id ?? currentTab?.id ?? ""
-                    });
-                    setHasQuery(true);
-                }
-            // } catch (e) {
-            //     navigate("/es", {
-            //         state: {
-            //             search: query
-            //         }
-            //     })
-            // }
+            const isSearch = (q: string) => {
+                if (q.includes(" ")) return true;
+                if (/^[a-zA-Z][a-zA-Z0-9+\-.]*:\/\//.test(q)) return false;
+                if (q.startsWith("www.") || q.includes(".") || q.includes(":")) return false;
+                return true;
+            }
+            const makeUrl = (q: string) => {
+                if (/^[a-zA-Z][a-zA-Z0-9+\-.]*:\/\//.test(q)) return q;
+                if (q.startsWith("www.")) return `https://${q}`;
+                if (q.includes(".") || q.includes(":")) return `https://${q}`;
+                return q;
+            }
+            let finalUrl: string;
+            let displayUrl: string;
+            if (isSearch(query)) {
+                finalUrl = `https://duckduckgo.com/?q=${encodeURIComponent(query)}`;
+                displayUrl = query;
+            } else {
+                finalUrl = makeUrl(query);
+                displayUrl = query;
+            }
+            if (tabs.length < 1) {
+                newTab({
+                    title: "New Tab",
+                    id: createId(),
+                    url: finalUrl,
+                    current: true,
+                    displayUrl: displayUrl
+                });
+                setHasQuery(true);
+            } else {
+                navigationEvent({
+                    url: finalUrl,
+                    icon: null,
+                    title: "New Tab",
+                    displayUrl: displayUrl,
+                    id: tab?.id ?? currentTab?.id ?? ""
+                });
+                setHasQuery(true);
+            }
         }
     }
 
     useEffect(() => {
         if (inputRef.current && currentTab) {
-            inputRef.current.value = currentTab.url
+            inputRef.current.value = currentTab.url           
             setHasQuery(!!currentTab.url);
         }
     }, [currentTab]);

@@ -1,6 +1,6 @@
 import { XMarkIcon, GlobeAltIcon } from "@heroicons/react/24/solid"
 import { useSettingsStore, useTabsStore } from "../store"
-import { useRef } from "react"
+import { useRef, useState } from "react"
 
 export interface TabProps {
     title: string
@@ -23,7 +23,18 @@ export const Tab = ({ title, url, id, icon }: TabProps) => {
     const setCurrentTab = useTabsStore(state => state.setCurrentTab)
     const closeTab = useTabsStore(state => state.closeTab)
     const settings = useSettingsStore(state => state.settings)
+    const [currTitle, setTitle] = useState(title);
+    const [currIcon, setIcon] = useState(icon);
 
+    // @ts-expect-error Custom Event
+    window.addEventListener("updatedTab", (e: CustomEvent) => {
+        const response = JSON.parse(e.detail);
+        if (response.id === id) {
+            setTitle(response.title);
+            setIcon(response.icon);
+        }
+        console.log(response);
+    });
     const closeRef = useRef<SVGSVGElement>(null)
 
     return (
@@ -68,16 +79,16 @@ export const Tab = ({ title, url, id, icon }: TabProps) => {
         }}>
             <div className="flex w-full justify-between items-center duration-150">
                 <div className="flex items-center gap-1.5 *:pointer-events-none">
-                    {typeof icon === "string" ? (
-                        <img src={icon} alt={title} className="size-5" />
-                    ) : icon ? (
-                        icon
+                    {typeof currIcon === "string" ? (
+                        <img src={currIcon} alt={currTitle} className="size-5" />
+                    ) : currIcon ? (
+                        currIcon
                     ) : (
                         <GlobeAltIcon className="size-5" />
                     )}
                     <span className={"font-medium select-none" + " " + `
                         ${currentTab && id === currentTab.id ? "font-semibold" : "font-medium"}
-                    `}>{title.length > 10 ? title.slice(0, 10) + "…" : title}</span>
+                    `}>{currTitle.length > 10 ? currTitle.slice(0, 10) + "…" : currTitle}</span>
                 </div>
                 <XMarkIcon ref={closeRef} className="size-5 text-[#ffffff70] hover:text-(--text-primary) stroke-current stroke-2 cursor-pointer duration-150" onClick={(e) => {
                     e.stopPropagation()

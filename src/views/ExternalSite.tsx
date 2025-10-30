@@ -1,5 +1,4 @@
 import { useEffect, useRef } from "react";
-import XOR from "../libs/XOR";
 import { useTabsStore } from "../store";
 
 interface ExternalSiteProps {
@@ -16,43 +15,36 @@ const ExternalSite = ({ url, className, current, id }: ExternalSiteProps) => {
     useEffect(() => {
         const iframe = frameRef.current;
         if (!iframe) return;
-        const contentWindow = iframe.contentWindow;
-        const contentDocument = iframe.contentDocument;
-
-        const rawHref = contentWindow?.location?.href ?? "";
-        const replacedHref = rawHref.replace(window.location.origin + "/uv/service", "");
-        const newUrl = XOR.decode(replacedHref) ?? iframe.src;
-        const title = contentDocument?.title ?? "New Tab";
-        const icon = (contentDocument?.querySelector("link[rel~='icon']") as HTMLLinkElement | null)?.href ?? null;
 
         const handleLoad = () => {
-            console.log(id)
             try {
-                if (id) {
-                    updateTab(id, {
-                        title: title,
-                        icon: icon,
-                        displayUrl: newUrl
-                    })
-                }
-            } catch (err) {
-                if (id) {
-                    updateTab(id, {
-                        title: "New Tab",
-                        icon: null,
-                        displayUrl: "newtab"
-                    })
-                }
+                const doc = iframe.contentDocument;
+                const href = iframe.contentWindow?.location?.href;
+                if (!href || href === "about:blank" || href === "about:srcdoc") return;
+                const title = doc?.title ?? "New Tab";
+                const icon = (doc?.querySelector("link[rel~='icon']") as HTMLLinkElement | null)?.href ?? null;
+                window.dispatchEvent(new CustomEvent("updatedTab", { detail: JSON.stringify({
+                    id: id,
+                    title: title,
+                    icon: icon,
+                }) }));
+            } catch {
+                window.dispatchEvent(new CustomEvent("updatedTab", { detail: JSON.stringify({
+                    id: id,
+                    title: null,
+                    icon: null,
+                }) }));
             }
         };
-        const proxChange = (e: CustomEvent) => {
-            iframe.src = iframe.src.replace(/\/(?:uv\/)?service\//, e.detail.proxy === "uv" ? "/uv/service/" : "/service/")
+
+        const proxChange = (e: Event) => {
+            const detail = (e as CustomEvent).detail;
+            iframe.src = iframe.src.replace(/\/(?:uv\/)?service\//, detail?.proxy === "uv" ? "/uv/service/" : "/service/");
         };
-        // @ts-expect-error Custom Event
+
         window.addEventListener("proxy-change", proxChange);
         iframe.addEventListener("load", handleLoad);
         return () => {
-            // @ts-expect-error Custom Event
             window.removeEventListener("proxy-change", proxChange);
             iframe.removeEventListener("load", handleLoad);
         };
