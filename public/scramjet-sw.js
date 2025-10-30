@@ -6,8 +6,9 @@ if (navigator.userAgent.includes("Firefox")) {
     });
 }
 
-importScripts("/scramjet/scramjet.shared.js", "/scramjet/scramjet.worker.js");
+importScripts("/scramjet/scramjet.all.js");
 
+const { ScramjetServiceWorker } = $scramjetLoadWorker();
 const scramjet = new ScramjetServiceWorker();
 
 async function handleRequest(event) {

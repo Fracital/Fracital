@@ -32,41 +32,39 @@ const regSw = async () => {
     })
     const connection = new BareMuxConnection("/baremux/worker.js");
     await connection.setTransport("/epoxy/index.mjs", [{ wisp: `${window.location.origin.replace(/^https?:\/\//, 'ws://')}/wisp/` }]);
-    const scramjet = new window.ScramjetController({
+    const { ScramjetController } = window.$scramjetLoadController()
+    const scramjet = new ScramjetController({
         prefix: "/service/",
         files: {
-            wasm: "/scramjet/scramjet.wasm.wasm",
-            worker: "/scramjet/scramjet.worker.js",
-            client: "/scramjet/scramjet.client.js",
-            shared: "/scramjet/scramjet.shared.js",
-            sync: "/scramjet/scramjet.sync.js",
-        },
-        defaultFlags: {
-            rewriterLogs: false,
-        },
-        codec: {
-            encode: `
-                if (!url) return Promise.resolve(url);
-                let result = "";
-                let len = url.length;
-                    for (let i = 0; i < len; i++) {
-                        const char = url[i];
-                        result += i % 2 ? String.fromCharCode(char.charCodeAt(0) ^ 2) : char;
-                    }
-                return encodeURIComponent(result);
-            `,
-            decode: `
-                if (!url) return Promise.resolve(url);
-                url = decodeURIComponent(url);
-                let result = "";
-                let len = url.length;
-                for (let i = 0; i < len; i++) {
-                    const char = url[i];
-                    result += i % 2 ? String.fromCharCode(char.charCodeAt(0) ^ 2) : char;
-                }
-                return result;
-            `,
-        }
+			wasm: "/scramjet/scramjet.wasm.wasm",
+			all: "/scramjet/scramjet.all.js",
+			sync: "/scramjet/scramjet.sync.js",
+		},
+		defaultFlags: {
+			rewriterLogs: false,
+		},
+		codec: {
+			encode: function encode(input: string): string {
+				let result = "";
+				let len = input.length;
+				for (let i = 0; i < len; i++) {
+					const char = input[i];
+					result += i % 2 ? String.fromCharCode(char.charCodeAt(0) ^ 2) : char;
+				}
+				return encodeURIComponent(result);
+			},
+			decode: function decode(input: string): string {
+				if (!input) return input;
+				input = decodeURIComponent(input);
+				let result = "";
+				let len = input.length;
+				for (let i = 0; i < len; i++) {
+					const char = input[i];
+					result += i % 2 ? String.fromCharCode(char.charCodeAt(0) ^ 2) : char;
+				}
+				return result;
+			},
+		},
     });
     scramjet.init()
     navigator.serviceWorker.register("/uv/sw.js", { scope: "/uv/service/" })

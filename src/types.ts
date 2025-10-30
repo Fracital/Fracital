@@ -1,7 +1,6 @@
 declare global {
     interface Window {
         Filer: FilerType,
-        ScramjetController: any
     }
 }
 

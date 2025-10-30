@@ -9,8 +9,8 @@ import { Search } from "../components/Search";
 
 declare global {
     interface Window {
-        $scramjet: any;
-        ScramjetController: any;
+        $scramjetVersion: any;
+        $scramjetLoadController: any;
     }
 }
 
@@ -171,8 +171,8 @@ const Shell = () => {
 
     const [fullscreen] = useState<boolean>(false)
 
-    const [uvVersion] = useState("v3.2.7");
-    const [sjVersion] = useState(window.$scramjet.version.version);
+    const [uvVersion] = useState("v3.2.10");
+    const [sjVersion] = useState(window.$scramjetVersion.version);
 
     const handleProxyChange = (e: Event) => {
         const customEvent = e as CustomEvent;
