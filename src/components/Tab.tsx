@@ -33,7 +33,6 @@ export const Tab = ({ title, url, id, icon }: TabProps) => {
             setTitle(response.title);
             setIcon(response.icon);
         }
-        console.log(response);
     });
     const closeRef = useRef<SVGSVGElement>(null)
 

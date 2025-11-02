@@ -24,6 +24,8 @@ export const useTabsStore = create<{
     newTab: (props: TabProps) => void
     closeTab: (id: string) => void
     updateTab: (id: string, changes: Partial<TabProps>) => void
+    getHistory: (id: string) => { url: string; title: string; icon?: string; displayUrl?: string }[] | null
+    setHistory: (id: string, history: { url: string; title: string; icon?: string; displayUrl?: string }[]) => void
     newGroup: (id: string | null, name: string, icon?: string) => void
     addTabToGroup: (groupId: string, tab: TabProps) => void
     moveTabRelative: (draggedId: string, targetId: string, placeBefore: boolean) => void
@@ -54,7 +56,6 @@ export const useTabsStore = create<{
         set(state => ({
             tabs: state.tabs.map(tab => ({ ...tab, current: false })).concat(tabWithId as TabProps & { current: boolean })
         }));
-
     },
     closeTab: (id: string) => {
         set(state => {
@@ -82,6 +83,15 @@ export const useTabsStore = create<{
             )
         })
     ),
+    getHistory: (id: string) => {
+        const tab = get().tabs.find(t => t.id === id);
+        return (tab as any)?.history ?? null;
+    },
+    setHistory: (id: string, history: { url: string; title: string; icon?: string; displayUrl?: string }[]) => {
+        set((state) => ({
+            tabs: state.tabs.map((tab) => tab.id === id ? ({ ...tab, history } as unknown as TabProps) : tab)
+        }));
+    },
     moveTabRelative: (draggedId: string, targetId: string, placeBefore: boolean) => set((state) => {
         const tabs = [...state.tabs];
         const from = tabs.findIndex(t => t.id === draggedId);

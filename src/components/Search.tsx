@@ -71,8 +71,9 @@ export const Search = ({ tab }: SearchProps) => {
 
     useEffect(() => {
         if (inputRef.current && currentTab) {
-            inputRef.current.value = currentTab.url           
-            setHasQuery(!!currentTab.url);
+            console.log(currentTab)
+            inputRef.current.value = currentTab.displayUrl
+            setHasQuery(!!currentTab.displayUrl);
         }
     }, [currentTab]);
 

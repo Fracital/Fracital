@@ -6,6 +6,7 @@ import { ShellButton } from "../components/ShellButton";
 import { useTabsStore, useSettingsStore } from "../store";
 import { createId } from "@paralleldrive/cuid2";
 import { Search } from "../components/Search";
+import { navigationEvent } from "../libs/eventBus";
 
 declare global {
     interface Window {
@@ -224,27 +225,77 @@ const Shell = () => {
                             }
                         `} />
                     </button>
-                    {/* <button className={"group size-8 p-1 rounded-md cursor-pointer duration-150" + " " + `
+                    <button className={"group size-8 p-1 rounded-md cursor-pointer duration-150" + " " + `
                         ${
                             settings.brightness === "light" ? "text-(--text-tertiary) hover:text-(--text-primary) hover:bg-[#00000018]" : "text-(--text-primary) hover:text-(--text-secondary) hover:bg-[#ffffff10]"
                         }
-                    `} title="Refresh Page">
+                    `} title="Refresh Page" onClick={() => {
+                        window.dispatchEvent(new CustomEvent("reload-tab", {
+                            detail: {
+                                tab: tabs.find(tab => tab.current)?.id ?? null
+                            }
+                        }));
+                    }}>
                         <ArrowPathIcon className={"size-full stroke-current stroke-1 text-(--text-tertiary) cursor-pointer group-hover:text-(--text-primary) group-hover:rotate-180 duration-300"}/>
-                    </button> */}
-                    {/* <button className={"group size-8 p-1 rounded-md cursor-pointer duration-150" + " " + `
+                    </button>
+                    <button className={"group size-8 p-1 rounded-md cursor-pointer duration-150" + " " + `
                         ${
                             settings.brightness === "light" ? "text-(--text-tertiary) hover:text-(--text-primary) hover:bg-[#00000018]" : "text-(--text-primary) hover:text-(--text-secondary) hover:bg-[#ffffff10]"
                         }
-                    `} title="Go back">
+                    `} title="Go back" onClick={() => {
+                        const currTab = tabs.find(tab => tab.current);
+                        if (!currTab) return;
+                        const currTabId = currTab.id;
+                        const history = useTabsStore.getState().getHistory(currTabId);
+                        if (!history || history.length < 2) return;
+                        let currentIndex = history.findIndex(h => {
+                            const entryDisplay = (h.displayUrl ?? h.url);
+                            const tabDisplay = (currTab.displayUrl ?? currTab.url);
+                            return h.url === currTab.url && entryDisplay === tabDisplay;
+                        });
+                        if (currentIndex === -1) currentIndex = history.length - 1;
+                        if (currentIndex <= 0) return;
+                        const target = history[currentIndex - 1];
+                        if (!target) return;
+                        navigationEvent({
+                            url: target.url,
+                            icon: target.icon,
+                            title: target.title,
+                            displayUrl: target.displayUrl ?? target.url,
+                            id: currTabId
+                        });
+                    }}>
                         <ArrowLeftIcon className={"size-full stroke-current stroke-1 text-(--text-tertiary) cursor-pointer group-hover:text-(--text-primary) duration-300"}/>
                     </button>
                     <button className={"group size-8 p-1 rounded-md cursor-pointer duration-150" + " " + `
                         ${
                             settings.brightness === "light" ? "text-(--text-tertiary) hover:text-(--text-primary) hover:bg-[#00000018]" : "text-(--text-primary) hover:text-(--text-secondary) hover:bg-[#ffffff10]"
                         }
-                    `} title="Go forward">
+                    `} title="Go forward" onClick={() => {
+                        const currTab = tabs.find(tab => tab.current);
+                        if (!currTab) return;
+                        const currTabId = currTab.id;
+                        const history = useTabsStore.getState().getHistory(currTabId);
+                        if (!history || history.length < 2) return;
+                        let currentIndex = history.findIndex(h => {
+                            const entryDisplay = (h.displayUrl ?? h.url);
+                            const tabDisplay = (currTab.displayUrl ?? currTab.url);
+                            return h.url === currTab.url && entryDisplay === tabDisplay;
+                        });
+                        if (currentIndex === -1) currentIndex = history.length - 1;
+                        if (currentIndex >= history.length - 1) return;
+                        const target = history[currentIndex + 1];
+                        if (!target) return;
+                        navigationEvent({
+                            url: target.url,
+                            icon: target.icon,
+                            title: target.title,
+                            displayUrl: target.displayUrl ?? target.url,
+                            id: currTabId
+                        });
+                    }}>
                         <ArrowRightIcon className={"size-full stroke-current stroke-1 text-(--text-tertiary) cursor-pointer group-hover:text-(--text-primary) duration-300"}/>
-                    </button> */}
+                    </button>
                 </div>
                 <div className="relative flex items-center justify-center">
                     {
