@@ -71,7 +71,6 @@ export const Search = ({ tab }: SearchProps) => {
 
     useEffect(() => {
         if (inputRef.current && currentTab) {
-            console.log(currentTab)
             inputRef.current.value = currentTab.displayUrl
             setHasQuery(!!currentTab.displayUrl);
         }
@@ -90,7 +89,6 @@ export const Search = ({ tab }: SearchProps) => {
             displayUrl: "newtab",
             id: createId()
         })
-        navigate("/");
     }
 
     return (
@@ -115,7 +113,7 @@ export const Search = ({ tab }: SearchProps) => {
             }}>
                 <div className={"relative flex items-center justify-start h-full z-10 duration-150" + " " + `
                     ${
-                        hasQuery ? "sm:w-[20rem] w-[5rem]" : "sm:w-[12.5rem] w-[5rem]"
+                        hasQuery ? "sm:w-[20rem] w-20" : "sm:w-[12.5rem] w-20"
                     }
                 `}>
                     <span className={"absolute left-4 font-semibold ease-in-out pointer-events-none w-max" + " " + `
@@ -145,8 +143,8 @@ export const Search = ({ tab }: SearchProps) => {
                         }
                     }} />
                 </div>
-                <div className={"p-1.5"}>
-                    <button className={"group flex items-center justify-center p-2 cursor-pointer z-20"}
+                <div className={"p-1.5 pl-0"}>
+                    <button className={"group flex items-center justify-center pl-1 p-2 cursor-pointer z-20"}
                     onClick={() => {
                         if (inputRef.current?.value === "") {
                             inputRef.current?.focus();

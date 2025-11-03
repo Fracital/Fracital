@@ -289,7 +289,7 @@ const App = () => {
     return (
         <div className="flex flex-col size-full gap-2.5 p-3">
             <Shell />
-            <div className="flex flex-col size-full gap-[1px]">
+            <div className="flex flex-col size-full">
                 <div id="main" className="relative flex size-full gap-2.5" style={{height: (settings["floating-tabs"] ? "100%" : `calc(100% - calc(${shellHeight}px + calc(var(--spacing) * 2.5))`)}}>
                     <div className={"relative size-full bg-(--secondary) inset-shadow-(--inset-shadow-primary) rounded-xl overflow-hidden" + " " + `
                         ${
@@ -297,7 +297,7 @@ const App = () => {
                         }
                     `}>
                         {
-                            tabs.length > 0 ? tabs.map((item, index) => {
+                            tabs.length > 0 ? tabs.map((item) => {
                                 if (item.url === "newtab") {
                                     return (
                                         <Home key={item.id} className={"absolute inset-0 duration-150" + " " + `

@@ -162,11 +162,13 @@ export const UserCard = ({ id, display, handle, avatar }: UserProps) => {
 const Shell = () => {
     const newTab = useTabsStore(state => state.newTab)
     const tabs = useTabsStore(state => state.tabs)
+    const currentTab = tabs.find(tab => tab.current === true);
 
     const settings = useSettingsStore(state => state.settings)
 
     const [proxy, setProxy] = useState<"uv" | "sj">("uv");
 
+    const navButtonsRef = useRef<HTMLDivElement>(null)
     const uvRef = useRef<HTMLDivElement>(null);
     const sjRef = useRef<HTMLDivElement>(null);
 
@@ -184,7 +186,6 @@ const Shell = () => {
         }
     };
 
-
     useEffect(() => {
         const storedProxy = window.localStorage.getItem("proxy");
         if (storedProxy === "sj" || storedProxy === "uv") {
@@ -199,12 +200,22 @@ const Shell = () => {
         };
     }, []);
 
+    useEffect(() => {
+        if (!currentTab && !navButtonsRef) return
+        if (currentTab?.url.includes("https://")) {
+            navButtonsRef.current?.classList.remove("absolute", "-translate-x-3")
+        } else {
+            setTimeout(() => {
+                navButtonsRef.current?.classList.add("absolute", "-translate-x-3")
+            }, 150)
+        }
+    }, [currentTab?.url, currentTab, navButtonsRef])
+
     return (
         <div id="shell" className={"flex justify-between gap-2.5 p-1 rounded-xl duration-200"}>
             <div className="flex items-center justify-start gap-2.5">
-                <div className="flex items-center justify-center gap-0.5">
+                <div className="relative flex items-center justify-center gap-0.5">
                     <button className="group relative flex items-center justify-center mr-1 cursor-pointer" title={`Home - Go to the homepage`} onMouseDown={() => {
-                        const currentTab = useTabsStore.getState().tabs.find(tab => tab.current);
                         if (currentTab) {
                             useTabsStore.getState().updateTab(currentTab.id, {
                                 url: "newtab",
@@ -225,77 +236,81 @@ const Shell = () => {
                             }
                         `} />
                     </button>
-                    <button className={"group size-8 p-1 rounded-md cursor-pointer duration-150" + " " + `
-                        ${
-                            settings.brightness === "light" ? "text-(--text-tertiary) hover:text-(--text-primary) hover:bg-[#00000018]" : "text-(--text-primary) hover:text-(--text-secondary) hover:bg-[#ffffff10]"
-                        }
-                    `} title="Refresh Page" onClick={() => {
-                        window.dispatchEvent(new CustomEvent("reload-tab", {
-                            detail: {
-                                tab: tabs.find(tab => tab.current)?.id ?? null
+                    <div ref={navButtonsRef} className={`flex items-center justify-center gap-0.5 duration-150` + " " + `
+                        ${currentTab?.url.includes("https://") ? "" : "opacity-0 pointer-events-none"}
+                    `}>
+                        <button className={"group size-8 p-1 rounded-md cursor-pointer duration-150" + " " + `
+                            ${
+                                settings.brightness === "light" ? "text-(--text-tertiary) hover:text-(--text-primary) hover:bg-[#00000018]" : "text-(--text-primary) hover:text-(--text-secondary) hover:bg-[#ffffff10]"
                             }
-                        }));
-                    }}>
-                        <ArrowPathIcon className={"size-full stroke-current stroke-1 text-(--text-tertiary) cursor-pointer group-hover:text-(--text-primary) group-hover:rotate-180 duration-300"}/>
-                    </button>
-                    <button className={"group size-8 p-1 rounded-md cursor-pointer duration-150" + " " + `
-                        ${
-                            settings.brightness === "light" ? "text-(--text-tertiary) hover:text-(--text-primary) hover:bg-[#00000018]" : "text-(--text-primary) hover:text-(--text-secondary) hover:bg-[#ffffff10]"
-                        }
-                    `} title="Go back" onClick={() => {
-                        const currTab = tabs.find(tab => tab.current);
-                        if (!currTab) return;
-                        const currTabId = currTab.id;
-                        const history = useTabsStore.getState().getHistory(currTabId);
-                        if (!history || history.length < 2) return;
-                        let currentIndex = history.findIndex(h => {
-                            const entryDisplay = (h.displayUrl ?? h.url);
-                            const tabDisplay = (currTab.displayUrl ?? currTab.url);
-                            return h.url === currTab.url && entryDisplay === tabDisplay;
-                        });
-                        if (currentIndex === -1) currentIndex = history.length - 1;
-                        if (currentIndex <= 0) return;
-                        const target = history[currentIndex - 1];
-                        if (!target) return;
-                        navigationEvent({
-                            url: target.url,
-                            icon: target.icon,
-                            title: target.title,
-                            displayUrl: target.displayUrl ?? target.url,
-                            id: currTabId
-                        });
-                    }}>
-                        <ArrowLeftIcon className={"size-full stroke-current stroke-1 text-(--text-tertiary) cursor-pointer group-hover:text-(--text-primary) duration-300"}/>
-                    </button>
-                    <button className={"group size-8 p-1 rounded-md cursor-pointer duration-150" + " " + `
-                        ${
-                            settings.brightness === "light" ? "text-(--text-tertiary) hover:text-(--text-primary) hover:bg-[#00000018]" : "text-(--text-primary) hover:text-(--text-secondary) hover:bg-[#ffffff10]"
-                        }
-                    `} title="Go forward" onClick={() => {
-                        const currTab = tabs.find(tab => tab.current);
-                        if (!currTab) return;
-                        const currTabId = currTab.id;
-                        const history = useTabsStore.getState().getHistory(currTabId);
-                        if (!history || history.length < 2) return;
-                        let currentIndex = history.findIndex(h => {
-                            const entryDisplay = (h.displayUrl ?? h.url);
-                            const tabDisplay = (currTab.displayUrl ?? currTab.url);
-                            return h.url === currTab.url && entryDisplay === tabDisplay;
-                        });
-                        if (currentIndex === -1) currentIndex = history.length - 1;
-                        if (currentIndex >= history.length - 1) return;
-                        const target = history[currentIndex + 1];
-                        if (!target) return;
-                        navigationEvent({
-                            url: target.url,
-                            icon: target.icon,
-                            title: target.title,
-                            displayUrl: target.displayUrl ?? target.url,
-                            id: currTabId
-                        });
-                    }}>
-                        <ArrowRightIcon className={"size-full stroke-current stroke-1 text-(--text-tertiary) cursor-pointer group-hover:text-(--text-primary) duration-300"}/>
-                    </button>
+                        `} title="Refresh Page" onClick={() => {
+                            window.dispatchEvent(new CustomEvent("reload-tab", {
+                                detail: {
+                                    tab: tabs.find(tab => tab.current)?.id ?? null
+                                }
+                            }));
+                        }}>
+                            <ArrowPathIcon className={"size-full stroke-current stroke-1 text-(--text-tertiary) cursor-pointer group-hover:text-(--text-primary) group-hover:rotate-180 duration-300"}/>
+                        </button>
+                        <button className={"group size-8 p-1 rounded-md cursor-pointer duration-150" + " " + `
+                            ${
+                                settings.brightness === "light" ? "text-(--text-tertiary) hover:text-(--text-primary) hover:bg-[#00000018]" : "text-(--text-primary) hover:text-(--text-secondary) hover:bg-[#ffffff10]"
+                            }
+                        `} title="Go back" onClick={() => {
+                            const currTab = tabs.find(tab => tab.current);
+                            if (!currTab) return;
+                            const currTabId = currTab.id;
+                            const history = useTabsStore.getState().getHistory(currTabId);
+                            if (!history || history.length < 2) return;
+                            let currentIndex = history.findIndex(h => {
+                                const entryDisplay = (h.displayUrl ?? h.url);
+                                const tabDisplay = (currTab.displayUrl ?? currTab.url);
+                                return h.url === currTab.url && entryDisplay === tabDisplay;
+                            });
+                            if (currentIndex === -1) currentIndex = history.length - 1;
+                            if (currentIndex <= 0) return;
+                            const target = history[currentIndex - 1];
+                            if (!target) return;
+                            navigationEvent({
+                                url: target.url,
+                                icon: target.icon,
+                                title: target.title,
+                                displayUrl: target.displayUrl ?? target.url,
+                                id: currTabId
+                            });
+                        }}>
+                            <ArrowLeftIcon className={"size-full stroke-current stroke-1 text-(--text-tertiary) cursor-pointer group-hover:text-(--text-primary) duration-300"}/>
+                        </button>
+                        <button className={"group size-8 p-1 rounded-md cursor-pointer duration-150" + " " + `
+                            ${
+                                settings.brightness === "light" ? "text-(--text-tertiary) hover:text-(--text-primary) hover:bg-[#00000018]" : "text-(--text-primary) hover:text-(--text-secondary) hover:bg-[#ffffff10]"
+                            }
+                        `} title="Go forward" onClick={() => {
+                            const currTab = tabs.find(tab => tab.current);
+                            if (!currTab) return;
+                            const currTabId = currTab.id;
+                            const history = useTabsStore.getState().getHistory(currTabId);
+                            if (!history || history.length < 2) return;
+                            let currentIndex = history.findIndex(h => {
+                                const entryDisplay = (h.displayUrl ?? h.url);
+                                const tabDisplay = (currTab.displayUrl ?? currTab.url);
+                                return h.url === currTab.url && entryDisplay === tabDisplay;
+                            });
+                            if (currentIndex === -1) currentIndex = history.length - 1;
+                            if (currentIndex >= history.length - 1) return;
+                            const target = history[currentIndex + 1];
+                            if (!target) return;
+                            navigationEvent({
+                                url: target.url,
+                                icon: target.icon,
+                                title: target.title,
+                                displayUrl: target.displayUrl ?? target.url,
+                                id: currTabId
+                            });
+                        }}>
+                            <ArrowRightIcon className={"size-full stroke-current stroke-1 text-(--text-tertiary) cursor-pointer group-hover:text-(--text-primary) duration-300"}/>
+                        </button>
+                    </div>
                 </div>
                 <div className="relative flex items-center justify-center">
                     {
