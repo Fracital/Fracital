@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { use, useEffect, useState } from "react";
 import { RectangleGroupIcon, PaintBrushIcon, PlusIcon, TrashIcon, ScaleIcon, Cog6ToothIcon } from "@heroicons/react/24/solid";
 import { CheckCircleIcon } from "@heroicons/react/24/outline";
 import LinkCard from "../components/LinkCard";
@@ -49,7 +49,7 @@ const ThemeCard = (config: any) => {
                     </button>
                     <TrashIcon className="size-5 text-(--text-secondary) stroke-current stroke-0.5 cursor-pointer hover:text-(--text-primary) duration-150" onMouseDown={async () => {
                         if (!confirm("Are you sure you want to delete this theme?")) return;
-                        await window.Filer.fs.promises.unlink(`/themes/${config.name.toLowerCase()}`);
+                        await window.fr.fs.promises.unlink(`/themes/${config.name.toLowerCase()}`);
                         loadTheme("default");
                     }} title="Delete Theme" />
                 </div>
@@ -80,7 +80,7 @@ const Settings = ({ className }: SettingsProps) => {
     const [floatingTabs, setFloatingTabs] = useState<boolean>(true)
     const [themes, setThemes] = useState<any[]>([])
 
-    const [links] = useState<linkProps[]>(
+    const [links, setLinks] = useState<linkProps[]>(
         (() => {
             const stored = window.localStorage.getItem("quicklinks");
             try {
@@ -93,12 +93,12 @@ const Settings = ({ className }: SettingsProps) => {
 
     useEffect(() => {
         const getThemes = async () => {
-            const themeDirs = await window.Filer.fs.promises.readdir("/themes");
+            const themeDirs = await window.fr.fs.promises.readdir("/themes");
             const themeNames: string[] = [];
             for (const dirName of themeDirs) {
                 const indexPath = `/themes/${dirName}/index.json`;
                 try {
-                    const indexData = JSON.parse(await window.Filer.fs.promises.readFile(indexPath, "utf8"));
+                    const indexData = JSON.parse(await window.fr.fs.promises.readFile(indexPath, "utf8"));
                     themeNames.push(indexData);
                 } catch {
                     console.warn(`No index.json found in theme directory: ${dirName}`);
@@ -113,7 +113,7 @@ const Settings = ({ className }: SettingsProps) => {
     useEffect(() => {
         const getSettings = async () => {
             try {
-                const settingsData = await window.Filer.fs.promises.readFile("/settings.json", "utf-8");
+                const settingsData = await window.fr.fs.promises.readFile("/settings.json", "utf-8");
                 const parsedSettings = JSON.parse(settingsData);
                 setFloatingTabs(parsedSettings["floating-tabs"] ?? true);
                 Object.entries(parsedSettings).forEach(([key, value]) => {
@@ -122,7 +122,7 @@ const Settings = ({ className }: SettingsProps) => {
             } catch (error) {
                 console.error("Error reading settings.json:", error);
                 setSettings("theme", "default");
-                setSettings("proxy", "uv");
+                setSettings("proxy", "sj");
                 setSettings("quicklinks", quickLinks);
                 setSettings("floating-tabs", true);
                 setFloatingTabs(true);
@@ -130,6 +130,22 @@ const Settings = ({ className }: SettingsProps) => {
         };
         getSettings();
     }, [])
+
+    useEffect(() => {
+        const updLinks = () => {
+            const stored = window.localStorage.getItem("quicklinks");
+            try {
+                const links = stored ? JSON.parse(stored) : [];
+                setLinks(links);
+            } catch {
+                setLinks([]);
+            }
+        };
+        window.addEventListener("links-updated", updLinks);
+        return () => {
+            window.removeEventListener("links-updated", updLinks);
+        };
+    }, [links]);
 
     const pages = {
         "general": (
@@ -167,6 +183,7 @@ const Settings = ({ className }: SettingsProps) => {
                         const stored = window.localStorage.getItem("quicklinks");
                         const links = stored ? JSON.parse(stored) : [];
                         links.push(newLink);
+                        setLinks(links);
                         window.localStorage.setItem("quicklinks", JSON.stringify(links));
                     }}>
                         <div className="*:pointer-events-none *:select-none">
@@ -196,7 +213,7 @@ const Settings = ({ className }: SettingsProps) => {
                         onChange={async () => {
                             const next = !floatingTabs;
                             setFloatingTabs(next);
-                            await window.Filer.fs.promises.writeFile("/settings.json", JSON.stringify({
+                            await window.fr.fs.promises.writeFile("/settings.json", JSON.stringify({
                                 ...settings,
                                 "floating-tabs": next
                             }, null, 4), "utf-8");

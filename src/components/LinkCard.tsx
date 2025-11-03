@@ -2,6 +2,7 @@ import { useRef, useEffect, useState } from "react";
 import { navigationEvent } from "../libs/eventBus";
 import { TrashIcon, PencilSquareIcon, GlobeAltIcon } from "@heroicons/react/24/solid";
 import type { linkProps } from "../views/Home";
+import { useTabsStore } from "../store";
 
 interface LinkCardProps {
     title: string;
@@ -16,6 +17,8 @@ interface LinkCardProps {
 const LinkCard: React.FC<LinkCardProps> = ({ title, icon, brightness, color, href, id, edit }) => {
     const cardRef = useRef<HTMLDivElement>(null)
     const [value, setValue] = useState<string>(href || "");
+    const tabs = useTabsStore(state => state.tabs)
+    const currentTab = tabs.find(tab => tab.current === true) || { id: "" };
 
     useEffect(() => {
         cardRef.current?.style.setProperty("--color", color)
@@ -58,6 +61,7 @@ const LinkCard: React.FC<LinkCardProps> = ({ title, icon, brightness, color, hre
                                     const stored = window.localStorage.getItem("quicklinks");
                                     const links = stored ? JSON.parse(stored) : [];
                                     links.splice(id, 1);
+                                    window.dispatchEvent(new Event("links-upd"));
                                     window.localStorage.setItem("quicklinks", JSON.stringify(links));
                                 }}>
                                     <TrashIcon className="size-6" />
@@ -86,14 +90,14 @@ const LinkCard: React.FC<LinkCardProps> = ({ title, icon, brightness, color, hre
                         </div>
                     </div>
                 ) : (
-                    <div ref={cardRef} className="group relative flex flex-col p-3 rounded-2xl bg-(--color) overflow-hidden cursor-pointer duration-200" onMouseDown={async () => {
+                    <div ref={cardRef} className="group relative flex flex-col p-3 rounded-2xl bg-(--color) overflow-hidden cursor-pointer duration-200" onClick={async () => {
                         if (href) {
                             navigationEvent({
                                 url: href,
                                 icon: icon,
                                 title: title,
                                 displayUrl: href,
-                                id: id !== undefined ? String(id) : ""
+                                id: currentTab.id
                             });
                         }
                     }}>

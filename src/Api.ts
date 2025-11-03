@@ -21,12 +21,15 @@ export const Api = async () => {
             },
             setTheme: async (name: string) => {
                 if (getSettings("theme") === name) return false
-                const themes = await window.Filer.fs.promises.readdir("/themes", "utf8")
+                const themes = await window.fr.fs.promises.readdir("/themes", "utf8")
                 if (themes.find(theme => theme === name)) {
                     setSettings("theme", name)
                     return true
                 } else return false
             }
-        }
+        },
+        fs: Filer.fs,
+        buffer: Filer.Buffer,
+        sh: new Filer.fs.Shell(),
     }
 }

@@ -45,6 +45,7 @@ const Home = ({ className }: HomeProps) => {
                                 icon={link.icon}
                                 color={link.color}
                                 href={link.href}
+                                edit={false}
                                 brightness={isColorBright(link.color)}
                             />
                         ))

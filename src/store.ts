@@ -240,10 +240,10 @@ export const useFilesStore = create<{
 }>((set, get) => {
     const debouncedReadDir = debounce(async (path: string) => {
         try {
-            const dir = await Filer.fs.promises.readdir(path)
+            const dir = await window.fr.fs.promises.readdir(path)
             const entries: FileEntry[] = await Promise.all(dir.map(async (name: string) => {
                 const fullPath = path.endsWith("/") ? path + name : path + "/" + name
-                const stat = await Filer.fs.promises.stat(fullPath)
+                const stat = await window.fr.fs.promises.stat(fullPath)
                 return {
                     name,
                     path: fullPath,

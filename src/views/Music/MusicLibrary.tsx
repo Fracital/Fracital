@@ -101,13 +101,13 @@ export const MusicLibrary = ({ query }: MusicLibraryProps) => {
 
         const readLibrary = async () => {
             try {
-                const folders = await Filer.fs.promises.readdir("/music");
+                const folders = await window.fr.fs.promises.readdir("/music");
                 const songs: Track[] = [];
 
                 for (const folderName of folders) {
                     try {
                         const folderPath = `/music/${folderName}`;
-                        const entries = await Filer.fs.promises.readdir(folderPath);
+                        const entries = await window.fr.fs.promises.readdir(folderPath);
 
                         const audioFileName = entries.find(name =>
                             /^audio\.(mp3|flac|wav|ogg|m4a)$/i.test(name)
@@ -115,7 +115,7 @@ export const MusicLibrary = ({ query }: MusicLibraryProps) => {
                         if (!audioFileName) continue;
 
                         const audioPath = `${folderPath}/${audioFileName}`;
-                        const audioData = await Filer.fs.promises.readFile(audioPath);
+                        const audioData = await window.fr.fs.promises.readFile(audioPath);
                         const extension = audioFileName.split('.').pop()?.toLowerCase();
                         const mimeType = extension === "mp3" ? "audio/mpeg"
                             : extension === "wav" ? "audio/wav"
@@ -129,7 +129,7 @@ export const MusicLibrary = ({ query }: MusicLibraryProps) => {
                         let tagsFromJson = {};
                         if (entries.includes("tags.json")) {
                             try {
-                                const tagsJsonData = await Filer.fs.promises.readFile(`${folderPath}/tags.json`, "utf8");
+                                const tagsJsonData = await window.fr.fs.promises.readFile(`${folderPath}/tags.json`, "utf8");
                                 tagsFromJson = JSON.parse(tagsJsonData);
                             } catch { }
                         }
@@ -168,14 +168,14 @@ export const MusicLibrary = ({ query }: MusicLibraryProps) => {
             }
         };
 
-        var watcher = Filer.fs.watch("/music", { recursive: true }, () => {
+        var watcher = window.fr.fs.watch("/music", { recursive: true }, () => {
             console.log("change");
             readLibrary();
             watcher.close();
             intervalId = window.setTimeout(() => {
                 // re-establish watcher after a short delay to avoid multiple triggers
                 readLibrary();
-                watcher = Filer.fs.watch("/music", { recursive: true }, () => {
+                watcher = window.fr.fs.watch("/music", { recursive: true }, () => {
                     console.log("change");
                     readLibrary();
                     watcher.close();
@@ -239,6 +239,58 @@ export const MusicLibrary = ({ query }: MusicLibraryProps) => {
                                             title: "Add to Queue",
                                             onClick: () => {
                                                 addTrack(song);
+                                            },
+                                            icon: null
+                                        },
+                                        {
+                                            title: "Remove from Library",
+                                            onClick: async () => {
+                                                try {
+                                                    const folders = await window.fr.fs.promises.readdir("/music");
+                                                    let deleted = false;
+                                                    for (const folderName of folders) {
+                                                        const folderPath = `/music/${folderName}`;
+                                                        try {
+                                                            const entries = await window.fr.fs.promises.readdir(folderPath);
+                                                            let tags: any = null;
+                                                            if (entries.includes("tags.json")) {
+                                                                try {
+                                                                    const tagsJson = await window.fr.fs.promises.readFile(`${folderPath}/tags.json`, "utf8");
+                                                                    tags = JSON.parse(tagsJson);
+                                                                } catch {}
+                                                            }
+                                                            const artistsFromTags = tags?.artists;
+                                                            const normalize = (v: any) => {
+                                                                if (Array.isArray(v)) return v.map(String).join(",").trim();
+                                                                return (v ?? "").toString().trim();
+                                                            };
+                                                            const matchByTitle = (tags && tags.title && tags.title === song.title) || folderName === song.title;
+                                                            const matchByArtists = artistsFromTags && normalize(artistsFromTags) === normalize(song.artists);
+                                                            if (matchByTitle || matchByArtists) {
+                                                                await window.fr.sh.promises.rm(folderPath, { recursive: true, force: true });
+                                                                if (song.src) {
+                                                                    try { URL.revokeObjectURL(song.src); } catch {}
+                                                                }
+                                                                try { removeTrack(song.id); } catch {}
+                                                                setLibrary(prev => prev.filter(s => s !== song));
+                                                                alert("Successfully removed from the library.");
+                                                                if (currentTrack && currentTrack.id === song.id) {
+                                                                    playNext();
+                                                                }
+                                                                deleted = true;
+                                                                break;
+                                                            }
+                                                        } catch (innerErr) {
+                                                            console.error("Error checking folder", folderName, innerErr);
+                                                        }
+                                                    }
+                                                    if (!deleted) {
+                                                        alert("Could not find matching folder for this track in /music.");
+                                                    }
+                                                } catch (err) {
+                                                    console.error("Failed to remove track:", err);
+                                                    alert("An error occurred while removing the track.");
+                                                }
                                             },
                                             icon: null
                                         }
@@ -318,7 +370,7 @@ export const MusicLibrary = ({ query }: MusicLibraryProps) => {
                                             const tags = await readTags(file);
 
                                             setFileName(file.name);
-                                            const { title, artist, album, genre, year } = tags as any;
+                                            const { title, artist, album, genre, year, picture } = tags as AudioTags;
                                             console.log(artist);
                                             if (titleRef.current && title) {
                                                 titleRef.current.value = title;
@@ -330,10 +382,23 @@ export const MusicLibrary = ({ query }: MusicLibraryProps) => {
                                                 albumRef.current.value = album
                                             }
                                             if (genreRef.current && genre) {
+                                                // @ts-expect-error you know it works buddy
                                                 genreRef.current.value = genre
                                             }
                                             if (yearRef.current && year) {
+                                                // @ts-expect-error you know it works buddy
                                                 yearRef.current.value = year
+                                            }
+                                            if (albumCoverRef.current && picture && picture.data) {
+                                                const uint8 = Uint8Array.from(picture.data);
+                                                const blob = new Blob([uint8], { type: picture.format });
+                                                const reader = new FileReader();
+                                                reader.onload = (e) => {
+                                                    const dataUrl = e.target?.result as string;
+                                                    if (albumCoverRef.current) albumCoverRef.current.src = dataUrl;
+                                                    setAlbumCover(dataUrl);
+                                                };
+                                                reader.readAsDataURL(blob);
                                             }
                                         }
                                     }}
@@ -378,10 +443,10 @@ export const MusicLibrary = ({ query }: MusicLibraryProps) => {
 
                                 const baseName = file.name.replace(/\.[^/.]+$/, "");
 
-                                await Filer.fs.promises.mkdir(`/music/${baseName}`);
+                                await window.fr.fs.promises.mkdir(`/music/${baseName}`);
 
                                 const audioFileName = `audio${file.name.substring(file.name.lastIndexOf("."))}`;
-                                await Filer.fs.promises.writeFile(`/music/${baseName}/${audioFileName}`, Filer.Buffer.from(arrayBuffer));
+                                await window.fr.fs.promises.writeFile(`/music/${baseName}/${audioFileName}`, window.fr.buffer.from(arrayBuffer));
 
                                 const artists = artistRef.current?.value.trim() || "";
                                 const artistsArray = artists.includes(",")
@@ -396,9 +461,31 @@ export const MusicLibrary = ({ query }: MusicLibraryProps) => {
                                     cover: albumCover,
                                     year: yearRef.current?.value || "",
                                 };
-                                await Filer.fs.promises.writeFile(`/music/${baseName}/tags.json`, JSON.stringify(providedTags, null, 2));
+                                await window.fr.fs.promises.writeFile(`/music/${baseName}/tags.json`, JSON.stringify(providedTags, null, 2));
 
                                 alert("Your song and tags have been uploaded!");
+                                if (titleRef.current) {
+                                                titleRef.current.value = "";
+                                            }
+                                            if (artistRef.current) {
+                                                artistRef.current.value = "";
+                                            }
+                                            if (albumRef.current) {
+                                                albumRef.current.value = "";
+                                            }
+                                            if (genreRef.current) {
+                                                genreRef.current.value = "";
+                                            }
+                                            if (yearRef.current) {
+                                                yearRef.current.value = "";
+                                            }
+                                            if (albumCoverRef.current) {
+                                                albumCoverRef.current.src = "";
+                                            }
+                                        setFileName("");
+                                        setAlbumCover(false);
+                                        setAudio(null);
+                                setpage("library");
                             }}>Upload</button>
                         </div>
                     </div>

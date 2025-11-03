@@ -48,6 +48,9 @@ export interface COM {
         getTheme: () => any
         setTheme: (name: string) => Promise<boolean>
     }
+    fs: FilerFS
+    buffer: any
+    sh: any
 }
 
 export interface SongProps {

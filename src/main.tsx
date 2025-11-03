@@ -10,6 +10,21 @@ import { Setup } from './Setup';
 
 const Root = () => {
   const [isSetup, setIsSetup] = useState<null | boolean>(true);
+  useEffect(() => {
+    let cancelled = false;
+    const waitForFs = async () => {
+      while (!cancelled && !(window as any).fr?.fs) {
+        await new Promise(resolve => setTimeout(resolve, 50));
+      }
+      if (!cancelled) {
+        init();
+      }
+    };
+    waitForFs();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // useEffect(() => {
   //   const checkSetup = async () => {
@@ -28,8 +43,6 @@ const Root = () => {
   // if (!isSetup) return <Setup />;
   return <App />;
 };
-
-init();
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

@@ -115,7 +115,7 @@ const App = () => {
     useEffect(() => {
         const getSettings = async () => {
             try {
-                const settingsData = await window.Filer.fs.promises.readFile("/settings.json", "utf-8");
+                const settingsData = await window.fr.fs.promises.readFile("/settings.json", "utf-8");
                 const parsedSettings = JSON.parse(settingsData);
                 Object.entries(parsedSettings).forEach(([key, value]) => {
                     setSettings(key, value);
@@ -123,7 +123,7 @@ const App = () => {
             } catch (error) {
                 console.error("Error reading settings.json:", error);
                 setSettings("theme", "default");
-                setSettings("proxy", "uv");
+                setSettings("proxy", "sj");
                 setSettings("quicklinks", quickLinks);
                 setSettings("floating-tabs", false);
             }
@@ -310,30 +310,30 @@ const App = () => {
                                     const page = item.url.replace("about:", "").split("?")[0];
                                     if (page === "settings") {
                                         return (
-                                            <>
+                                            <div key={item.id}>
                                                 {currentTab && <View key={item.id} id={item.id}><Settings /></View>}
-                                            </>
+                                            </div>
                                         );
                                     } else if (page === "music") {
                                         const query = item.url.includes("?") ? item.url.split("?")[1] : undefined;
 
                                         return (
-                                            <>
+                                            <div key={item.id}>
                                                 {currentTab && <View key={item.id} id={item.id}><MusicLibrary query={query}/></View>}
-                                            </>
+                                            </div>
                                         )
                                     } else if (page === "files") {
                                         const query = item.url.includes("?") ? item.url.split("?")[1] : undefined;
                                         return (
-                                            <>
+                                            <div key={item.id}>
                                                 {currentTab && <View key={item.id} id={item.id}><Files query={query} /></View>}
-                                            </>
+                                            </div>
                                         )
                                     } else if (page === "account") {
                                         return (
-                                            <>
+                                            <div key={item.id}>
                                                 {currentTab && <View key={item.id} id={item.id}><Login query={pathname} /></View>}
-                                            </>
+                                            </div>
                                         )
                                     }
                                 } else {
