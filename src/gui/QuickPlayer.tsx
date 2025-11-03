@@ -104,6 +104,20 @@ export const QuickPlayer = ({ panelsOpen, className, onMouseDown }: QuickPlayerP
         seekbarRef.current?.style.setProperty("--current", `${percent}%`)
     }, [currentTime, duration])
 
+    useEffect(() => {
+        if (currentTime === duration) {
+            if (currentTime === duration) {
+                if (queue && queue.length > 0) {
+                    const next = queue[0];
+                    setCurrentTrack(next);
+                    removeTrack(next.id);
+                } else {
+                    setIsPlaying(false);
+                }
+            }
+        }
+    }, [currentTime, duration]);
+
     const handleSeek = (clientX: number) => {
         if (!audioRef.current || !duration) return;
 

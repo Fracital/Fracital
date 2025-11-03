@@ -168,16 +168,20 @@ export const MusicLibrary = ({ query }: MusicLibraryProps) => {
             }
         };
 
+        // @ts-expect-error types
         var watcher = window.fr.fs.watch("/music", { recursive: true }, () => {
             console.log("change");
             readLibrary();
+            // @ts-expect-error types
             watcher.close();
             intervalId = window.setTimeout(() => {
                 // re-establish watcher after a short delay to avoid multiple triggers
                 readLibrary();
+                // @ts-expect-error types
                 watcher = window.fr.fs.watch("/music", { recursive: true }, () => {
                     console.log("change");
                     readLibrary();
+                    // @ts-expect-error types
                     watcher.close();
                 });
             }, 1000);
