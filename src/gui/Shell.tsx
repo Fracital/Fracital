@@ -1,4 +1,4 @@
-import { Cog6ToothIcon, ArrowsPointingOutIcon, ArrowsPointingInIcon, ChevronUpDownIcon, ChevronDownIcon, UserCircleIcon, ArrowLeftStartOnRectangleIcon, InformationCircleIcon, LifebuoyIcon, UserIcon, HomeIcon, ArrowPathIcon, ArrowLeftIcon, ArrowRightIcon, FolderArrowDownIcon, FolderIcon } from "@heroicons/react/24/solid";
+import { Cog6ToothIcon, ArrowsPointingOutIcon, ArrowsPointingInIcon, ChevronUpDownIcon, ChevronDownIcon, UserCircleIcon, ArrowLeftStartOnRectangleIcon, InformationCircleIcon, LifebuoyIcon, UserIcon, HomeIcon, ArrowPathIcon, ArrowLeftIcon, ArrowRightIcon, FolderArrowDownIcon, FolderIcon, StarIcon } from "@heroicons/react/24/solid";
 import { FireIcon, WrenchScrewdriverIcon, CheckBadgeIcon } from "@heroicons/react/24/solid"
 import { Suspense, useEffect, useState, useRef } from "react";
 import { Link } from "react-router-dom";
@@ -7,6 +7,7 @@ import { useTabsStore, useSettingsStore } from "../store";
 import { createId } from "@paralleldrive/cuid2";
 import { Search } from "../components/Search";
 import { navigationEvent } from "../libs/eventBus";
+import type { linkProps } from "../views/Home";
 
 declare global {
     interface Window {
@@ -309,6 +310,38 @@ const Shell = () => {
                             });
                         }}>
                             <ArrowRightIcon className={"size-full stroke-current stroke-1 text-(--text-tertiary) cursor-pointer group-hover:text-(--text-primary) duration-300"}/>
+                        </button>
+                        <button className={"group size-8 p-1 rounded-md cursor-pointer duration-150" + " " + `
+                            ${
+                                settings.brightness === "light" ? "text-(--text-tertiary) hover:text-(--text-primary) hover:bg-[#00000018]" : "text-(--text-primary) hover:text-(--text-secondary) hover:bg-[#ffffff10]"
+                            }
+                        `} title="Favorite site" onClick={async () => {
+                            /*
+                            const currLinks = JSON.parse(window.localStorage.getItem("quicklinks") || "[]");
+                            const hrefs = currLinks.map((link: linkProps) => link.href)
+                            if (currentTab?.url && hrefs.includes(currentTab.url)) {
+                                currLinks.splice(currentTab?.id, 1);
+                                window.dispatchEvent(new Event("links-upd"));
+                                window.localStorage.setItem("quicklinks", JSON.stringify(currLinks));
+                            } else {
+                                const linkname = currentTab?.title;
+                                if (!linkname || linkname.trim() === "") return;
+                                const linkicon = currentTab?.icon as string;
+                                const linkcolor = prompt("Enter the color for this link (leave empty for default):");
+                                const linkurl = currentTab?.url;
+                                if (!linkurl || linkurl.trim() === "") return;
+                                const newLink: linkProps = {
+                                    title: linkname,
+                                    icon: linkicon && linkicon.trim() !== "" ? linkicon : "default",
+                                    color: linkcolor && linkcolor.trim() !== "" ? linkcolor : "#ffffff",
+                                    href: linkurl
+                                };
+                                currLinks.push(newLink);
+                                window.dispatchEvent(new Event("links-upd"));
+                                window.localStorage.setItem("quicklinks", JSON.stringify(currLinks));
+                            }*/
+                        }}>
+                            <StarIcon className={"size-full stroke-current stroke-1 text-(--text-tertiary) cursor-pointer group-hover:text-(--text-primary) duration-300"}/>
                         </button>
                     </div>
                 </div>

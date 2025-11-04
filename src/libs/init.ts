@@ -91,7 +91,9 @@ export const init = async () => {
     if (!await dirExists("/music")) {
         await window.fr.fs.promises.mkdir("/music");
     }
-
+    if (!window.localStorage.getItem("proxy")) {
+        window.localStorage.setItem("proxy", "sj");
+    }
     console.log("%cFracital%c: %cinit%c()", "color: #fb74fe", "color: #ff7b72", "color: #c7a1f2", "color: #79c0ff");
     if (!window.localStorage.getItem("quicklinks")) {
         console.log("%cinit%c()%c -> setting: %c[%cquicklinks%c]", "color: #c7a1f2", "color: #79c0ff", "color: #ffffffbf", "color: #56d364", "color: #e2b340", "color: #56d364");
