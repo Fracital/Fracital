@@ -172,11 +172,15 @@ const Shell = () => {
     const navButtonsRef = useRef<HTMLDivElement>(null)
     const uvRef = useRef<HTMLDivElement>(null);
     const sjRef = useRef<HTMLDivElement>(null);
+    const favRef = useRef<SVGSVGElement>(null);
 
     const [fullscreen] = useState<boolean>(false)
 
     const [uvVersion] = useState("v3.2.10");
     const [sjVersion] = useState(window.$scramjetVersion.version);
+
+    const currLinks = JSON.parse(window.localStorage.getItem("quicklinks") || "[]");
+    const hrefs = currLinks.map((link: linkProps) => link.href)
 
     const handleProxyChange = (e: Event) => {
         const customEvent = e as CustomEvent;
@@ -209,6 +213,9 @@ const Shell = () => {
             setTimeout(() => {
                 navButtonsRef.current?.classList.add("absolute", "-translate-x-3")
             }, 150)
+        }
+        if (hrefs.includes(currentTab?.url ?? "")) {
+            favRef.current?.classList.add("text-white");
         }
     }, [currentTab?.url, currentTab, navButtonsRef])
 
@@ -316,13 +323,16 @@ const Shell = () => {
                                 settings.brightness === "light" ? "text-(--text-tertiary) hover:text-(--text-primary) hover:bg-[#00000018]" : "text-(--text-primary) hover:text-(--text-secondary) hover:bg-[#ffffff10]"
                             }
                         `} title="Favorite site" onClick={async () => {
-                            /*
-                            const currLinks = JSON.parse(window.localStorage.getItem("quicklinks") || "[]");
-                            const hrefs = currLinks.map((link: linkProps) => link.href)
                             if (currentTab?.url && hrefs.includes(currentTab.url)) {
-                                currLinks.splice(currentTab?.id, 1);
+                                const idx = currLinks.findIndex((l: linkProps) => l.href === currentTab?.url);
+                                if (idx !== -1) {
+                                    currLinks.splice(idx, 1);
+                                }
                                 window.dispatchEvent(new Event("links-upd"));
                                 window.localStorage.setItem("quicklinks", JSON.stringify(currLinks));
+                                setTimeout(() => {
+                                    favRef.current?.classList.remove("text-white");
+                                }, 500);
                             } else {
                                 const linkname = currentTab?.title;
                                 if (!linkname || linkname.trim() === "") return;
@@ -339,9 +349,12 @@ const Shell = () => {
                                 currLinks.push(newLink);
                                 window.dispatchEvent(new Event("links-upd"));
                                 window.localStorage.setItem("quicklinks", JSON.stringify(currLinks));
-                            }*/
+                                setTimeout(() => {
+                                    favRef.current?.classList.add("text-white");
+                                }, 500);
+                            }
                         }}>
-                            <StarIcon className={"size-full stroke-current stroke-1 text-(--text-tertiary) cursor-pointer group-hover:text-(--text-primary) duration-300"}/>
+                            <StarIcon ref={favRef} className={"size-full stroke-current stroke-1 text-(--text-tertiary) cursor-pointer group-hover:text-(--text-primary) duration-300"}/>
                         </button>
                     </div>
                 </div>
