@@ -6,13 +6,14 @@
 		"useIgnoreFile": false
 	},
 	"files": {
-		"includes": ["**", "!**/node_modules/**", "!**/dist/**", "!**/.vscode/**", "!**/.zed/**"]
+		"includes": ["**", "!**/node_modules/**", "!**/dist/**", "!**/.vscode/**", "!**/.zed/**", "!src/index.css", "!src/assets/default.css"]
 	},
 	"formatter": {
 		"enabled": true,
 		"indentStyle": "tab",
 		"indentWidth": 4,
-		"lineWidth": 320
+		"lineWidth": 320,
+		"formatWithErrors": true
 	},
 	"css": {
 		"parser": {
