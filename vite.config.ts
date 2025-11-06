@@ -2,7 +2,7 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react-swc";
 import tailwindcss from "@tailwindcss/vite";
 //import { viteStaticCopy } from "vite-plugin-static-copy";
-// @ts-expect-error no types
+// // @ts-expect-error no types
 //import { epoxyPath } from "@mercuryworkshop/epoxy-transport";
 //import { baremuxPath } from "@mercuryworkshop/bare-mux/node";
 // @ts-expect-error No types
@@ -12,6 +12,7 @@ import { server as wisp } from "@mercuryworkshop/wisp-js/server";
 
 // https://vite.dev/config/
 export default defineConfig({
+	base: "./",
 	optimizeDeps: {
 		include: ["music-metadata"],
 	},

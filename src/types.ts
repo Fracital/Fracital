@@ -4,8 +4,8 @@ declare global {
 	}
 }
 
-const FilerFS: any = window.Filer;
-export const Filer: FilerFS = new FilerFS.FileSystem();
+//const FilerFS: any = window.Filer;
+//export const Filer: FilerFS = new FilerFS.FileSystem();
 
 export const dirExists = async (path: string): Promise<boolean> => {
 	return new Promise(resolve => {
