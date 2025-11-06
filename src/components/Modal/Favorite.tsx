@@ -215,7 +215,7 @@ const FavoriteModal = () => {
             <div className="flex items-center w-full">
                 <button onClick={closeModal} className={"flex p-2.5 px-3 leading-none rounded-lg cursor-pointer duration-150" + " " + `
                     ${settings.brightness === "dark" ? "hover:bg-[#ffffff10]" : "hover:bg-[#00000028]"}
-                `}>cancel</button>
+                `}>Cancel</button>
                 <div className={"flex justify-center w-full"}>
                     <button className={"cursor-pointer duration-150" + " " + `
                         ${selecting !== "preview" ? "opacity-80 hover:opacity-100" : "scale-70 opacity-0 pointer-events-auto"}
@@ -240,7 +240,7 @@ const FavoriteModal = () => {
                 }} className={"flex p-2.5 px-3 leading-none rounded-lg cursor-pointer duration-150" + " " + `
                     ${settings.brightness === "dark" ? "bg-[#ffffff10]" : "bg-[#00000028]"}
                     hover:bg-(--accent)
-                `}>save</button>
+                `}>Save</button>
             </div>
         </div>
     )

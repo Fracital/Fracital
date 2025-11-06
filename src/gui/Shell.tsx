@@ -221,6 +221,8 @@ const Shell = () => {
         }
         if (hrefs.includes(currentTab?.url ?? "")) {
             favRef.current?.classList.add("text-white");
+        } else {
+            favRef.current?.classList.remove("text-white");
         }
     }, [currentTab?.url, currentTab, navButtonsRef])
 
