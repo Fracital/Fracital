@@ -51,8 +51,8 @@ export const Api = async () => {
 				return null;
 			},
 		},
-		fs: Filer.fs,
-		buffer: Filer.Buffer,
-		sh: new Filer.fs.Shell(),
+		fs: window.parent.tb.fs,
+		buffer: window.parent.tb.Buffer,
+		sh: window.parent.tb.sh,
 	};
 };

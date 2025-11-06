@@ -16,7 +16,7 @@ import Settings from "./views/Settings";
 import ExternalSite from "./views/ExternalSite";
 import Files from "./views/Files/Files";
 
-import { BareMuxConnection } from "@mercuryworkshop/bare-mux";
+// import { BareMuxConnection } from "@mercuryworkshop/bare-mux";
 import { usePanelsStore, useSettingsStore, useTabsStore } from "./store";
 import { quickLinks } from "./libs/init";
 import { initTheme } from "./libs/theme";
@@ -27,6 +27,7 @@ import { Login } from "./views/Login";
 import FavoriteModal from "./components/Modal/Favorite";
 import { ModalProvider } from "./components/Modal/ModalContext";
 
+/*
 const regSw = async () => {
 	await navigator.serviceWorker.getRegistrations().then(registrations => {
 		registrations.forEach(registration => {
@@ -75,7 +76,7 @@ const regSw = async () => {
 	navigator.serviceWorker.register("/uv/sw.js", { scope: "/uv/service/" });
 	navigator.serviceWorker.register("/scramjet-sw.js", { scope: "/service/" });
 };
-regSw();
+regSw();*/
 
 const App = () => {
 	Api();
