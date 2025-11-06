@@ -24,6 +24,8 @@ import { MusicLibrary } from "./views/Music/MusicLibrary";
 import { View } from "./gui/View";
 import TabGroup from "./components/TabGroup";
 import { Login } from "./views/Login";
+import FavoriteModal from "./components/Modal/Favorite";
+import { ModalProvider } from "./components/Modal/ModalContext";
 
 const regSw = async () => {
     await navigator.serviceWorker.getRegistrations().then(registrations => {
@@ -287,245 +289,247 @@ const App = () => {
     })
 
     return (
-        <div className="flex flex-col size-full gap-2.5 p-3">
-            <Shell />
-            <div className="flex flex-col size-full">
-                <div id="main" className="relative flex size-full gap-2.5" style={{height: (settings["floating-tabs"] ? "100%" : `calc(100% - calc(${shellHeight}px + calc(var(--spacing) * 2.5))`)}}>
-                    <div className={"relative size-full bg-(--secondary) inset-shadow-(--inset-shadow-primary) rounded-xl overflow-hidden" + " " + `
-                        ${
-                            settings
-                        }
-                    `}>
-                        {
-                            tabs.length > 0 ? tabs.map((item) => {
-                                if (item.url === "newtab") {
-                                    return (
-                                        <Home key={item.id} className={"absolute inset-0 duration-150" + " " + `
-                                            ${
-                                                currentTab ? currentTab.id !== item.id ? "opacity-0 translate-y-2 pointer-events-none" : "" : ""
-                                            }
-                                        `} />
-                                    );
-                                } else if (item.url.includes("about:")) {
-                                    const page = item.url.replace("about:", "").split("?")[0];
-                                    if (page === "settings") {
-                                        return (
-                                            <div key={item.id}>
-                                                {currentTab && <View key={item.id} id={item.id}><Settings /></View>}
-                                            </div>
-                                        );
-                                    } else if (page === "music") {
-                                        const query = item.url.includes("?") ? item.url.split("?")[1] : undefined;
-
-                                        return (
-                                            <div key={item.id}>
-                                                {currentTab && <View key={item.id} id={item.id}><MusicLibrary query={query}/></View>}
-                                            </div>
-                                        )
-                                    } else if (page === "files") {
-                                        const query = item.url.includes("?") ? item.url.split("?")[1] : undefined;
-                                        return (
-                                            <div key={item.id}>
-                                                {currentTab && <View key={item.id} id={item.id}><Files query={query} /></View>}
-                                            </div>
-                                        )
-                                    } else if (page === "account") {
-                                        return (
-                                            <div key={item.id}>
-                                                {currentTab && <View key={item.id} id={item.id}><Login query={pathname} /></View>}
-                                            </div>
-                                        )
-                                    }
-                                } else {
-                                    return (
-                                        <ExternalSite
-                                            id={item.id}
-                                            current={currentTab?.id === item.id}
-                                            key={item.id}
-                                            url={proxy === "sj" ? "/service/" + XOR.encode(item.url) : "/uv/service/" + XOR.encode(item.url)}
-                                            className={"absolute inset-0" + " " + `
-                                                ${
-                                                    currentTab ? currentTab.id !== item.id ? "opacity-0 pointer-events-none" : "" : ""
-                                                }
-                                            `}
-                                        />
-                                    );
-                                }
-                            }) : <Home />
-                        }
-                    </div>
-                    <div className={(settings["floating-tabs"] && "absolute py-2") + " " + "flex flex-col h-full duration-150" + " " + `
-                        ${
-                            settings["floating-tabs"] === true ? panelsOpen ? "w-60 right-2" : "w-10 -right-1" : panelsOpen ? "w-78 right-2" : "w-10 -right-1"
-                        }
-                        ${
-                            settings["floating-tabs"] ? "gap-2" : "gap-2.5"
-                        }
-                    `}>
-                        <div className={"flex w-full h-max p-1.5 py-2 gap-2 items-center justify-between bg-(--secondary) hover:bg-(--tertiary) inset-shadow-(--inset-shadow-primary) *:pointer-events-none cursor-pointer duration-150" + " " + `
+        <ModalProvider>
+            <div className="flex flex-col size-full gap-2.5 p-3">
+                <Shell />
+                <div className="flex flex-col size-full">
+                    <div id="main" className="relative flex size-full gap-2.5" style={{height: (settings["floating-tabs"] ? "100%" : `calc(100% - calc(${shellHeight}px + calc(var(--spacing) * 2.5))`)}}>
+                        <div className={"relative size-full bg-(--secondary) inset-shadow-(--inset-shadow-primary) rounded-xl overflow-hidden" + " " + `
                             ${
-                                settings["floating-tabs"] && panelsOpen ? "rounded-lg" : "rounded-xl"
+                                settings
                             }
-                            ${
-                                settings["floating-tabs"] && panelsOpen ? "shadow-[0_0_16px_3px_#00000035]" : ""
-                            }
-                        `}
-                        title={panelsOpen ? "Close Panels" : "Open Panels"}
-                        onMouseDown={() => {
-                            panelsOpen ? setPanelsOpen(false) :
-                            setPanelsOpen(true)
-                        }}>
-                            <ChevronLeftIcon className={"size-6 stroke-2 stroke-current" + " " + `
-                                ${panelsOpen ? "opacity-0" : "opacity-100"}
-                            `} />
+                        `}>
                             {
-                                panelsOpen && (
-                                    <>
-                                        <span className="font-semibold">Close Panels</span>
-                                        <ChevronRightIcon className="size-6 stroke-2 stroke-current" />
-                                    </>
-                                )
-                            }
-                        </div>
-                        {/* tabs panel */}
-                        <div ref={tabsRef} className={"flex flex-col bg-(--secondary) inset-shadow-(--inset-shadow-primary) overflow-hidden duration-150" + " " + `
-                            ${
-                                currentPanel === "tabs" ? "h-2/3" : "h-1/3"
-                            }
-                            ${
-                                panelsOpen ? "w-full" : "w-50"
-                            }
-                            ${
-                                settings["floating-tabs"] && panelsOpen ? "rounded-lg" : "rounded-xl"
-                            }
-                            ${
-                                settings["floating-tabs"] && "shadow-[0_0_16px_3px_#00000035]"
-                            }
-                        `} onMouseDown={() => {
-                            setPanelsOpen(true)
-                            setCurrentPanel("tabs")
-                        }}>
-                            <div className={"relative flex w-full h-full overflow-auto gap-2 p-2 flex-col items-stretch duration-200"}
-                                onDragOver={(e) => {
-                                    e.preventDefault();
-                                    const el = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null;
-                                    const tabEl = el?.closest('[data-url][id]') as HTMLElement | null;
-                                    if (tabEl && tabEl.id) {
-                                        const rect = tabEl.getBoundingClientRect();
-                                        const y = e.clientY - rect.top;
-                                        const placeBefore = y < rect.height / 2;
-                                        return;
-                                    }
-                                    const groupHeader = el?.closest('[data-group-id]') as HTMLElement | null;
-                                    if (groupHeader) { return; }
-                                    const groupWrapper = el?.closest('[data-group-wrapper]') as HTMLElement | null;
-                                    if (groupWrapper) { return; }
-                                }}
-                                onDrop={(e) => {
-                                    e.preventDefault();
-                                    const draggedId = e.dataTransfer.getData('text/tab-id');
-                                    if (!draggedId) return;
-
-                                    const el = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null;
-                                    if (!el) { updateTab(draggedId, { groupId: undefined }); return; }
-
-                                    const tabEl = el.closest('[data-url][id]') as HTMLElement | null;
-                                    if (tabEl && tabEl.id) {
-                                        const targetId = tabEl.id;
-                                        if (targetId === draggedId) return;
-                                        const targetTab = tabs.find(t => t.id === targetId);
-                                        const targetGroupId = targetTab?.groupId;
-                                        const rect = tabEl.getBoundingClientRect();
-                                        const y = e.clientY - rect.top;
-                                        const placeBefore = y < rect.height / 2;
-                                        updateTab(draggedId, { groupId: targetGroupId });
-                                        useTabsStore.getState().moveTabRelative(draggedId, targetId, placeBefore);
-                                        return;
-                                    }
-
-                                    const groupHeader = el.closest('[data-group-id]') as HTMLElement | null;
-                                    const groupWrapper = el.closest('[data-group-wrapper]') as HTMLElement | null;
-                                    const gid = groupHeader?.getAttribute('data-group-id') || groupWrapper?.getAttribute('data-group-wrapper');
-                                    if (gid) {
-                                        updateTab(draggedId, { groupId: gid });
-                                        const groupTabs = tabs.filter(t => t.groupId === gid);
-                                        if (groupTabs.length > 0) {
-                                            const lastId = groupTabs[groupTabs.length - 1].id;
-                                            useTabsStore.getState().moveTabRelative(draggedId, lastId, false);
-                                        }
-                                        return;
-                                    }
-
-                                    updateTab(draggedId, { groupId: undefined });
-                                }}
-                            >
-                                {
-                                    groups.length > 0 && groups.map((group) => (
-                                        <TabGroup key={group.id} id={group.id} name={group.name} icon={group.icon} />
-                                    ))
-                                }
-                                {
-                                    (() => {
-                                        const ungrouped = tabs.filter(t => !t.groupId);
-                                        if (tabs.length === 0) {
+                                tabs.length > 0 ? tabs.map((item) => {
+                                    if (item.url === "newtab") {
+                                        return (
+                                            <Home key={item.id} className={"absolute inset-0 duration-150" + " " + `
+                                                ${
+                                                    currentTab ? currentTab.id !== item.id ? "opacity-0 translate-y-2 pointer-events-none" : "" : ""
+                                                }
+                                            `} />
+                                        );
+                                    } else if (item.url.includes("about:")) {
+                                        const page = item.url.replace("about:", "").split("?")[0];
+                                        if (page === "settings") {
                                             return (
-                                                <span className={"absolute left-1/2 top-1/2 -translate-1/2 w-max font-semibold text-lg duration-150" + " " + `
-                                                    ${
-                                                        tabs.length < 0 ? "opacity-0" : ""
-                                                    }
-                                                `}>No tabs open</span>
+                                                <div key={item.id}>
+                                                    {currentTab && <View key={item.id} id={item.id}><Settings /></View>}
+                                                </div>
+                                            );
+                                        } else if (page === "music") {
+                                            const query = item.url.includes("?") ? item.url.split("?")[1] : undefined;
+
+                                            return (
+                                                <div key={item.id}>
+                                                    {currentTab && <View key={item.id} id={item.id}><MusicLibrary query={query}/></View>}
+                                                </div>
+                                            )
+                                        } else if (page === "files") {
+                                            const query = item.url.includes("?") ? item.url.split("?")[1] : undefined;
+                                            return (
+                                                <div key={item.id}>
+                                                    {currentTab && <View key={item.id} id={item.id}><Files query={query} /></View>}
+                                                </div>
+                                            )
+                                        } else if (page === "account") {
+                                            return (
+                                                <div key={item.id}>
+                                                    {currentTab && <View key={item.id} id={item.id}><Login query={pathname} /></View>}
+                                                </div>
                                             )
                                         }
-
-                                        return ungrouped.length > 0 ? ungrouped.map((item) => (
-                                            <Tab title={item.title} url={item.url} id={item.id} icon={item.icon} displayUrl={item.url} key={item.id} />
-                                        )) : null
-                                    })()
-                                }
-                            </div>
-                            <div className={"flex min-max-1 w-full p-1.5 items-start justify-between gap-0.5" + " " + `
-                                ${
-                                    settings.brightness === "dark" ? "bg-[#ffffff10]" : "bg-[#00000025]"
-                                }
-                            `}>
-                                <div className="flex gap-0.5">
-                                    <button title={platform.includes("Mac") ? "New Tab ⌃ + T" : "New Tab: Alt + T"}className="flex items-center justify-center p-2 hover:bg-[#ffffff10] text-(--text-secondary) hover:text-(--text-primary) rounded-md cursor-pointer duration-200"
-                                    onClick={() => {
-                                        newTab({
-                                            id: createId(),
-                                            title: "New Tab",
-                                            url: "newtab",
-                                            current: true,
-                                            displayUrl: "newtab"
-                                        })
-                                    }}>
-                                        <PlusIcon className="size-5 stroke-current stroke-1 duration-150" />
-                                    </button>
-                                    <button title={platform.includes("Mac") ? "New Group ⌃ + T" : "New Group: Alt + T"}className="flex items-center justify-center p-2 hover:bg-[#ffffff10] text-(--text-secondary) hover:text-(--text-primary) rounded-md cursor-pointer duration-200"
-                                    onClick={() => {
-                                        const groupId = createId();
-                                        newGroup(groupId, `Group ${groups.length + 1}`)
-                                    }}>
-                                        <RectangleStackIcon className="size-4.5 duration-150" />
-                                        <PlusIcon className="size-3 stroke-current stroke-1 duration-150" />
-                                    </button>
-                                </div>
-                                <div className="flex gap-0.5 items-center h-full">
-                                </div>
-                            </div>
-                        </div>
-                        <QuickPlayer className={`
-                            ${
-                                currentPanel === "quickplayer" ? "h-2/3" : "h-1/3"
+                                    } else {
+                                        return (
+                                            <ExternalSite
+                                                id={item.id}
+                                                current={currentTab?.id === item.id}
+                                                key={item.id}
+                                                url={proxy === "sj" ? "/service/" + XOR.encode(item.url) : "/uv/service/" + XOR.encode(item.url)}
+                                                className={"absolute inset-0" + " " + `
+                                                    ${
+                                                        currentTab ? currentTab.id !== item.id ? "opacity-0 pointer-events-none" : "" : ""
+                                                    }
+                                                `}
+                                            />
+                                        );
+                                    }
+                                }) : <Home />
                             }
-                        `} panelsOpen={panelsOpen} onMouseDown={() => {
-                            setPanelsOpen(true)
-                            setCurrentPanel("quickplayer")
-                        }} />
+                        </div>
+                        <div className={(settings["floating-tabs"] && "absolute py-2") + " " + "flex flex-col h-full duration-150" + " " + `
+                            ${
+                                settings["floating-tabs"] === true ? panelsOpen ? "w-60 right-2" : "w-10 -right-1" : panelsOpen ? "w-78 right-2" : "w-10 -right-1"
+                            }
+                            ${
+                                settings["floating-tabs"] ? "gap-2" : "gap-2.5"
+                            }
+                        `}>
+                            <div className={"flex w-full h-max p-1.5 py-2 gap-2 items-center justify-between bg-(--secondary) hover:bg-(--tertiary) inset-shadow-(--inset-shadow-primary) *:pointer-events-none cursor-pointer duration-150" + " " + `
+                                ${
+                                    settings["floating-tabs"] && panelsOpen ? "rounded-lg" : "rounded-xl"
+                                }
+                                ${
+                                    settings["floating-tabs"] && panelsOpen ? "shadow-[0_0_16px_3px_#00000035]" : ""
+                                }
+                            `}
+                            title={panelsOpen ? "Close Panels" : "Open Panels"}
+                            onMouseDown={() => {
+                                panelsOpen ? setPanelsOpen(false) :
+                                setPanelsOpen(true)
+                            }}>
+                                <ChevronLeftIcon className={"size-6 stroke-2 stroke-current" + " " + `
+                                    ${panelsOpen ? "opacity-0" : "opacity-100"}
+                                `} />
+                                {
+                                    panelsOpen && (
+                                        <>
+                                            <span className="font-semibold">Close Panels</span>
+                                            <ChevronRightIcon className="size-6 stroke-2 stroke-current" />
+                                        </>
+                                    )
+                                }
+                            </div>
+                            {/* tabs panel */}
+                            <div ref={tabsRef} className={"flex flex-col bg-(--secondary) inset-shadow-(--inset-shadow-primary) overflow-hidden duration-150" + " " + `
+                                ${
+                                    currentPanel === "tabs" ? "h-2/3" : "h-1/3"
+                                }
+                                ${
+                                    panelsOpen ? "w-full" : "w-50"
+                                }
+                                ${
+                                    settings["floating-tabs"] && panelsOpen ? "rounded-lg" : "rounded-xl"
+                                }
+                                ${
+                                    settings["floating-tabs"] && "shadow-[0_0_16px_3px_#00000035]"
+                                }
+                            `} onMouseDown={() => {
+                                setPanelsOpen(true)
+                                setCurrentPanel("tabs")
+                            }}>
+                                <div className={"relative flex w-full h-full overflow-auto gap-2 p-2 flex-col items-stretch duration-200"}
+                                    onDragOver={(e) => {
+                                        e.preventDefault();
+                                        const el = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null;
+                                        const tabEl = el?.closest('[data-url][id]') as HTMLElement | null;
+                                        if (tabEl && tabEl.id) {
+                                            const rect = tabEl.getBoundingClientRect();
+                                            const y = e.clientY - rect.top;
+                                            const placeBefore = y < rect.height / 2;
+                                            return;
+                                        }
+                                        const groupHeader = el?.closest('[data-group-id]') as HTMLElement | null;
+                                        if (groupHeader) { return; }
+                                        const groupWrapper = el?.closest('[data-group-wrapper]') as HTMLElement | null;
+                                        if (groupWrapper) { return; }
+                                    }}
+                                    onDrop={(e) => {
+                                        e.preventDefault();
+                                        const draggedId = e.dataTransfer.getData('text/tab-id');
+                                        if (!draggedId) return;
+
+                                        const el = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null;
+                                        if (!el) { updateTab(draggedId, { groupId: undefined }); return; }
+
+                                        const tabEl = el.closest('[data-url][id]') as HTMLElement | null;
+                                        if (tabEl && tabEl.id) {
+                                            const targetId = tabEl.id;
+                                            if (targetId === draggedId) return;
+                                            const targetTab = tabs.find(t => t.id === targetId);
+                                            const targetGroupId = targetTab?.groupId;
+                                            const rect = tabEl.getBoundingClientRect();
+                                            const y = e.clientY - rect.top;
+                                            const placeBefore = y < rect.height / 2;
+                                            updateTab(draggedId, { groupId: targetGroupId });
+                                            useTabsStore.getState().moveTabRelative(draggedId, targetId, placeBefore);
+                                            return;
+                                        }
+
+                                        const groupHeader = el.closest('[data-group-id]') as HTMLElement | null;
+                                        const groupWrapper = el.closest('[data-group-wrapper]') as HTMLElement | null;
+                                        const gid = groupHeader?.getAttribute('data-group-id') || groupWrapper?.getAttribute('data-group-wrapper');
+                                        if (gid) {
+                                            updateTab(draggedId, { groupId: gid });
+                                            const groupTabs = tabs.filter(t => t.groupId === gid);
+                                            if (groupTabs.length > 0) {
+                                                const lastId = groupTabs[groupTabs.length - 1].id;
+                                                useTabsStore.getState().moveTabRelative(draggedId, lastId, false);
+                                            }
+                                            return;
+                                        }
+
+                                        updateTab(draggedId, { groupId: undefined });
+                                    }}
+                                >
+                                    {
+                                        groups.length > 0 && groups.map((group) => (
+                                            <TabGroup key={group.id} id={group.id} name={group.name} icon={group.icon} />
+                                        ))
+                                    }
+                                    {
+                                        (() => {
+                                            const ungrouped = tabs.filter(t => !t.groupId);
+                                            if (tabs.length === 0) {
+                                                return (
+                                                    <span className={"absolute left-1/2 top-1/2 -translate-1/2 w-max font-semibold text-lg duration-150" + " " + `
+                                                        ${
+                                                            tabs.length < 0 ? "opacity-0" : ""
+                                                        }
+                                                    `}>No tabs open</span>
+                                                )
+                                            }
+
+                                            return ungrouped.length > 0 ? ungrouped.map((item) => (
+                                                <Tab title={item.title} url={item.url} id={item.id} icon={item.icon} displayUrl={item.url} key={item.id} />
+                                            )) : null
+                                        })()
+                                    }
+                                </div>
+                                <div className={"flex min-max-1 w-full p-1.5 items-start justify-between gap-0.5" + " " + `
+                                    ${
+                                        settings.brightness === "dark" ? "bg-[#ffffff10]" : "bg-[#00000025]"
+                                    }
+                                `}>
+                                    <div className="flex gap-0.5">
+                                        <button title={platform.includes("Mac") ? "New Tab ⌃ + T" : "New Tab: Alt + T"}className="flex items-center justify-center p-2 hover:bg-[#ffffff10] text-(--text-secondary) hover:text-(--text-primary) rounded-md cursor-pointer duration-200"
+                                        onClick={() => {
+                                            newTab({
+                                                id: createId(),
+                                                title: "New Tab",
+                                                url: "newtab",
+                                                current: true,
+                                                displayUrl: "newtab"
+                                            })
+                                        }}>
+                                            <PlusIcon className="size-5 stroke-current stroke-1 duration-150" />
+                                        </button>
+                                        <button title={platform.includes("Mac") ? "New Group ⌃ + T" : "New Group: Alt + T"}className="flex items-center justify-center p-2 hover:bg-[#ffffff10] text-(--text-secondary) hover:text-(--text-primary) rounded-md cursor-pointer duration-200"
+                                        onClick={() => {
+                                            const groupId = createId();
+                                            newGroup(groupId, `Group ${groups.length + 1}`)
+                                        }}>
+                                            <RectangleStackIcon className="size-4.5 duration-150" />
+                                            <PlusIcon className="size-3 stroke-current stroke-1 duration-150" />
+                                        </button>
+                                    </div>
+                                    <div className="flex gap-0.5 items-center h-full">
+                                    </div>
+                                </div>
+                            </div>
+                            <QuickPlayer className={`
+                                ${
+                                    currentPanel === "quickplayer" ? "h-2/3" : "h-1/3"
+                                }
+                            `} panelsOpen={panelsOpen} onMouseDown={() => {
+                                setPanelsOpen(true)
+                                setCurrentPanel("quickplayer")
+                            }} />
+                        </div>
                     </div>
                 </div>
             </div>
-        </div>
+        </ModalProvider>
     );
 }
 

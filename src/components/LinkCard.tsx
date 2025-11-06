@@ -1,12 +1,12 @@
 import { useRef, useEffect, useState } from "react";
 import { navigationEvent } from "../libs/eventBus";
-import { TrashIcon, PencilSquareIcon, GlobeAltIcon } from "@heroicons/react/24/solid";
+import { TrashIcon, PencilSquareIcon, GlobeAltIcon, GiftIcon, MusicalNoteIcon, PuzzlePieceIcon, ShoppingBagIcon, BriefcaseIcon, NewspaperIcon } from "@heroicons/react/24/solid";
 import type { linkProps } from "../views/Home";
 import { useTabsStore } from "../store";
 
 interface LinkCardProps {
     title: string;
-    icon: string | React.ReactNode;
+    icon: string;
     brightness: "light" | "dark"
     color: string;
     href: string;
@@ -69,12 +69,18 @@ const LinkCard: React.FC<LinkCardProps> = ({ title, icon, brightness, color, hre
                             </div>
                         )}
                         <div className="*:select-none">
-                            <div className="flex items-center justify-center py-5 px-22">
+                            <div className={"flex items-center justify-center py-5 px-22" + " " + `
+                                ${color === "#ffffff" ? "text-black" : ""}
+                            `}>
                                 {
-                                    icon === "default" ? (
-                                        <GlobeAltIcon className="sm:size-16 size-8 text-(--text-secondary)" />
-                                    ) :
-                                    typeof icon === "string" ? (<img src={icon} alt={title} className="sm:size-16 size-8" />) : (<>{icon}</>)
+                                    icon === "gifticon" ? <GiftIcon className="sm:size-16 size-8" /> :
+                                    icon === "musicalicon" ? <MusicalNoteIcon className="sm:size-16 size-8" /> :
+                                    icon === "puzzleicon" ? <PuzzlePieceIcon className="sm:size-16 size-8" /> :
+                                    icon === "shoppingicon" ? <ShoppingBagIcon className="sm:size-16 size-8" /> :
+                                    icon === "brieficon" ? <BriefcaseIcon className="sm:size-16 size-8" /> :
+                                    icon === "newspapericon" ? <NewspaperIcon className="sm:size-16 size-8" /> :
+                                    icon.includes("https://") ? <img src={icon} alt={title} className="sm:size-16 size-8" /> :
+                                    <GlobeAltIcon className="sm:size-16 size-8" />
                                 }
                             </div>
                             <div className="flex flex-col w-full justify-center items-center gap-1">
@@ -90,7 +96,7 @@ const LinkCard: React.FC<LinkCardProps> = ({ title, icon, brightness, color, hre
                         </div>
                     </div>
                 ) : (
-                    <div ref={cardRef} className="group relative flex flex-col p-3 rounded-2xl bg-(--color) overflow-hidden cursor-pointer duration-200" onClick={async () => {
+                    <div ref={cardRef} className="group relative flex flex-col p-3 rounded-2xl bg-(--color) w-60 h-[142px] overflow-hidden cursor-pointer duration-200" onClick={async () => {
                         if (href) {
                             navigationEvent({
                                 url: href,
@@ -117,12 +123,22 @@ const LinkCard: React.FC<LinkCardProps> = ({ title, icon, brightness, color, hre
                                     </button>
                                 </div>
                             )}
-                            <div className="flex items-center justify-center py-5 px-19">
+                            <div className={"flex items-center justify-center py-5 px-19" + " " + `
+                                ${color === "#ffffff" ? "text-black" : ""}
+                            `}>
                                 {
-                                    icon === "default" ? (
-                                        <GlobeAltIcon className="sm:size-16 size-8 text-(--text-secondary) group-hover:-translate-y-2 duration-200" />
-                                    ) :
-                                    typeof icon === "string" ? (<img src={icon} alt={title} className="sm:size-16 size-8 min-w-10 group-hover:-translate-y-2 duration-200" />) : (<>{icon}</>)
+                                    // icon === "default" ? (
+                                    //     <GlobeAltIcon className="sm:size-16 size-8 text-(--text-secondary) group-hover:-translate-y-2 duration-200" />
+                                    // ) :
+                                    // typeof icon === "string" ? (<img src={icon} alt={title} className="sm:size-16 size-8 min-w-10 group-hover:-translate-y-2 duration-200" />) : (<>{icon}</>)
+                                    icon === "gifticon" ? <GiftIcon className="sm:size-16 size-8 group-hover:-translate-y-2 duration-200" /> :
+                                    icon === "musicalicon" ? <MusicalNoteIcon className="sm:size-16 size-8 group-hover:-translate-y-2 duration-200" /> :
+                                    icon === "puzzleicon" ? <PuzzlePieceIcon className="sm:size-16 size-8 group-hover:-translate-y-2 duration-200" /> :
+                                    icon === "shoppingicon" ? <ShoppingBagIcon className="sm:size-16 size-8 group-hover:-translate-y-2 duration-200" /> :
+                                    icon === "brieficon" ? <BriefcaseIcon className="sm:size-16 size-8 group-hover:-translate-y-2 duration-200" /> :
+                                    icon === "newspapericon" ? <NewspaperIcon className="sm:size-16 size-8 group-hover:-translate-y-2 duration-200" /> :
+                                    icon.includes("https://") ? <img src={icon} alt={title} className="sm:size-16 size-8 group-hover:-translate-y-2 duration-200" /> :
+                                    <GlobeAltIcon className="sm:size-16 size-8 group-hover:-translate-y-2 duration-200" />
                                 }
                             </div>
                             <div className="flex w-full justify-center">

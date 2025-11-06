@@ -9,6 +9,10 @@ import { Search } from "../components/Search";
 import { navigationEvent } from "../libs/eventBus";
 import type { linkProps } from "../views/Home";
 
+import { useModal } from "../components/Modal/ModalContext";
+import FavoriteModal from "../components/Modal/Favorite";
+import { Modal } from "../components/Modal/Modal";
+
 declare global {
     interface Window {
         $scramjetVersion: any;
@@ -46,7 +50,7 @@ export const UserCard = ({ id, display, handle, avatar }: UserProps) => {
 
     return (
         <>
-            <div className="relative flex flex-col gap-2.5 h-[28px]" onClick={() => {
+            <div className="relative flex flex-col gap-2.5 h-7" onClick={() => {
                 contextOpen === true ? setContextOpen(false) : setContextOpen(true)
             }}>
                 <div ref={accountRef} className="group flex gap-2.5 items-center cursor-pointer *:pointer-events-none" title={display + "\n@" + handle}>
@@ -179,6 +183,7 @@ const Shell = () => {
     const [uvVersion] = useState("v3.2.10");
     const [sjVersion] = useState(window.$scramjetVersion.version);
 
+    const { openModal } = useModal()
     const currLinks = JSON.parse(window.localStorage.getItem("quicklinks") || "[]");
     const hrefs = currLinks.map((link: linkProps) => link.href)
 
@@ -334,24 +339,15 @@ const Shell = () => {
                                     favRef.current?.classList.remove("text-white");
                                 }, 500);
                             } else {
-                                const linkname = currentTab?.title;
-                                if (!linkname || linkname.trim() === "") return;
-                                const linkicon = currentTab?.icon as string;
-                                const linkcolor = prompt("Enter the color for this link (leave empty for default):");
-                                const linkurl = currentTab?.url;
-                                if (!linkurl || linkurl.trim() === "") return;
-                                const newLink: linkProps = {
-                                    title: linkname,
-                                    icon: linkicon && linkicon.trim() !== "" ? linkicon : "default",
-                                    color: linkcolor && linkcolor.trim() !== "" ? linkcolor : "#ffffff",
-                                    href: linkurl
-                                };
-                                currLinks.push(newLink);
-                                window.dispatchEvent(new Event("links-upd"));
-                                window.localStorage.setItem("quicklinks", JSON.stringify(currLinks));
                                 setTimeout(() => {
                                     favRef.current?.classList.add("text-white");
                                 }, 500);
+
+                                openModal(<Modal><FavoriteModal /></Modal>, {
+                                    url: currentTab?.url,
+                                    name: currentTab?.title,
+                                    icon: currentTab?.icon
+                                })
                             }
                         }}>
                             <StarIcon ref={favRef} className={"size-full stroke-current stroke-1 text-(--text-tertiary) cursor-pointer group-hover:text-(--text-primary) duration-300"}/>

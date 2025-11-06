@@ -34,9 +34,9 @@ const Home = ({ className }: HomeProps) => {
 
     return (
         <div className={"flex flex-col items-center justify-center size-full p-2" + " " + className}>
-            <div className="flex flex-col h-full items-center justify-center gap-4">
+            <div className="flex flex-col h-full items-center justify-center gap-4 mt-35">
                 <span className="text-7xl font-black text-center text-accent text-stroke">FRACITAL</span>
-                <div className="flex gap-4">
+                <div className="grid grid-cols-3 gap-4 h-95 overflow-auto">
                     {
                         links.length > 0 && links.map((link, index) => (
                             <LinkCard

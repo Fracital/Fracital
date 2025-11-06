@@ -50,6 +50,12 @@ const Files = ({ children, query }: FilesProps) => {
                 <div className="flex flex-col p-4 gap-2">
                     <div className="flex items-center justify-between">
                         <div className="flex flex-col gap-1.5">
+                            <input
+                                type="text"
+                                ref={currentDirRef}
+                                className={"bg-transparent outline-none min-w-40 max-w-65 leading-none text-lg font-semibold text-(--text-secondary) placeholder:(text-(--text-tertiary) italic) duration-150"}
+                                placeholder="current path"
+                            />
                             <div className={"relative flex items-center p-1 gap-0.5 h-max leading-none text-(--text-secondary) bg-[#ffffff10] rounded-lg cursor-text"}>
                                 <div className={"flex items-center gap-0.5"}>
                                     <button className="flex items-center p-1.5 px-2 gap-1.5 leading-none text-lg font-semibold hover:bg-[#ffffff10] rounded-md cursor-pointer duration-150" onClick={() => {
@@ -75,24 +81,18 @@ const Files = ({ children, query }: FilesProps) => {
                                     ))
                                 }
                             </div>
-                            <input
-                                type="text"
-                                ref={currentDirRef}
-                                className={"bg-transparent outline-none min-w-40 max-w-65 leading-none text-lg font-semibold text-(--text-secondary) placeholder:(text-(--text-tertiary) italic) duration-150"}
-                                placeholder="current path"
-                            />
                         </div>
                     </div>
                     <div className="flex flex-col gap-1.5">
                         <div className="flex w-full items-center justify-between">
-                            <div>
-                            </div>
                             <input
                                 type="text"
                                 ref={searchRef}
                                 className={"p-2 bg-[#ffffff10] outline-none rounded-lg min-w-40 max-w-65 leading-none text-lg font-semibold text-(--text-secondary) placeholder:(text-(--text-tertiary) italic) duration-150"}
                                 placeholder={`search ${currentDirName}`}
                             />
+                            <div>
+                            </div>
                         </div>
                         <div className="flex flex-col">
                             {fileTree && fileTree.map((entry, index) => (
