@@ -28,6 +28,29 @@ export const Api = async () => {
 				} else return false;
 			},
 		},
+		dialog: {
+			prompt: ({ title, message, defaultValue, onOk }: { title: string; message: string; defaultValue?: string; onOk: (value: string) => void }) => {
+				console.log(title, message);
+				const value = window.prompt(message, defaultValue || "");
+				if (value !== null) {
+					onOk(value);
+				}
+				return null;
+			},
+			alert: ({ title, message, onOk }: { title: string; message: string; onOk?: () => void }) => {
+				console.log(title, message);
+				window.alert(message);
+				onOk?.();
+			},
+			confirm: ({ title, message, onOk }: { title: string; message: string; onOk: () => void }) => {
+				console.log(title, message);
+				const confirmed = window.confirm(message);
+				if (confirmed) {
+					onOk();
+				}
+				return null;
+			},
+		},
 		fs: Filer.fs,
 		buffer: Filer.Buffer,
 		sh: new Filer.fs.Shell(),

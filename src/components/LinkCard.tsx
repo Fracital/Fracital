@@ -39,11 +39,42 @@ const LinkCard: React.FC<LinkCardProps> = ({ title, icon, brightness, color, hre
                                 `
 								}
 								onMouseDown={() => {
-									const linkname = prompt("Enter the name of the link:", title);
+									let linkname = "";
+									let linkicon = "";
+									let linkcolor = "";
+									let linkurl = "";
+									window.fr.dialog.prompt({
+										title: "Create new Link",
+										message: "Enter the name of the link:",
+										onOk: (res: string) => {
+											linkname = res;
+										},
+									});
+									window.fr.dialog.prompt({
+										title: "Create new Link",
+										message: "Enter the URL of the icon for this link (leave empty for default):",
+										defaultValue: typeof icon === "string" ? icon : "",
+										onOk: (res: string) => {
+											linkicon = res;
+										},
+									});
+									window.fr.dialog.prompt({
+										title: "Create new Link",
+										message: "Enter the color for this link (leave empty for default):",
+										defaultValue: color,
+										onOk: (res: string) => {
+											linkcolor = res;
+										},
+									});
+									window.fr.dialog.prompt({
+										title: "Create new Link",
+										message: "Enter the URL for this link:",
+										defaultValue: value,
+										onOk: (res: string) => {
+											linkurl = res;
+										},
+									});
 									if (!linkname || linkname.trim() === "") return;
-									const linkicon = prompt("Enter the URL of the icon for this link (leave empty for default):", typeof icon === "string" ? icon : "");
-									const linkcolor = prompt("Enter the color for this link (leave empty for default):", color);
-									const linkurl = prompt("Enter the URL for this link:", value);
 									if (!linkurl || linkurl.trim() === "") return;
 									const newLink: linkProps = {
 										title: linkname,

@@ -289,7 +289,10 @@ export const MusicLibrary = ({ query }: MusicLibraryProps) => {
 																		removeTrack(song.id);
 																	} catch {}
 																	setLibrary(prev => prev.filter(s => s !== song));
-																	alert("Successfully removed from the library.");
+																	window.fr.dialog.alert({
+																		title: "Track Removed",
+																		message: `"${song.title}" has been removed from your library.`,
+																	});
 																	if (currentTrack && currentTrack.id === song.id) {
 																		playNext();
 																	}
@@ -301,11 +304,17 @@ export const MusicLibrary = ({ query }: MusicLibraryProps) => {
 															}
 														}
 														if (!deleted) {
-															alert("Could not find matching folder for this track in /music.");
+															window.fr.dialog.alert({
+																title: "Track Not Found",
+																message: "Could not find matching folder for this track in /music.",
+															});
 														}
 													} catch (err) {
 														console.error("Failed to remove track:", err);
-														alert("An error occurred while removing the track.");
+														window.fr.dialog.alert({
+															title: "Error",
+															message: "An error occurred while removing the track.",
+														});
 													}
 												},
 												icon: null,
@@ -462,13 +471,19 @@ export const MusicLibrary = ({ query }: MusicLibraryProps) => {
 								className="leading-none p-3 px-4 rounded-lg bg-(--primary) inset-shadow-(--inset-shadow-primary) hover:inset-shadow-(--inset-shadow-accent) focus-visible:inset-shadow-(--inset-shadow-accent) focus-visible:outline-0 cursor-pointer duration-150"
 								onClick={async () => {
 									if (!audio) {
-										alert("You haven't uploaded any audio files!");
+										window.fr.dialog.alert({
+											title: "No Audio",
+											message: "You haven't uploaded any audio files!",
+										});
 										return;
 									}
 
 									const file = audioRef.current?.files?.[0];
 									if (!file) {
-										alert("No audio file selected!");
+										window.fr.dialog.alert({
+											title: "No File",
+											message: "No audio file selected!",
+										});
 										return;
 									}
 
@@ -501,7 +516,10 @@ export const MusicLibrary = ({ query }: MusicLibraryProps) => {
 									};
 									await window.fr.fs.promises.writeFile(`/music/${baseName}/tags.json`, JSON.stringify(providedTags, null, 2));
 
-									alert("Your song and tags have been uploaded!");
+									window.fr.dialog.alert({
+										title: "Upload Successful",
+										message: "Your song and tags have been uploaded!",
+									});
 									if (titleRef.current) {
 										titleRef.current.value = "";
 									}

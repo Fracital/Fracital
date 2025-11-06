@@ -48,6 +48,11 @@ export interface COM {
 		getTheme: () => any;
 		setTheme: (name: string) => Promise<boolean>;
 	};
+	dialog: {
+		prompt: (options: { title: string; message: string; defaultValue?: string; onOk: (value: string) => void }) => void;
+		alert: (options: { title: string; message: string; onOk?: () => void }) => void;
+		confirm: (options: { title: string; message: string; onOk: () => void }) => void;
+	};
 	fs: FilerFS;
 	buffer: any;
 	sh: any;

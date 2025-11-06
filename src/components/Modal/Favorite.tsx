@@ -110,13 +110,29 @@ const FavoriteModal = () => {
                         `
 							}
 							onClick={() => {
-								var namePrompt = prompt("Enter site name, hit enter to skip");
+								var namePrompt = ""
+								window.fr.dialog.prompt({
+									title: "Enter Name",
+									message: "Enter site name, hit enter to skip",
+									defaultValue: name,
+									onOk: (res: string) => {
+										namePrompt = res;
+									}
+								});
 								if (namePrompt) {
 									if (namePrompt !== "") {
 										setName(namePrompt);
 									}
 								}
-								var urlPrompt = prompt("Enter site url, hit enter to skip");
+								var urlPrompt = ""
+								window.fr.dialog.prompt({
+									title: "Enter URL",
+									message: "Enter site url, hit enter to skip",
+									defaultValue: url,
+									onOk: (res: string) => {
+										urlPrompt = res;
+									}
+								});
 								if (urlPrompt) {
 									if (urlPrompt === "") setSelecting("preview");
 									else {
@@ -282,7 +298,14 @@ const FavoriteModal = () => {
 							<div
 								className="group flex items-center justify-center row-span-2 w-25 bg-[#ffffff20] rounded-lg opacity-90 hover:opacity-100 cursor-pointer duration-150"
 								onClick={() => {
-									var askUrl = prompt("Enter the url for your image, hit enter to skip");
+									var askUrl = "";
+									window.fr.dialog.prompt({
+										title: "Change Icon URL",
+										message: "Enter the url for your image, hit enter to skip",
+										onOk: (res: string) => {
+											askUrl = res;
+										}
+									});
 									if (askUrl) {
 										if (askUrl === "") setSelecting("preview");
 										else {

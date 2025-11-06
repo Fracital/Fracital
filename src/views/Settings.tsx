@@ -178,11 +178,39 @@ const Settings = ({ className }: SettingsProps) => {
 					<div
 						className="flex flex-col p-3 rounded-2xl bg-[#ffffff25] hover:bg-[#ffffff35] overflow-hidden cursor-pointer duration-200"
 						onMouseDown={() => {
-							const linkname = prompt("Enter the name of the new link:");
+							let linkname = "";
+							let linkicon = "";
+							let linkcolor = "";
+							let linkurl = "";
+							window.fr.dialog.prompt({
+								title: "Create new Link",
+								message: "Enter the name of the link:",
+								onOk: (res: string) => {
+									linkname = res;
+								},
+							});
+							window.fr.dialog.prompt({
+								title: "Create new Link",
+								message: "Enter the URL of the icon for this link (leave empty for default):",
+								onOk: (res: string) => {
+									linkicon = res;
+								},
+							});
+							window.fr.dialog.prompt({
+								title: "Create new Link",
+								message: "Enter the color for this link (leave empty for default):",
+								onOk: (res: string) => {
+									linkcolor = res;
+								},
+							});
+							window.fr.dialog.prompt({
+								title: "Create new Link",
+								message: "Enter the URL for this link:",
+								onOk: (res: string) => {
+									linkurl = res;
+								},
+							});
 							if (!linkname || linkname.trim() === "") return;
-							const linkicon = prompt("Enter the URL of the icon for this link (leave empty for default):");
-							const linkcolor = prompt("Enter the color for this link (leave empty for default):");
-							const linkurl = prompt("Enter the URL for this link:");
 							if (!linkurl || linkurl.trim() === "") return;
 							const newLink: linkProps = {
 								title: linkname,

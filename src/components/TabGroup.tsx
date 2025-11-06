@@ -173,7 +173,15 @@ const TabGroup = ({ id, name, icon }: TabGroupProps) => {
 									<button
 										onClick={ev => {
 											ev.stopPropagation();
-											const color = window.prompt("Accent color (hex, e.g. #ff0000)", groupAccent || "#ff7b7b");
+											let color = "";
+											window.fr.dialog.prompt({
+												title: "Select new Color",
+												message: "Enter the color for this link (leave empty for default):",
+												defaultValue: groupAccent || "#ff7b7b",
+												onOk: (res: string) => {
+													color = res;
+												},
+											});
 											if (color && color.trim()) {
 												updateGroup(id, { accent: color.trim() });
 												setGroupAccent(color.trim());
@@ -201,7 +209,15 @@ const TabGroup = ({ id, name, icon }: TabGroupProps) => {
 									title: "Rename group",
 									icon: null,
 									onClick: () => {
-										const newName = window.prompt("New group name", name);
+										let newName = "";
+										window.fr.dialog.prompt({
+											title: "Rename Group",
+											message: "New group name",
+											defaultValue: name,
+											onOk: (res: string) => {
+												newName = res;
+											},
+										});
 										if (newName && newName.trim().length > 0) {
 											updateGroup(id, { name: newName.trim() });
 										}
