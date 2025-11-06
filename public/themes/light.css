@@ -1,18 +1,18 @@
 :root {
-    --secondary: #fff;
-    --tertiary: #b7b7b7;
-    --quaternary: #333333;
-    --logo-primary: #fb74fe;
-    --logo-secondary: #ffe866;
-    --accent: #fb74fe;
-    --accent-opaque: #fc74fea5;
-    --text-primary: #000000db;
-    --text-secondary: #000000a6;
-    --text-tertiary: #00000080;
-    --text-quaternary: #0000004d;
-    --shadow-primary: 0 0 2px 0px #00000040;
-    --shadow-accent: 0 0 2px 0px #fb74fe;
-    --inset-shadow-primary: 0 0 0 2px #00000058;
-    --inset-shadow-secondary: 0 0 0 2px #00000048;
-    --inset-shadow-accent: 0 0 0 2px #00000048;
+	--secondary: #fff;
+	--tertiary: #b7b7b7;
+	--quaternary: #333333;
+	--logo-primary: #fb74fe;
+	--logo-secondary: #ffe866;
+	--accent: #fb74fe;
+	--accent-opaque: #fc74fea5;
+	--text-primary: #000000db;
+	--text-secondary: #000000a6;
+	--text-tertiary: #00000080;
+	--text-quaternary: #0000004d;
+	--shadow-primary: 0 0 2px 0px #00000040;
+	--shadow-accent: 0 0 2px 0px #fb74fe;
+	--inset-shadow-primary: 0 0 0 2px #00000058;
+	--inset-shadow-secondary: 0 0 0 2px #00000048;
+	--inset-shadow-accent: 0 0 0 2px #00000048;
 }

@@ -1,1 +1,1 @@
-const Games = () => {}
+const Games = () => {};

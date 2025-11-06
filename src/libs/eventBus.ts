@@ -1,12 +1,12 @@
 export interface detailProps {
-    title: string
-    url: string
-    icon: string | React.ReactNode | null
-    id: string
-    displayUrl: string
+	title: string;
+	url: string;
+	icon: string | React.ReactNode | null;
+	id: string;
+	displayUrl: string;
 }
 
 export const navigationEvent = (detail: detailProps) => {
-    const event = new CustomEvent("proxy-navigate", { detail })
-    window.dispatchEvent(event)
-}
+	const event = new CustomEvent("proxy-navigate", { detail });
+	window.dispatchEvent(event);
+};

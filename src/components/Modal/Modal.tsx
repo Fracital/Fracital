@@ -1,5 +1,5 @@
-import { type ReactNode } from "react"
+import { type ReactNode } from "react";
 
-export const Modal = ({children}: { children: ReactNode }) => {
-    return <div className="w-full max-w-md">{children}</div>
-}
+export const Modal = ({ children }: { children: ReactNode }) => {
+	return <div className="w-full max-w-md">{children}</div>;
+};

@@ -1,123 +1,118 @@
-import { useSettingsStore, useFilesStore } from "../../store"
-import { useEffect, useRef, useState } from "react"
-import { ChevronRightIcon, FolderIcon, DocumentIcon } from "@heroicons/react/24/solid"
+import { useSettingsStore, useFilesStore } from "../../store";
+import { useEffect, useRef, useState } from "react";
+import { ChevronRightIcon, FolderIcon, DocumentIcon } from "@heroicons/react/24/solid";
 
 interface FilesProps {
-    children?: React.ReactNode
-    query?: string | undefined
+	children?: React.ReactNode;
+	query?: string | undefined;
 }
 
 const Files = ({ children, query }: FilesProps) => {
-    const settings = useSettingsStore(state => state.settings);
+	const settings = useSettingsStore(state => state.settings);
 
-    const fileTree = useFilesStore(state => state.fileTree);
-    const currentDirectory = useFilesStore(state => state.currentDirectory);
-    const setCurrentDirectory = useFilesStore(state => state.setCurrentDirectory);
+	const fileTree = useFilesStore(state => state.fileTree);
+	const currentDirectory = useFilesStore(state => state.currentDirectory);
+	const setCurrentDirectory = useFilesStore(state => state.setCurrentDirectory);
 
-    const [crumbs, setCrumbs] = useState<string[]>([]);
+	const [crumbs, setCrumbs] = useState<string[]>([]);
 
-    const currentDirRef = useRef<HTMLInputElement>(null);
-    const searchRef = useRef<HTMLInputElement>(null);
+	const currentDirRef = useRef<HTMLInputElement>(null);
+	const searchRef = useRef<HTMLInputElement>(null);
 
-    const [currentDirName, setCurrentDirName] = useState<string>("root")
+	const [currentDirName, setCurrentDirName] = useState<string>("root");
 
-    useEffect(() => {
-        setCurrentDirectory("/")
-    }, []);
+	useEffect(() => {
+		setCurrentDirectory("/");
+	}, []);
 
-    useEffect(() => {
-        if (currentDirectory) {
-            const parts = currentDirectory.split("/").filter(part => part.length > 0);
-            const lastPart = parts[parts.length - 1]
-            setCrumbs(parts);
-            currentDirRef.current!.value = currentDirectory;
-            if (lastPart === undefined) setCurrentDirName("root");
-            else setCurrentDirName(lastPart)
-        } else {
-            setCrumbs([]);
-        }
-    }, [currentDirectory]);
+	useEffect(() => {
+		if (currentDirectory) {
+			const parts = currentDirectory.split("/").filter(part => part.length > 0);
+			const lastPart = parts[parts.length - 1];
+			setCrumbs(parts);
+			currentDirRef.current!.value = currentDirectory;
+			if (lastPart === undefined) setCurrentDirName("root");
+			else setCurrentDirName(lastPart);
+		} else {
+			setCrumbs([]);
+		}
+	}, [currentDirectory]);
 
-    useEffect(() => {
-        // Placeholder for fetching and setting up the file system tree based on the query
-        // This could involve API calls or local file system access depending on the environment
-    }, [query]);
+	useEffect(() => {
+		// Placeholder for fetching and setting up the file system tree based on the query
+		// This could involve API calls or local file system access depending on the environment
+	}, [query]);
 
+	return (
+		<div className="w-full h-full relative overflow-hidden">
+			{
+				<div className="flex flex-col p-4 gap-2">
+					<div className="flex items-center justify-between">
+						<div className="flex flex-col gap-1.5">
+							<input type="text" ref={currentDirRef} className={"bg-transparent outline-none min-w-40 max-w-65 leading-none text-lg font-semibold text-(--text-secondary) placeholder:(text-(--text-tertiary) italic) duration-150"} placeholder="current path" />
+							<div className={"relative flex items-center p-1 gap-0.5 h-max leading-none text-(--text-secondary) bg-[#ffffff10] rounded-lg cursor-text"}>
+								<div className={"flex items-center gap-0.5"}>
+									<button
+										className="flex items-center p-1.5 px-2 gap-1.5 leading-none text-lg font-semibold hover:bg-[#ffffff10] rounded-md cursor-pointer duration-150"
+										onClick={() => {
+											const path = "/";
+											if (currentDirectory === "/") return;
+											setCurrentDirectory(path);
+										}}
+									>
+										<span>root</span>
+									</button>
+									{currentDirectory !== "/" && <ChevronRightIcon className="size-4 text-(--text-secondary) stroke-current stroke-2 pointer-events-none" />}
+								</div>
+								{crumbs.length >= 1 &&
+									crumbs.map((crumb, index) => (
+										<div className={"flex items-center gap-0.5"} key={index}>
+											{index > 0 && <ChevronRightIcon className="size-4 text-(--text-secondary) stroke-current stroke-2 pointer-events-none" />}
+											<button
+												key={index}
+												className="flex items-center p-1.5 px-2 gap-1.5 leading-none text-lg font-semibold hover:bg-[#ffffff10] rounded-md cursor-pointer duration-150"
+												onClick={() => {
+													const path = "/" + crumbs.slice(0, index + 1).join("/");
+													setCurrentDirectory(path);
+												}}
+											>
+												<span>{crumb}</span>
+											</button>
+										</div>
+									))}
+							</div>
+						</div>
+					</div>
+					<div className="flex flex-col gap-1.5">
+						<div className="flex w-full items-center justify-between">
+							<input type="text" ref={searchRef} className={"p-2 bg-[#ffffff10] outline-none rounded-lg min-w-40 max-w-65 leading-none text-lg font-semibold text-(--text-secondary) placeholder:(text-(--text-tertiary) italic) duration-150"} placeholder={`search ${currentDirName}`} />
+							<div></div>
+						</div>
+						<div className="flex flex-col">
+							{fileTree &&
+								fileTree.map((entry, index) => (
+									<div
+										key={index}
+										className="flex items-center justify-center p-2 gap-1.5 w-max hover:bg-[#ffffff18] rounded-md cursor-pointer duration-100"
+										onClick={() => {
+											if (entry.isDirectory) {
+												const newPath = currentDirectory.endsWith("/") ? currentDirectory + entry.name : currentDirectory + "/" + entry.name;
+												setCurrentDirectory(newPath);
+											} else {
+												// Handle file click (e.g., open or play the file)
+											}
+										}}
+									>
+										<div className="leading-none">{entry.isDirectory ? <FolderIcon className="size-5 text-(--text-accent)" /> : <DocumentIcon className="size-5 text-(--text-accent)" />}</div>
+										<div className="leading-none font-medium">{entry.name}</div>
+									</div>
+								))}
+						</div>
+					</div>
+				</div>
+			}
+		</div>
+	);
+};
 
-    return (
-        <div className="w-full h-full relative overflow-hidden">
-            {
-                <div className="flex flex-col p-4 gap-2">
-                    <div className="flex items-center justify-between">
-                        <div className="flex flex-col gap-1.5">
-                            <input
-                                type="text"
-                                ref={currentDirRef}
-                                className={"bg-transparent outline-none min-w-40 max-w-65 leading-none text-lg font-semibold text-(--text-secondary) placeholder:(text-(--text-tertiary) italic) duration-150"}
-                                placeholder="current path"
-                            />
-                            <div className={"relative flex items-center p-1 gap-0.5 h-max leading-none text-(--text-secondary) bg-[#ffffff10] rounded-lg cursor-text"}>
-                                <div className={"flex items-center gap-0.5"}>
-                                    <button className="flex items-center p-1.5 px-2 gap-1.5 leading-none text-lg font-semibold hover:bg-[#ffffff10] rounded-md cursor-pointer duration-150" onClick={() => {
-                                        const path = "/";
-                                        if (currentDirectory === "/") return;
-                                        setCurrentDirectory(path);
-                                    }}>
-                                        <span>root</span>
-                                    </button>
-                                    {currentDirectory !== "/" && <ChevronRightIcon className="size-4 text-(--text-secondary) stroke-current stroke-2 pointer-events-none" />}
-                                </div>
-                                {
-                                    crumbs.length >= 1 && crumbs.map((crumb, index) => (
-                                        <div className={"flex items-center gap-0.5"} key={index}>
-                                            {index > 0 && <ChevronRightIcon className="size-4 text-(--text-secondary) stroke-current stroke-2 pointer-events-none" />}
-                                            <button key={index} className="flex items-center p-1.5 px-2 gap-1.5 leading-none text-lg font-semibold hover:bg-[#ffffff10] rounded-md cursor-pointer duration-150" onClick={() => {
-                                                const path = "/" + crumbs.slice(0, index + 1).join("/");
-                                                setCurrentDirectory(path);
-                                            }}>
-                                                <span>{crumb}</span>
-                                            </button>
-                                        </div>
-                                    ))
-                                }
-                            </div>
-                        </div>
-                    </div>
-                    <div className="flex flex-col gap-1.5">
-                        <div className="flex w-full items-center justify-between">
-                            <input
-                                type="text"
-                                ref={searchRef}
-                                className={"p-2 bg-[#ffffff10] outline-none rounded-lg min-w-40 max-w-65 leading-none text-lg font-semibold text-(--text-secondary) placeholder:(text-(--text-tertiary) italic) duration-150"}
-                                placeholder={`search ${currentDirName}`}
-                            />
-                            <div>
-                            </div>
-                        </div>
-                        <div className="flex flex-col">
-                            {fileTree && fileTree.map((entry, index) => (
-                                <div key={index} className="flex items-center justify-center p-2 gap-1.5 w-max hover:bg-[#ffffff18] rounded-md cursor-pointer duration-100" onClick={() => {
-                                    if (entry.isDirectory) {
-                                        const newPath = currentDirectory.endsWith("/") ? currentDirectory + entry.name : currentDirectory + "/" + entry.name;
-                                        setCurrentDirectory(newPath);
-                                    } else {
-                                        // Handle file click (e.g., open or play the file)
-                                    }
-                                }}>
-                                    <div className="leading-none">{
-                                        entry.isDirectory
-                                            ? <FolderIcon className="size-5 text-(--text-accent)"/>
-                                            : <DocumentIcon className="size-5 text-(--text-accent)"/>
-                                    }</div>
-                                    <div className="leading-none font-medium">{entry.name}</div>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                </div>
-            }
-        </div>
-    )
-}
-
-export default Files
+export default Files;
