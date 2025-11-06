@@ -110,28 +110,28 @@ const FavoriteModal = () => {
                         `
 							}
 							onClick={() => {
-								var namePrompt = ""
+								var namePrompt = "";
 								window.fr.dialog.prompt({
 									title: "Enter Name",
 									message: "Enter site name, hit enter to skip",
 									defaultValue: name,
 									onOk: (res: string) => {
 										namePrompt = res;
-									}
+									},
 								});
 								if (namePrompt) {
 									if (namePrompt !== "") {
 										setName(namePrompt);
 									}
 								}
-								var urlPrompt = ""
+								var urlPrompt = "";
 								window.fr.dialog.prompt({
 									title: "Enter URL",
 									message: "Enter site url, hit enter to skip",
 									defaultValue: url,
 									onOk: (res: string) => {
 										urlPrompt = res;
-									}
+									},
 								});
 								if (urlPrompt) {
 									if (urlPrompt === "") setSelecting("preview");
@@ -304,7 +304,7 @@ const FavoriteModal = () => {
 										message: "Enter the url for your image, hit enter to skip",
 										onOk: (res: string) => {
 											askUrl = res;
-										}
+										},
 									});
 									if (askUrl) {
 										if (askUrl === "") setSelecting("preview");
