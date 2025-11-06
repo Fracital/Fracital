@@ -1,4 +1,4 @@
-import { dirExists, fileExists } from "../types";
+import { dirExists, fileExists, ThemePath, StaticThemePath, MusicPath, SettingsPath } from "../types";
 
 export const quickLinks = [
 	{
@@ -24,14 +24,14 @@ export const quickLinks = [
 export const init = async () => {
 	if (typeof window === "undefined" || !window.localStorage) throw Error("Cannot reach LocalStorage");
 
-	if (!(await fileExists("/settings.json"))) {
+	if (!(await fileExists(SettingsPath))) {
 		console.log("%cFracital%c: %cinit%c() -> %csettings.json%c does not exist, creating default settings", "color: #fb74fe", "color: #ff7b72", "color: #c7a1f2", "color: #79c0ff", "color: #56d364", "color: #e2b340");
 		await window.fr.fs.promises.writeFile(
-			"/settings.json",
+			SettingsPath,
 			JSON.stringify(
 				{
 					theme: "default",
-					proxy: "uv",
+					proxy: "sj",
 					quicklinks: JSON.stringify(quickLinks),
 					"floating-tabs": false,
 				},
@@ -42,15 +42,15 @@ export const init = async () => {
 	} else {
 		console.log("%cFracital%c: %cinit%c() -> %csettings.json%c already exists", "color: #fb74fe", "color: #ff7b72", "color: #c7a1f2", "color: #79c0ff", "color: #56d364", "color: #e2b340");
 	}
-	if (!(await dirExists("/themes"))) {
-		const defaultTheme = await fetch("/themes/default.css").then(res => res.text());
-		const amberTheme = await fetch("/themes/amber.css").then(res => res.text());
-		const lightTheme = await fetch("/themes/light.css").then(res => res.text());
-		const greyTheme = await fetch("/themes/greyscale.css").then(res => res.text());
-		await window.fr.fs.promises.mkdir("/themes");
-		await window.fr.fs.promises.mkdir("/themes/default");
+	if (!(await dirExists(ThemePath))) {
+		const defaultTheme = await fetch(`${StaticThemePath}/default.css`).then(res => res.text());
+		const amberTheme = await fetch(`${StaticThemePath}/amber.css`).then(res => res.text());
+		const lightTheme = await fetch(`${StaticThemePath}/light.css`).then(res => res.text());
+		const greyTheme = await fetch(`${StaticThemePath}/greyscale.css`).then(res => res.text());
+		await window.fr.fs.promises.mkdir(ThemePath);
+		await window.fr.fs.promises.mkdir(`${ThemePath}/default`);
 		await window.fr.fs.promises.writeFile(
-			"/themes/default/index.json",
+			`${ThemePath}/default/index.json`,
 			JSON.stringify({
 				name: "Default",
 				description: "The default theme for Fracital.",
@@ -61,10 +61,10 @@ export const init = async () => {
 				brightness: "dark",
 			}),
 		);
-		await window.fr.fs.promises.writeFile("/themes/default/index.css", defaultTheme);
-		await window.fr.fs.promises.mkdir("/themes/light");
+		await window.fr.fs.promises.writeFile(`${ThemePath}/default/index.css`, defaultTheme);
+		await window.fr.fs.promises.mkdir(`${ThemePath}/light`);
 		await window.fr.fs.promises.writeFile(
-			"/themes/light/index.json",
+			`${ThemePath}/light/index.json`,
 			JSON.stringify({
 				name: "Light",
 				description: "The default light theme for Fracital.",
@@ -75,10 +75,10 @@ export const init = async () => {
 				brightness: "light",
 			}),
 		);
-		await window.fr.fs.promises.writeFile("/themes/light/index.css", lightTheme);
-		await window.fr.fs.promises.mkdir("/themes/amber");
+		await window.fr.fs.promises.writeFile(`${ThemePath}/light/index.css`, lightTheme);
+		await window.fr.fs.promises.mkdir(`${ThemePath}/amber`);
 		await window.fr.fs.promises.writeFile(
-			"/themes/amber/index.json",
+			`${ThemePath}/amber/index.json`,
 			JSON.stringify({
 				name: "Amber",
 				description: "A amber theme for Fracital.",
@@ -89,10 +89,10 @@ export const init = async () => {
 				brightness: "light",
 			}),
 		);
-		await window.fr.fs.promises.writeFile("/themes/amber/index.css", amberTheme);
-		await window.fr.fs.promises.mkdir("/themes/greyscale");
+		await window.fr.fs.promises.writeFile(`${ThemePath}/amber/index.css`, amberTheme);
+		await window.fr.fs.promises.mkdir(`${ThemePath}/greyscale`);
 		await window.fr.fs.promises.writeFile(
-			"/themes/greyscale/index.json",
+			`${ThemePath}/greyscale/index.json`,
 			JSON.stringify({
 				name: "Greyscale",
 				description: "A greyscale theme for Fracital.",
@@ -103,12 +103,12 @@ export const init = async () => {
 				brightness: "dark",
 			}),
 		);
-		await window.fr.fs.promises.writeFile("/themes/greyscale/index.css", greyTheme);
+		await window.fr.fs.promises.writeFile(`${ThemePath}/greyscale/index.css`, greyTheme);
 		console.log("%cFracital%c: %cinit%c() -> %cdirectory%c /themes created with default themes", "color: #fb74fe", "color: #ff7b72", "color: #c7a1f2", "color: #79c0ff", "color: #56d364", "color: #e2b340");
 		window.location.reload();
 	}
-	if (!(await dirExists("/music"))) {
-		await window.fr.fs.promises.mkdir("/music");
+	if (!(await dirExists(MusicPath))) {
+		await window.fr.fs.promises.mkdir(MusicPath);
 	}
 	if (!window.localStorage.getItem("proxy")) {
 		window.localStorage.setItem("proxy", "sj");

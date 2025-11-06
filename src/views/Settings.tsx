@@ -1,4 +1,4 @@
-import { use, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { RectangleGroupIcon, PaintBrushIcon, PlusIcon, TrashIcon, ScaleIcon, Cog6ToothIcon } from "@heroicons/react/24/solid";
 import { CheckCircleIcon } from "@heroicons/react/24/outline";
 import LinkCard from "../components/LinkCard";
@@ -7,6 +7,7 @@ import { quickLinks } from "../libs/init";
 import type { linkProps } from "./Home";
 import { useSettingsStore } from "../store";
 import { loadTheme } from "../libs/theme";
+import { ThemePath, SettingsPath } from "../types";
 
 interface SettingsProps {
 	className?: string;
@@ -68,7 +69,7 @@ const ThemeCard = (config: any) => {
 						className="size-5 text-(--text-secondary) stroke-current stroke-0.5 cursor-pointer hover:text-(--text-primary) duration-150"
 						onMouseDown={async () => {
 							if (!confirm("Are you sure you want to delete this theme?")) return;
-							await window.fr.fs.promises.unlink(`/themes/${config.name.toLowerCase()}`);
+							await window.fr.fs.promises.unlink(`${ThemePath}/${config.name.toLowerCase()}`);
 							loadTheme("default");
 						}}
 						title="Delete Theme"
@@ -114,10 +115,10 @@ const Settings = ({ className }: SettingsProps) => {
 
 	useEffect(() => {
 		const getThemes = async () => {
-			const themeDirs = await window.fr.fs.promises.readdir("/themes");
+			const themeDirs = await window.fr.fs.promises.readdir(ThemePath);
 			const themeNames: string[] = [];
 			for (const dirName of themeDirs) {
-				const indexPath = `/themes/${dirName}/index.json`;
+				const indexPath = `${ThemePath}/${dirName}/index.json`;
 				try {
 					const indexData = JSON.parse(await window.fr.fs.promises.readFile(indexPath, "utf8"));
 					themeNames.push(indexData);
@@ -134,7 +135,7 @@ const Settings = ({ className }: SettingsProps) => {
 	useEffect(() => {
 		const getSettings = async () => {
 			try {
-				const settingsData = await window.fr.fs.promises.readFile("/settings.json", "utf-8");
+				const settingsData = await window.fr.fs.promises.readFile(SettingsPath, "utf-8");
 				const parsedSettings = JSON.parse(settingsData);
 				setFloatingTabs(parsedSettings["floating-tabs"] ?? true);
 				Object.entries(parsedSettings).forEach(([key, value]) => {
@@ -259,7 +260,7 @@ const Settings = ({ className }: SettingsProps) => {
 								const next = !floatingTabs;
 								setFloatingTabs(next);
 								await window.fr.fs.promises.writeFile(
-									"/settings.json",
+									SettingsPath,
 									JSON.stringify(
 										{
 											...settings,

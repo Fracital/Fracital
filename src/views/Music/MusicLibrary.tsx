@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useMusicStore, useSettingsStore } from "../../store";
 import { ArrowUpOnSquareIcon, BookmarkIcon, RectangleGroupIcon, PlusIcon, MusicalNoteIcon } from "@heroicons/react/24/solid";
 import { PlayIcon, EllipsisHorizontalIcon } from "@heroicons/react/24/solid";
-import type { Track } from "../../types";
+import { MusicPath, type Track } from "../../types";
 import { parseBlob } from "music-metadata";
 import { createId } from "@paralleldrive/cuid2";
 import { ContextMenu, type MenuItem } from "../../components/ContextMenu";
@@ -108,12 +108,12 @@ export const MusicLibrary = ({ query }: MusicLibraryProps) => {
 
 		const readLibrary = async () => {
 			try {
-				const folders = await window.fr.fs.promises.readdir("/music");
+				const folders = await window.fr.fs.promises.readdir(MusicPath);
 				const songs: Track[] = [];
 
 				for (const folderName of folders) {
 					try {
-						const folderPath = `/music/${folderName}`;
+						const folderPath = `${MusicPath}/${folderName}`;
 						const entries = await window.fr.fs.promises.readdir(folderPath);
 
 						const audioFileName = entries.find(name => /^audio\.(mp3|flac|wav|ogg|m4a)$/i.test(name));
@@ -170,7 +170,7 @@ export const MusicLibrary = ({ query }: MusicLibraryProps) => {
 		};
 
 		// @ts-expect-error types
-		var watcher = window.fr.fs.watch("/music", { recursive: true }, () => {
+		var watcher = window.fr.fs.watch(MusicPath, { recursive: true }, () => {
 			console.log("change");
 			readLibrary();
 			// @ts-expect-error types
@@ -179,7 +179,7 @@ export const MusicLibrary = ({ query }: MusicLibraryProps) => {
 				// re-establish watcher after a short delay to avoid multiple triggers
 				readLibrary();
 				// @ts-expect-error types
-				watcher = window.fr.fs.watch("/music", { recursive: true }, () => {
+				watcher = window.fr.fs.watch(MusicPath, { recursive: true }, () => {
 					console.log("change");
 					readLibrary();
 					// @ts-expect-error types
@@ -258,10 +258,10 @@ export const MusicLibrary = ({ query }: MusicLibraryProps) => {
 												title: "Remove from Library",
 												onClick: async () => {
 													try {
-														const folders = await window.fr.fs.promises.readdir("/music");
+														const folders = await window.fr.fs.promises.readdir(MusicPath);
 														let deleted = false;
 														for (const folderName of folders) {
-															const folderPath = `/music/${folderName}`;
+															const folderPath = `${MusicPath}/${folderName}`;
 															try {
 																const entries = await window.fr.fs.promises.readdir(folderPath);
 																let tags: any = null;
@@ -306,7 +306,7 @@ export const MusicLibrary = ({ query }: MusicLibraryProps) => {
 														if (!deleted) {
 															window.fr.dialog.alert({
 																title: "Track Not Found",
-																message: "Could not find matching folder for this track in /music.",
+																message: `Could not find matching folder for this track in ${MusicPath}`,
 															});
 														}
 													} catch (err) {
@@ -491,10 +491,10 @@ export const MusicLibrary = ({ query }: MusicLibraryProps) => {
 
 									const baseName = file.name.replace(/\.[^/.]+$/, "");
 
-									await window.fr.fs.promises.mkdir(`/music/${baseName}`);
+									await window.fr.fs.promises.mkdir(`${MusicPath}/${baseName}`);
 
 									const audioFileName = `audio${file.name.substring(file.name.lastIndexOf("."))}`;
-									await window.fr.fs.promises.writeFile(`/music/${baseName}/${audioFileName}`, window.fr.buffer.from(arrayBuffer));
+									await window.fr.fs.promises.writeFile(`${MusicPath}/${baseName}/${audioFileName}`, window.fr.buffer.from(arrayBuffer));
 
 									const artists = artistRef.current?.value.trim() || "";
 									const artistsArray = artists.includes(",")
@@ -514,7 +514,7 @@ export const MusicLibrary = ({ query }: MusicLibraryProps) => {
 										cover: albumCover,
 										year: yearRef.current?.value || "",
 									};
-									await window.fr.fs.promises.writeFile(`/music/${baseName}/tags.json`, JSON.stringify(providedTags, null, 2));
+									await window.fr.fs.promises.writeFile(`${MusicPath}/${baseName}/tags.json`, JSON.stringify(providedTags, null, 2));
 
 									window.fr.dialog.alert({
 										title: "Upload Successful",

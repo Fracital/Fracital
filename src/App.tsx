@@ -26,6 +26,7 @@ import TabGroup from "./components/TabGroup";
 import { Login } from "./views/Login";
 import FavoriteModal from "./components/Modal/Favorite";
 import { ModalProvider } from "./components/Modal/ModalContext";
+import { SettingsPath } from "./types";
 
 const regSw = async () => {
 	await navigator.serviceWorker.getRegistrations().then(registrations => {
@@ -115,7 +116,7 @@ const App = () => {
 	useEffect(() => {
 		const getSettings = async () => {
 			try {
-				const settingsData = await window.fr.fs.promises.readFile("/settings.json", "utf-8");
+				const settingsData = await window.fr.fs.promises.readFile(SettingsPath, "utf-8");
 				const parsedSettings = JSON.parse(settingsData);
 				Object.entries(parsedSettings).forEach(([key, value]) => {
 					setSettings(key, value);
