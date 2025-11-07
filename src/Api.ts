@@ -36,8 +36,8 @@ export const Api = async () => {
 					defaultValue,
 					onOk: (value: string) => {
 						onOk(value);
-					}
-				})
+					},
+				});
 				return null;
 			},
 			alert: ({ title, message, onOk }: { title: string; message: string; onOk?: () => void }) => {
@@ -46,8 +46,8 @@ export const Api = async () => {
 					message,
 					onOk: () => {
 						if (onOk) onOk();
-					}
-				})
+					},
+				});
 				return null;
 			},
 			// @ts-expect-error
