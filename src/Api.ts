@@ -41,7 +41,7 @@ export const Api = async () => {
 				console.log(title, message);
 				window.alert(message);
 				onOk?.();
-			}
+			},
 		},
 		fs: Filer.fs,
 		buffer: Filer.Buffer,
