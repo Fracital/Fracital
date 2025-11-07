@@ -17,6 +17,8 @@ html, body {
   height: 100%;
   font-family: Inter;
   overflow-x: hidden;
+  /* Bypasses Terbium Transparency Feature */
+  color: white;
 }
 
 ::selection {

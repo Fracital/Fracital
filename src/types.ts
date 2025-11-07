@@ -7,6 +7,12 @@ declare global {
 //const FilerFS: any = window.Filer;
 //export const Filer: FilerFS = new FilerFS.FileSystem();
 
+// For webOS Builds of Fracital
+export const ThemePath = `/apps/user/${sessionStorage.getItem("currAcc")}/Fracital/themes/`;
+export const StaticThemePath = `${location.pathname.replace("index.html", "")}/themes/`;
+export const SettingsPath = `/apps/user/${sessionStorage.getItem("currAcc")}/Fracital/settings.json`;
+export const MusicPath = `/home/${sessionStorage.getItem("currAcc")}/Music/`;
+
 export const dirExists = async (path: string): Promise<boolean> => {
 	return new Promise(resolve => {
 		window.parent.tb.fs.stat(path, (err: any, stats: any) => {

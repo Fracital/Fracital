@@ -30,29 +30,34 @@ export const Api = async () => {
 		},
 		dialog: {
 			prompt: ({ title, message, defaultValue, onOk }: { title: string; message: string; defaultValue?: string; onOk: (value: string) => void }) => {
-				console.log(title, message);
-				const value = window.prompt(message, defaultValue || "");
-				if (value !== null) {
-					onOk(value);
-				}
+				window.parent.tb.dialog.Message({
+					title,
+					message,
+					defaultValue,
+					onOk: (value: string) => {
+						onOk(value);
+					}
+				})
 				return null;
 			},
 			alert: ({ title, message, onOk }: { title: string; message: string; onOk?: () => void }) => {
-				console.log(title, message);
-				window.alert(message);
-				onOk?.();
+				window.parent.tb.dialog.Alert({
+					title,
+					message,
+					onOk: () => {
+						if (onOk) onOk();
+					}
+				})
+				return null;
 			},
+			// @ts-expect-error
 			confirm: ({ title, message, onOk }: { title: string; message: string; onOk: () => void }) => {
-				console.log(title, message);
-				const confirmed = window.confirm(message);
-				if (confirmed) {
-					onOk();
-				}
+				// API Stub anyways
 				return null;
 			},
 		},
 		fs: window.parent.tb.fs,
-		buffer: window.parent.tb.Buffer,
+		buffer: window.parent.tb.buffer,
 		sh: window.parent.tb.sh,
 	};
 };

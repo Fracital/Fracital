@@ -126,7 +126,7 @@ export function fsrv() {
 	});
 
 	server.listen(port, () => {
-		console.log(`\x1b[38;2;251;116;254mFractial v${version} is running on port ${port}\x1b[0m`);
+		console.log(`\x1b[38;2;251;116;254mFracital v${version} is running on port ${port}\x1b[0m`);
 	});
 	async function nodeHandler(req: IncomingMessage, res: ServerResponse) {
 		const proto = (req.socket as any).encrypted ? "https" : "http";

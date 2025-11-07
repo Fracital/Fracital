@@ -2,7 +2,7 @@
 
 @font-face {
     font-family: Inter;
-    src: url(/fonts/Inter.ttf) format("truetype");
+    src: url(./assets/Inter.ttf) format("truetype");
 }
 
 @utility stroke-0.5 {

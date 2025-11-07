@@ -1,13 +1,13 @@
 {
-  "title": "Fractial",
-  "icon": "fractial.svg",
+  "title": "Fracital",
+  "icon": "fracital.svg",
   "version": "1.0.0",
   "wmArgs": {
     "title": {
-      "text": "Fractial",
+      "text": "Fracital",
       "weight": 600
     },
-    "icon": "fractial.svg",
+    "icon": "fracital.svg",
     "src": "index.html",
     "size": {
       "width": 650,
