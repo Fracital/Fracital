@@ -15,7 +15,7 @@ export const MusicPath = "/music/";
 
 export const dirExists = async (path: string): Promise<boolean> => {
 	return new Promise(resolve => {
-		Filer.stat(path, (err: any, stats: any) => {
+		window.fr.fs.stat(path, (err: any, stats: any) => {
 			if (err) {
 				if (err.code === "ENOENT") {
 					resolve(false);
@@ -33,7 +33,7 @@ export const dirExists = async (path: string): Promise<boolean> => {
 
 export const fileExists = async (path: string): Promise<boolean> => {
 	return new Promise(resolve => {
-		Filer.stat(path, (err: any, stats: any) => {
+		window.fr.fs.stat(path, (err: any, stats: any) => {
 			if (err) {
 				if (err.code === "ENOENT") {
 					resolve(false);
@@ -57,7 +57,6 @@ export interface COM {
 	dialog: {
 		prompt: (options: { title: string; message: string; defaultValue?: string; onOk: (value: string) => void }) => void;
 		alert: (options: { title: string; message: string; onOk?: () => void }) => void;
-		confirm: (options: { title: string; message: string; onOk: () => void }) => void;
 	};
 	fs: FilerFS;
 	buffer: any;

@@ -41,15 +41,7 @@ export const Api = async () => {
 				console.log(title, message);
 				window.alert(message);
 				onOk?.();
-			},
-			confirm: ({ title, message, onOk }: { title: string; message: string; onOk: () => void }) => {
-				console.log(title, message);
-				const confirmed = window.confirm(message);
-				if (confirmed) {
-					onOk();
-				}
-				return null;
-			},
+			}
 		},
 		fs: Filer.fs,
 		buffer: Filer.Buffer,
