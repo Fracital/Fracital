@@ -15,7 +15,7 @@ export const initTheme = async () => {
 export const loadTheme = async (name: string) => {
 	const { setSettings } = useSettingsStore.getState();
 	try {
-		const themeBuffer = await window.fr.fs.promises.readFile(`${ThemePath}/${name}/index.css`);
+		const themeBuffer = await window.fr.fs.promises.readFile(`${ThemePath}/${name}/index.css`, "utf8");
 		const configBuffer = await window.fr.fs.promises.readFile(`${ThemePath}/${name}/index.json`, "utf8");
 
 		if (!styleElement) {
@@ -23,7 +23,7 @@ export const loadTheme = async (name: string) => {
 			styleElement.id = "theme-style";
 			document.head.appendChild(styleElement);
 		}
-		styleElement.textContent = new TextDecoder().decode(themeBuffer);
+		styleElement.textContent = themeBuffer;
 		setSettings("theme", name);
 		setSettings("brightness", JSON.parse(configBuffer).brightness);
 		const settings = JSON.parse(await window.fr.fs.promises.readFile(SettingsPath, "utf-8"));
