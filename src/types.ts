@@ -11,11 +11,11 @@ declare global {
 export const ThemePath = `/apps/user/${sessionStorage.getItem("currAcc")}/Fracital/themes/`;
 export const StaticThemePath = `${location.pathname.replace("index.html", "")}/themes/`;
 export const SettingsPath = `/apps/user/${sessionStorage.getItem("currAcc")}/Fracital/settings.json`;
-export const MusicPath = `/home/${sessionStorage.getItem("currAcc")}/Music/`;
+export const MusicPath = `/home/${sessionStorage.getItem("currAcc")}/music/`;
 
 export const dirExists = async (path: string): Promise<boolean> => {
 	return new Promise(resolve => {
-		window.parent.tb.fs.stat(path, (err: any, stats: any) => {
+		window.fr.fs.stat(path, (err: any, stats: any) => {
 			if (err) {
 				if (err.code === "ENOENT") {
 					resolve(false);
@@ -33,7 +33,7 @@ export const dirExists = async (path: string): Promise<boolean> => {
 
 export const fileExists = async (path: string): Promise<boolean> => {
 	return new Promise(resolve => {
-		window.parent.tb.fs.stat(path, (err: any, stats: any) => {
+		window.fr.fs.stat(path, (err: any, stats: any) => {
 			if (err) {
 				if (err.code === "ENOENT") {
 					resolve(false);

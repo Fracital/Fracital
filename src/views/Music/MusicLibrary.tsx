@@ -120,7 +120,7 @@ export const MusicLibrary = ({ query }: MusicLibraryProps) => {
 						if (!audioFileName) continue;
 
 						const audioPath = `${folderPath}/${audioFileName}`;
-						const audioData = await window.fr.fs.promises.readFile(audioPath);
+						const audioData = await window.fr.fs.promises.readFile(audioPath, "arraybuffer");
 						const extension = audioFileName.split(".").pop()?.toLowerCase();
 						const mimeType = extension === "mp3" ? "audio/mpeg" : extension === "wav" ? "audio/wav" : extension === "ogg" ? "audio/ogg" : extension === "m4a" ? "audio/mp4" : "application/octet-stream";
 
@@ -494,7 +494,7 @@ export const MusicLibrary = ({ query }: MusicLibraryProps) => {
 									await window.fr.fs.promises.mkdir(`${MusicPath}/${baseName}`);
 
 									const audioFileName = `audio${file.name.substring(file.name.lastIndexOf("."))}`;
-									await window.fr.fs.promises.writeFile(`${MusicPath}/${baseName}/${audioFileName}`, window.fr.buffer.from(arrayBuffer));
+									await window.fr.fs.promises.writeFile(`${MusicPath}/${baseName}/${audioFileName}`, window.fr.buffer.from(new Uint8Array(arrayBuffer)));
 
 									const artists = artistRef.current?.value.trim() || "";
 									const artistsArray = artists.includes(",")
