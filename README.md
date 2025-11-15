@@ -1,12 +1,13 @@
-# Fractial
+# Fracital
 
-The NEW age of fractial
+The NEW age of Fracital
 
 ## Features
 
 - Music Player
 - Vertical Tabs
 - Sleek Design
+- Modern & Fast
 
 ## Installation
 
@@ -16,14 +17,16 @@ Using the package manager of your choise install the dependencies by running, fo
 npm i
 ```
 
-If your developing Fractial, use the dev server availible at `npm run dev`
+## Usage
 
-If your using Fractial in Production, use `npm run start`
+If your developing Fracital, use the dev server availible at `npm run dev`
+
+If your using Fracital in Production, use `npm run start`
 
 ## Credits
 
-Made with ❤️ by the Fractial Team
+Made with ❤️ by the Fracital Team
 
-&copy; Copyright 2025 Fractial Development
+&copy; Copyright 2025 Fracital Development
 
 Licensed Under the [AGPL License](./LICENSE)
