@@ -7,6 +7,7 @@ The NEW age of Fracital
 - Music Player
 - Vertical Tabs
 - Sleek Design
+- Modern & Fast
 
 ## Installation
 
@@ -15,6 +16,8 @@ Using the package manager of your choise install the dependencies by running, fo
 ```js
 npm i
 ```
+
+## Usage
 
 If your developing Fracital, use the dev server availible at `npm run dev`
 

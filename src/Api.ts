@@ -1,5 +1,5 @@
 import { useSettingsStore } from "./store";
-import { type COM } from "./types";
+import { ThemePath, type COM } from "./types";
 
 declare const fr: COM;
 declare global {
@@ -21,7 +21,7 @@ export const Api = async () => {
 			},
 			setTheme: async (name: string) => {
 				if (getSettings("theme") === name) return false;
-				const themes = await window.fr.fs.promises.readdir("/themes", "utf8");
+				const themes = await window.fr.fs.promises.readdir(ThemePath, "utf8");
 				if (themes.find(theme => theme === name)) {
 					setSettings("theme", name);
 					return true;
@@ -48,11 +48,6 @@ export const Api = async () => {
 						if (onOk) onOk();
 					},
 				});
-				return null;
-			},
-			// @ts-expect-error
-			confirm: ({ title, message, onOk }: { title: string; message: string; onOk: () => void }) => {
-				// API Stub anyways
 				return null;
 			},
 		},

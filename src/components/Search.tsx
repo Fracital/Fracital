@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef, type ChangeEvent } from "react";
-import { XMarkIcon, MagnifyingGlassIcon } from "@heroicons/react/24/solid";
+import { XMarkIcon, MagnifyingGlassIcon, Cog6ToothIcon, FolderIcon, MusicalNoteIcon, IdentificationIcon } from "@heroicons/react/24/solid";
 import type { TabProps } from "./Tab";
 import { useTabsStore } from "../store";
 import { navigationEvent } from "../libs/eventBus";
@@ -38,29 +38,59 @@ export const Search = ({ tab }: SearchProps) => {
 				if (q.includes(".") || q.includes(":")) return `https://${q}`;
 				return q;
 			};
+
+			const getAboutPageInfo = (url: string): { title: string; icon: React.ReactNode | null } => {
+				const page = url.replace("about:", "").split("?")[0];
+				switch (page) {
+					case "newtab":
+						return { title: "New Tab", icon: null };
+					case "settings":
+						return { title: "Settings", icon: <Cog6ToothIcon className="size-5" /> };
+					case "music":
+						return { title: "Music Library", icon: <MusicalNoteIcon className="size-5" /> };
+					case "files":
+						return { title: "File Manager", icon: <FolderIcon className="size-5" /> };
+					case "account":
+						return { title: "Account Management", icon: <IdentificationIcon className="size-5" /> };
+					default:
+						return { title: "New Tab", icon: null };
+				}
+			};
+
 			let finalUrl: string;
 			let displayUrl: string;
+			let pageTitle = "New Tab";
+			let pageIcon: React.ReactNode | null = null;
+
 			if (isSearch(query)) {
 				finalUrl = `https://duckduckgo.com/?q=${encodeURIComponent(query)}`;
 				displayUrl = query;
 			} else {
 				finalUrl = makeUrl(query);
 				displayUrl = query;
+
+				if (finalUrl.includes("about:")) {
+					const info = getAboutPageInfo(finalUrl);
+					pageTitle = info.title;
+					pageIcon = info.icon;
+				}
 			}
+
 			if (tabs.length < 1) {
 				newTab({
-					title: "New Tab",
+					title: pageTitle,
 					id: createId(),
 					url: finalUrl,
 					current: true,
 					displayUrl: displayUrl,
+					icon: pageIcon,
 				});
 				setHasQuery(true);
 			} else {
 				navigationEvent({
 					url: finalUrl,
-					icon: null,
-					title: "New Tab",
+					icon: pageIcon,
+					title: pageTitle,
 					displayUrl: displayUrl,
 					id: tab?.id ?? currentTab?.id ?? "",
 				});
@@ -83,11 +113,11 @@ export const Search = ({ tab }: SearchProps) => {
 			inputRef.current.value = "";
 		}
 		navigationEvent({
-			url: "newtab",
+			url: "about:newtab",
 			title: "New Tab",
 			icon: null,
-			displayUrl: "newtab",
-			id: createId(),
+			displayUrl: "about:newtab",
+			id: tab?.id ?? currentTab?.id ?? "",
 		});
 	};
 
@@ -107,7 +137,7 @@ export const Search = ({ tab }: SearchProps) => {
 			<div
 				ref={searchRef}
 				className={
-					"flex items-center bg-(--secondary) h-[48px] gap-1 rounded-xl cursor-text duration-150" +
+					"flex items-center bg-(--secondary) h-12 gap-1 rounded-xl cursor-text duration-150" +
 					" " +
 					`
                 ${searchFocused ? "inset-shadow-(--inset-shadow-accent)" : "inset-shadow-(--inset-shadow-secondary)"}
@@ -127,7 +157,7 @@ export const Search = ({ tab }: SearchProps) => {
 						"relative flex items-center justify-start h-full z-10 duration-150" +
 						" " +
 						`
-                    ${hasQuery ? "sm:w-[20rem] w-20" : "sm:w-[12.5rem] w-20"}
+                    ${hasQuery ? "sm:w-[20rem] w-20" : "sm:w-50 w-20"}
                 `
 					}
 				>

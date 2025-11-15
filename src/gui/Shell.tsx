@@ -15,11 +15,11 @@ import {
 	ArrowRightIcon,
 	FolderArrowDownIcon,
 	FolderIcon,
-	StarIcon,
+	StarIcon as StarIconSolid,
 } from "@heroicons/react/24/solid";
+import { StarIcon as StarIconOutline } from "@heroicons/react/24/outline";
 import { FireIcon, WrenchScrewdriverIcon, CheckBadgeIcon } from "@heroicons/react/24/solid";
 import { Suspense, useEffect, useState, useRef } from "react";
-import { Link } from "react-router-dom";
 import { ShellButton } from "../components/ShellButton";
 import { useTabsStore, useSettingsStore } from "../store";
 import { createId } from "@paralleldrive/cuid2";
@@ -30,6 +30,7 @@ import type { linkProps } from "../views/Home";
 import { useModal } from "../components/Modal/ModalContext";
 import FavoriteModal from "../components/Modal/Favorite";
 import { Modal } from "../components/Modal/Modal";
+import { changeProxy, getProxy } from "../types";
 
 declare global {
 	interface Window {
@@ -224,6 +225,7 @@ const Shell = () => {
 	const newTab = useTabsStore(state => state.newTab);
 	const tabs = useTabsStore(state => state.tabs);
 	const currentTab = tabs.find(tab => tab.current === true);
+	const updateTab = useTabsStore(state => state.updateTab);
 
 	const settings = useSettingsStore(state => state.settings);
 
@@ -232,7 +234,6 @@ const Shell = () => {
 	const navButtonsRef = useRef<HTMLDivElement>(null);
 	const uvRef = useRef<HTMLDivElement>(null);
 	const sjRef = useRef<HTMLDivElement>(null);
-	const favRef = useRef<SVGSVGElement>(null);
 
 	const [fullscreen] = useState<boolean>(false);
 
@@ -240,23 +241,46 @@ const Shell = () => {
 	const [sjVersion] = useState(window.parent.$scramjetVersion.version);
 
 	const { openModal } = useModal();
-	const currLinks = JSON.parse(window.localStorage.getItem("quicklinks") || "[]");
-	const hrefs = currLinks.map((link: linkProps) => link.href);
+	const [isFavorited, setIsFavorited] = useState<boolean>(false);
 
-	const handleProxyChange = (e: Event) => {
+	useEffect(() => {
+		const checkFavorited = () => {
+			const currLinks = JSON.parse(window.localStorage.getItem("quicklinks") || "[]");
+			const hrefs = currLinks.map((link: linkProps) => link.href);
+			setIsFavorited(currentTab?.url ? hrefs.includes(currentTab.url) : false);
+		};
+
+		checkFavorited();
+
+		const handleLinksUpdate = () => {
+			setTimeout(checkFavorited, 0);
+		};
+
+		window.addEventListener("links-upd", handleLinksUpdate);
+
+		window.addEventListener("storage", checkFavorited);
+
+		return () => {
+			window.removeEventListener("links-upd", handleLinksUpdate);
+			window.removeEventListener("storage", checkFavorited);
+		};
+	}, [currentTab?.url]);
+
+	const handleProxyChange = async (e: Event) => {
 		const customEvent = e as CustomEvent;
 		const newProxy = customEvent.detail.proxy;
 		if (newProxy === "sj" || newProxy === "uv") {
 			setProxy(newProxy);
-			window.localStorage.setItem("proxy", newProxy);
+			await changeProxy(newProxy);
 		}
 	};
 
 	useEffect(() => {
-		const storedProxy = window.localStorage.getItem("proxy");
-		if (storedProxy === "sj" || storedProxy === "uv") {
-			setProxy(storedProxy as "uv" | "sj");
-		}
+		const getProx = async () => {
+			const proxy = await getProxy();
+			setProxy(proxy);
+		};
+		getProx();
 	}, []);
 
 	useEffect(() => {
@@ -265,22 +289,6 @@ const Shell = () => {
 			window.removeEventListener("proxy-change", handleProxyChange);
 		};
 	}, []);
-
-	useEffect(() => {
-		if (!currentTab && !navButtonsRef) return;
-		if (currentTab?.url.includes("https://")) {
-			navButtonsRef.current?.classList.remove("absolute", "-translate-x-3");
-		} else {
-			setTimeout(() => {
-				navButtonsRef.current?.classList.add("absolute", "-translate-x-3");
-			}, 150);
-		}
-		if (hrefs.includes(currentTab?.url ?? "")) {
-			favRef.current?.classList.add("text-white");
-		} else {
-			favRef.current?.classList.remove("text-white");
-		}
-	}, [currentTab?.url, currentTab, navButtonsRef]);
 
 	return (
 		<div id="shell" className={"flex justify-between gap-2.5 p-1 rounded-xl duration-200"}>
@@ -291,9 +299,9 @@ const Shell = () => {
 						title={`Home - Go to the homepage`}
 						onMouseDown={() => {
 							if (currentTab) {
-								useTabsStore.getState().updateTab(currentTab.id, {
-									url: "newtab",
-									displayUrl: "newtab",
+								updateTab(currentTab.id, {
+									url: "about:newtab",
+									displayUrl: "about:newtab",
 									title: "New Tab",
 									icon: null,
 								});
@@ -321,23 +329,14 @@ const Shell = () => {
 							}
 						/>
 					</button>
-					<div
-						ref={navButtonsRef}
-						className={
-							`flex items-center justify-center gap-0.5 duration-150` +
-							" " +
-							`
-                        ${currentTab?.url.includes("https://") ? "" : "opacity-0 pointer-events-none"}
-                    `
-						}
-					>
+					<div ref={navButtonsRef} className={`flex items-center justify-center gap-0.5 duration-150`}>
 						<button
 							className={
 								"group size-8 p-1 rounded-md cursor-pointer duration-150" +
 								" " +
 								`
-                            ${settings.brightness === "light" ? "text-(--text-tertiary) hover:text-(--text-primary) hover:bg-[#00000018]" : "text-(--text-primary) hover:text-(--text-secondary) hover:bg-[#ffffff10]"}
-                        `
+							${settings.brightness === "light" ? "text-(--text-tertiary) hover:text-(--text-primary) hover:bg-[#00000018]" : "text-(--text-primary) hover:text-(--text-secondary) hover:bg-[#ffffff10]"}
+						`
 							}
 							title="Refresh Page"
 							onClick={() => {
@@ -365,24 +364,21 @@ const Shell = () => {
 								const currTab = tabs.find(tab => tab.current);
 								if (!currTab) return;
 								const currTabId = currTab.id;
+								const currentIndex = useTabsStore.getState().getHistoryIndex(currTabId);
+								if (currentIndex <= 0) return;
 								const history = useTabsStore.getState().getHistory(currTabId);
 								if (!history || history.length < 2) return;
-								let currentIndex = history.findIndex(h => {
-									const entryDisplay = h.displayUrl ?? h.url;
-									const tabDisplay = currTab.displayUrl ?? currTab.url;
-									return h.url === currTab.url && entryDisplay === tabDisplay;
-								});
-								if (currentIndex === -1) currentIndex = history.length - 1;
-								if (currentIndex <= 0) return;
 								const target = history[currentIndex - 1];
 								if (!target) return;
+								useTabsStore.getState().setHistoryIndex(currTabId, currentIndex - 1);
 								navigationEvent({
 									url: target.url,
 									icon: target.icon,
 									title: target.title,
 									displayUrl: target.displayUrl ?? target.url,
 									id: currTabId,
-								});
+									isHistoryNavigation: true,
+								} as any);
 							}}
 						>
 							<ArrowLeftIcon className={"size-full stroke-current stroke-1 text-(--text-tertiary) cursor-pointer group-hover:text-(--text-primary) duration-300"} />
@@ -402,22 +398,19 @@ const Shell = () => {
 								const currTabId = currTab.id;
 								const history = useTabsStore.getState().getHistory(currTabId);
 								if (!history || history.length < 2) return;
-								let currentIndex = history.findIndex(h => {
-									const entryDisplay = h.displayUrl ?? h.url;
-									const tabDisplay = currTab.displayUrl ?? currTab.url;
-									return h.url === currTab.url && entryDisplay === tabDisplay;
-								});
-								if (currentIndex === -1) currentIndex = history.length - 1;
+								const currentIndex = useTabsStore.getState().getHistoryIndex(currTabId);
 								if (currentIndex >= history.length - 1) return;
 								const target = history[currentIndex + 1];
 								if (!target) return;
+								useTabsStore.getState().setHistoryIndex(currTabId, currentIndex + 1);
 								navigationEvent({
 									url: target.url,
 									icon: target.icon,
 									title: target.title,
 									displayUrl: target.displayUrl ?? target.url,
 									id: currTabId,
-								});
+									isHistoryNavigation: true,
+								} as any);
 							}}
 						>
 							<ArrowRightIcon className={"size-full stroke-current stroke-1 text-(--text-tertiary) cursor-pointer group-hover:text-(--text-primary) duration-300"} />
@@ -430,23 +423,19 @@ const Shell = () => {
                             ${settings.brightness === "light" ? "text-(--text-tertiary) hover:text-(--text-primary) hover:bg-[#00000018]" : "text-(--text-primary) hover:text-(--text-secondary) hover:bg-[#ffffff10]"}
                         `
 							}
-							title="Favorite site"
+							title={isFavorited ? "Remove from favorites" : "Add to favorites"}
 							onClick={async () => {
-								if (currentTab?.url && hrefs.includes(currentTab.url)) {
+								const currLinks = JSON.parse(window.localStorage.getItem("quicklinks") || "[]");
+
+								if (isFavorited && currentTab?.url) {
 									const idx = currLinks.findIndex((l: linkProps) => l.href === currentTab?.url);
 									if (idx !== -1) {
 										currLinks.splice(idx, 1);
 									}
-									window.dispatchEvent(new Event("links-upd"));
 									window.localStorage.setItem("quicklinks", JSON.stringify(currLinks));
-									setTimeout(() => {
-										favRef.current?.classList.remove("text-white");
-									}, 500);
+									window.dispatchEvent(new Event("links-upd"));
+									setIsFavorited(false);
 								} else {
-									setTimeout(() => {
-										favRef.current?.classList.add("text-white");
-									}, 500);
-
 									openModal(
 										<Modal>
 											<FavoriteModal />
@@ -460,14 +449,16 @@ const Shell = () => {
 								}
 							}}
 						>
-							<StarIcon ref={favRef} className={"size-full stroke-current stroke-1 text-(--text-tertiary) cursor-pointer group-hover:text-(--text-primary) duration-300"} />
+							{isFavorited ? (
+								<StarIconSolid className={"size-full text-(--text-tertiary) cursor-pointer group-hover:text-(--text-primary) duration-300"} />
+							) : (
+								<StarIconOutline className={"size-full stroke-current stroke-2 text-(--text-tertiary) cursor-pointer group-hover:text-(--text-primary) duration-300"} />
+							)}
 						</button>
 					</div>
 				</div>
 				<div className="relative flex items-center justify-center">{tabs && tabs.length > 0 ? tabs.map((tab, index) => <Search tab={tab} key={index} />) : <Search />}</div>
 			</div>
-			{/* <div className="relative flex items-center justify-center">
-            </div> */}
 			<div className="flex items-center justify-end gap-2.5">
 				<div
 					className={

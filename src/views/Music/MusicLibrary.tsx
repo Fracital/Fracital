@@ -53,15 +53,23 @@ export const readTags = async (file: File): Promise<AudioTags | false> => {
 	try {
 		const metadata = await parseBlob(file);
 		const common = metadata.common;
-		const hasAnyTag = common.title || common.artist || common.album || (common.picture && common.picture.length > 0) || common.genre || common.year;
+		const hasAnyTag = common.title || common.artist || common.artists || common.album || (common.picture && common.picture.length > 0) || common.genre || common.year;
 		console.log(common);
 		console.log(hasAnyTag);
 
 		if (!hasAnyTag) return false;
 
+		// Handle multiple artists - check both 'artists' and 'artist' fields
+		let artistString = "Unknown";
+		if (common.artists && Array.isArray(common.artists)) {
+			artistString = common.artists.join(", ");
+		} else if (common.artist) {
+			artistString = common.artist;
+		}
+
 		return {
 			title: common.title ?? "Untitled",
-			artist: common.artist ?? "Unknown",
+			artist: artistString,
 			album: common.album ?? "Unknown",
 			picture: common.picture?.[0]
 				? {
@@ -120,7 +128,7 @@ export const MusicLibrary = ({ query }: MusicLibraryProps) => {
 						if (!audioFileName) continue;
 
 						const audioPath = `${folderPath}/${audioFileName}`;
-						const audioData = await window.fr.fs.promises.readFile(audioPath, "arraybuffer");
+						const audioData = await window.fr.fs.promises.readFile(audioPath);
 						const extension = audioFileName.split(".").pop()?.toLowerCase();
 						const mimeType = extension === "mp3" ? "audio/mpeg" : extension === "wav" ? "audio/wav" : extension === "ogg" ? "audio/ogg" : extension === "m4a" ? "audio/mp4" : "application/octet-stream";
 
@@ -137,6 +145,7 @@ export const MusicLibrary = ({ query }: MusicLibraryProps) => {
 
 						const mergedTags = {
 							id: createId(),
+							folderName: folderName,
 							// @ts-expect-error
 							title: tagsFromJson.title || folderName,
 							// @ts-expect-error
@@ -224,7 +233,7 @@ export const MusicLibrary = ({ query }: MusicLibraryProps) => {
 								)}
 								<div className="flex flex-col gap-1 justify-center pr-2">
 									<span className="text-xl font-medium">{song.title}</span>
-									<span className="text-md text-[#ffffff88]">{song.artists}</span>
+									<span className="text-md text-[#ffffff88]">{Array.isArray(song.artists) ? song.artists.join(", ") : song.artists}</span>
 								</div>
 								<div id="play" title="Play track" className="flex items-center justify-center p-2 bg-[#ffffff10] hover:bg-[#ffffff18] rounded-full cursor-pointer duration-150">
 									<PlayIcon id="play" className="size-5 pointer-events-none" />
@@ -258,56 +267,45 @@ export const MusicLibrary = ({ query }: MusicLibraryProps) => {
 												title: "Remove from Library",
 												onClick: async () => {
 													try {
-														const folders = await window.fr.fs.promises.readdir(MusicPath);
-														let deleted = false;
-														for (const folderName of folders) {
-															const folderPath = `${MusicPath}/${folderName}`;
-															try {
-																const entries = await window.fr.fs.promises.readdir(folderPath);
-																let tags: any = null;
-																if (entries.includes("tags.json")) {
-																	try {
-																		const tagsJson = await window.fr.fs.promises.readFile(`${folderPath}/tags.json`, "utf8");
-																		tags = JSON.parse(tagsJson);
-																	} catch {}
-																}
-																const artistsFromTags = tags?.artists;
-																const normalize = (v: any) => {
-																	if (Array.isArray(v)) return v.map(String).join(",").trim();
-																	return (v ?? "").toString().trim();
-																};
-																const matchByTitle = (tags && tags.title && tags.title === song.title) || folderName === song.title;
-																const matchByArtists = artistsFromTags && normalize(artistsFromTags) === normalize(song.artists);
-																if (matchByTitle || matchByArtists) {
-																	await window.fr.sh.promises.rm(folderPath, { recursive: true, force: true });
-																	if (song.src) {
-																		try {
-																			URL.revokeObjectURL(song.src);
-																		} catch {}
-																	}
-																	try {
-																		removeTrack(song.id);
-																	} catch {}
-																	setLibrary(prev => prev.filter(s => s !== song));
-																	window.fr.dialog.alert({
-																		title: "Track Removed",
-																		message: `"${song.title}" has been removed from your library.`,
-																	});
-																	if (currentTrack && currentTrack.id === song.id) {
-																		playNext();
-																	}
-																	deleted = true;
-																	break;
-																}
-															} catch (innerErr) {
-																console.error("Error checking folder", folderName, innerErr);
-															}
-														}
-														if (!deleted) {
+														if (!song.folderName) {
 															window.fr.dialog.alert({
-																title: "Track Not Found",
-																message: `Could not find matching folder for this track in ${MusicPath}`,
+																title: "Error",
+																message: "Cannot delete track: folder information missing.",
 															});
+															return;
+														}
+
+														const folderPath = `${MusicPath}/${song.folderName}`;
+														try {
+															await window.fr.fs.promises.readdir(folderPath);
+														} catch {
+															window.fr.dialog.alert({
+																title: "Error",
+																message: "Track folder not found. It may have already been deleted.",
+															});
+															setLibrary(prev => prev.filter(s => s.id !== song.id));
+															return;
+														}
+
+														await window.fr.sh.promises.rm(folderPath, { recursive: true, force: true });
+														if (song.src) {
+															try {
+																URL.revokeObjectURL(song.src);
+															} catch {}
+														}
+
+														try {
+															removeTrack(song.id);
+														} catch {}
+
+														setLibrary(prev => prev.filter(s => s.id !== song.id));
+														window.fr.dialog.alert({
+															title: "Track Removed",
+															message: `"${song.title}" has been removed from your library.`,
+														});
+
+														if (currentTrack && currentTrack.id === song.id) {
+															playNext();
 														}
 													} catch (err) {
 														console.error("Failed to remove track:", err);
@@ -494,7 +492,7 @@ export const MusicLibrary = ({ query }: MusicLibraryProps) => {
 									await window.fr.fs.promises.mkdir(`${MusicPath}/${baseName}`);
 
 									const audioFileName = `audio${file.name.substring(file.name.lastIndexOf("."))}`;
-									await window.fr.fs.promises.writeFile(`${MusicPath}/${baseName}/${audioFileName}`, window.fr.buffer.from(new Uint8Array(arrayBuffer)));
+									await window.fr.fs.promises.writeFile(`${MusicPath}/${baseName}/${audioFileName}`, window.fr.buffer.from(arrayBuffer));
 
 									const artists = artistRef.current?.value.trim() || "";
 									const artistsArray = artists.includes(",")

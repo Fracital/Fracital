@@ -362,8 +362,8 @@ const FavoriteModal = () => {
 							href: url,
 						};
 						currLinks.push(newLink);
-						window.dispatchEvent(new Event("links-upd"));
 						window.localStorage.setItem("quicklinks", JSON.stringify(currLinks));
+						window.dispatchEvent(new Event("links-upd"));
 						closeModal();
 					}}
 					className={

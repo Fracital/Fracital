@@ -24,8 +24,12 @@ export const useTabsStore = create<{
 	newTab: (props: TabProps) => void;
 	closeTab: (id: string) => void;
 	updateTab: (id: string, changes: Partial<TabProps>) => void;
+	refreshTab: (id: string) => void;
 	getHistory: (id: string) => { url: string; title: string; icon?: string; displayUrl?: string }[] | null;
 	setHistory: (id: string, history: { url: string; title: string; icon?: string; displayUrl?: string }[]) => void;
+	getHistoryIndex: (id: string) => number;
+	setHistoryIndex: (id: string, index: number) => void;
+	pushHistory: (id: string, entry: { url: string; title: string; icon?: string; displayUrl?: string }) => void;
 	newGroup: (id: string | null, name: string, icon?: string) => void;
 	addTabToGroup: (groupId: string, tab: TabProps) => void;
 	moveTabRelative: (draggedId: string, targetId: string, placeBefore: boolean) => void;
@@ -37,10 +41,12 @@ export const useTabsStore = create<{
 		{
 			id: baseId,
 			title: "New Tab",
-			url: "newtab",
+			url: "about:newtab",
 			current: true,
-			displayUrl: "newtab",
+			displayUrl: "about:newtab",
 			index: 0,
+			history: [{ url: "about:newtab", title: "New Tab", displayUrl: "about:newtab" }] as any,
+			historyIndex: 0,
 		},
 	],
 	setCurrentTab: (id: string | null) =>
@@ -55,7 +61,15 @@ export const useTabsStore = create<{
 	tabsOpen: false,
 	newTab: (props: TabProps) => {
 		const id = props.id ?? createId();
-		const tabWithId: TabProps = { ...props, id, current: true } as TabProps;
+		const initialHistory = [
+			{
+				url: props.url,
+				title: props.title,
+				icon: typeof props.icon === "string" ? props.icon : undefined,
+				displayUrl: props.displayUrl,
+			},
+		] as any;
+		const tabWithId: TabProps = { ...props, id, current: true, history: initialHistory, historyIndex: 0 } as TabProps;
 		set(state => ({
 			tabs: state.tabs.map(tab => ({ ...tab, current: false })).concat(tabWithId as TabProps & { current: boolean }),
 		}));
@@ -79,6 +93,10 @@ export const useTabsStore = create<{
 		set(state => ({
 			tabs: state.tabs.map(tab => (tab.id === id ? { ...tab, ...changes } : tab)),
 		})),
+	refreshTab: (id: string) =>
+		set(state => ({
+			tabs: state.tabs.map(tab => (tab.id === id ? { ...tab, refreshKey: (tab.refreshKey ?? 0) + 1 } : tab)),
+		})),
 	getHistory: (id: string) => {
 		const tab = get().tabs.find(t => t.id === id);
 		return (tab as any)?.history ?? null;
@@ -86,6 +104,29 @@ export const useTabsStore = create<{
 	setHistory: (id: string, history: { url: string; title: string; icon?: string; displayUrl?: string }[]) => {
 		set(state => ({
 			tabs: state.tabs.map(tab => (tab.id === id ? ({ ...tab, history } as unknown as TabProps) : tab)),
+		}));
+	},
+	getHistoryIndex: (id: string) => {
+		const tab = get().tabs.find(t => t.id === id);
+		return (tab as any)?.historyIndex ?? 0;
+	},
+	setHistoryIndex: (id: string, index: number) => {
+		set(state => ({
+			tabs: state.tabs.map(tab => (tab.id === id ? ({ ...tab, historyIndex: index } as unknown as TabProps) : tab)),
+		}));
+	},
+	pushHistory: (id: string, entry: { url: string; title: string; icon?: string; displayUrl?: string }) => {
+		const tab = get().tabs.find(t => t.id === id);
+		if (!tab) return;
+
+		const currentHistory = (tab as any)?.history ?? [];
+		const currentIndex = (tab as any)?.historyIndex ?? 0;
+
+		const newHistory = [...currentHistory.slice(0, currentIndex + 1), entry];
+		const newIndex = newHistory.length - 1;
+
+		set(state => ({
+			tabs: state.tabs.map(t => (t.id === id ? ({ ...t, history: newHistory, historyIndex: newIndex } as unknown as TabProps) : t)),
 		}));
 	},
 	moveTabRelative: (draggedId: string, targetId: string, placeBefore: boolean) =>
@@ -96,7 +137,6 @@ export const useTabsStore = create<{
 			const item = tabs.splice(from, 1)[0];
 			let to = tabs.findIndex(t => t.id === targetId);
 			if (to === -1) {
-				// append to end
 				tabs.push(item);
 				return { tabs };
 			}
@@ -167,6 +207,8 @@ export const useMusicStore = create<{
 	src: string;
 	currentTrack: Track | null;
 	queue: Track[];
+	playerView: "tracks" | "bigplayer";
+	playedHistory: Track[];
 
 	addTrack: (track: Track) => void;
 	removeTrack: (id: string) => void;
@@ -174,11 +216,15 @@ export const useMusicStore = create<{
 
 	playTrack: (track: Track) => void;
 	playNext: () => void;
-	playPrev: () => void;
+	playPrev: () => boolean;
+
+	changeView: (view: "tracks" | "bigplayer") => void;
 }>((set, get) => ({
 	src: "",
 	currentTrack: null,
 	queue: [],
+	playerView: "bigplayer",
+	playedHistory: [],
 
 	addTrack: track => {
 		set(state => ({
@@ -197,10 +243,14 @@ export const useMusicStore = create<{
 		}));
 	},
 	setCurrentTrack: track => {
-		set({ currentTrack: track ? { ...track, id: typeof track.id === "string" && track.id.length > 0 ? createId() : createId() } : null, src: track?.src || "" });
+		const { currentTrack, playedHistory } = get();
+		const nextHistory = currentTrack ? [...playedHistory, currentTrack] : playedHistory;
+		set({ currentTrack: track ? { ...track, id: typeof track.id === "string" && track.id.length > 0 ? createId() : createId() } : null, src: track?.src || "", playedHistory: nextHistory });
 	},
 	playTrack: track => {
-		set({ currentTrack: track, src: track.src });
+		const { currentTrack, playedHistory } = get();
+		const nextHistory = currentTrack ? [...playedHistory, currentTrack] : playedHistory;
+		set({ currentTrack: track, src: track.src, playedHistory: nextHistory });
 	},
 	playNext: () => {
 		const { queue, currentTrack } = get();
@@ -211,13 +261,15 @@ export const useMusicStore = create<{
 		if (next) set({ currentTrack: next });
 	},
 	playPrev: () => {
-		const { queue, currentTrack } = get();
-		if (!currentTrack || queue.length === 0) return;
-
-		const index = queue.findIndex(t => t.id === currentTrack.id);
-		const prev = queue[index - 1];
-		if (prev) set({ currentTrack: prev });
+		const { playedHistory } = get();
+		if (playedHistory.length > 0) {
+			const prev = playedHistory[playedHistory.length - 1];
+			set({ currentTrack: prev, playedHistory: playedHistory.slice(0, -1) });
+			return true;
+		}
+		return false;
 	},
+	changeView: (view: "tracks" | "bigplayer") => set({ playerView: view }),
 }));
 
 interface FileEntry {
@@ -240,7 +292,7 @@ export const useFilesStore = create<{
 	fileTree: FileEntry[] | null;
 	setCurrentDirectory: (path: string) => void;
 	setFileTree: (tree: any) => void;
-}>((set, get) => {
+}>(set => {
 	const debouncedReadDir = debounce(async (path: string) => {
 		try {
 			const dir = await window.fr.fs.promises.readdir(path);

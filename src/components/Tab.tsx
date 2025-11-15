@@ -1,6 +1,6 @@
 import { XMarkIcon, GlobeAltIcon } from "@heroicons/react/24/solid";
 import { useSettingsStore, useTabsStore } from "../store";
-import { useRef, useState } from "react";
+import { useRef } from "react";
 
 export interface TabProps {
 	title: string;
@@ -10,11 +10,10 @@ export interface TabProps {
 	icon?: string | React.ReactNode | null;
 	history?: string[];
 	historyIndex?: number;
-	historyLength?: number;
-	historyPosition?: "start" | "middle" | "end";
 	index?: number;
 	current?: boolean;
 	groupId?: string;
+	refreshKey?: number;
 }
 
 export const Tab = ({ title, url, id, icon }: TabProps) => {
@@ -23,17 +22,12 @@ export const Tab = ({ title, url, id, icon }: TabProps) => {
 	const setCurrentTab = useTabsStore(state => state.setCurrentTab);
 	const closeTab = useTabsStore(state => state.closeTab);
 	const settings = useSettingsStore(state => state.settings);
-	const [currTitle, setTitle] = useState(title);
-	const [currIcon, setIcon] = useState(icon);
 
-	// @ts-expect-error Custom Event
-	window.addEventListener("updatedTab", (e: CustomEvent) => {
-		const response = JSON.parse(e.detail);
-		if (response.id === id) {
-			setTitle(response.title);
-			setIcon(response.icon);
-		}
-	});
+	// Read title and icon directly from store instead of local state
+	const thisTab = tabs.find(tab => tab.id === id);
+	const currTitle = thisTab?.title ?? title;
+	const currIcon = thisTab?.icon ?? icon;
+
 	const closeRef = useRef<SVGSVGElement>(null);
 
 	return (
@@ -82,7 +76,7 @@ export const Tab = ({ title, url, id, icon }: TabProps) => {
 
 					const input = document.querySelector<HTMLInputElement>("#input");
 					if (input && latestCurrentTab) {
-						input.value = latestCurrentTab.displayUrl || latestCurrentTab.url || "newtab";
+						input.value = latestCurrentTab.displayUrl || latestCurrentTab.url || "about:newtab";
 					}
 				}
 			}}

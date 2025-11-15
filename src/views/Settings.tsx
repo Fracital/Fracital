@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { RectangleGroupIcon, PaintBrushIcon, PlusIcon, TrashIcon, ScaleIcon, Cog6ToothIcon } from "@heroicons/react/24/solid";
+import { RectangleGroupIcon, PaintBrushIcon, PlusIcon, TrashIcon, ScaleIcon } from "@heroicons/react/24/solid";
 import { CheckCircleIcon } from "@heroicons/react/24/outline";
 import LinkCard from "../components/LinkCard";
 import { isColorBright } from "../libs/colorBright";
@@ -8,6 +8,9 @@ import type { linkProps } from "./Home";
 import { useSettingsStore } from "../store";
 import { loadTheme } from "../libs/theme";
 import { ThemePath, SettingsPath } from "../types";
+import { useModal } from "../components/Modal/ModalContext";
+import { Modal } from "../components/Modal/Modal";
+import FavoriteModal from "../components/Modal/Favorite";
 
 interface SettingsProps {
 	className?: string;
@@ -101,6 +104,7 @@ const Settings = ({ className }: SettingsProps) => {
 	const [page, setpage] = useState<string>("general");
 	const [floatingTabs, setFloatingTabs] = useState<boolean>(true);
 	const [themes, setThemes] = useState<any[]>([]);
+	const { openModal } = useModal();
 
 	const [links, setLinks] = useState<linkProps[]>(
 		(() => {
@@ -163,11 +167,13 @@ const Settings = ({ className }: SettingsProps) => {
 				setLinks([]);
 			}
 		};
-		window.addEventListener("links-updated", updLinks);
+		window.addEventListener("links-upd", updLinks);
+		window.addEventListener("storage", updLinks);
 		return () => {
-			window.removeEventListener("links-updated", updLinks);
+			window.removeEventListener("links-upd", updLinks);
+			window.removeEventListener("storage", updLinks);
 		};
-	}, [links]);
+	}, []);
 
 	const pages = {
 		general: (
@@ -179,51 +185,17 @@ const Settings = ({ className }: SettingsProps) => {
 					<div
 						className="flex flex-col p-3 rounded-2xl bg-[#ffffff25] hover:bg-[#ffffff35] overflow-hidden cursor-pointer duration-200"
 						onMouseDown={() => {
-							let linkname = "";
-							let linkicon = "";
-							let linkcolor = "";
-							let linkurl = "";
-							window.fr.dialog.prompt({
-								title: "Create new Link",
-								message: "Enter the name of the link:",
-								onOk: (res: string) => {
-									linkname = res;
+							openModal(
+								<Modal>
+									<FavoriteModal />
+								</Modal>,
+								{
+									url: "https://example.com",
+									name: "Example",
+									icon: "",
+									color: "#ffffff",
 								},
-							});
-							window.fr.dialog.prompt({
-								title: "Create new Link",
-								message: "Enter the URL of the icon for this link (leave empty for default):",
-								onOk: (res: string) => {
-									linkicon = res;
-								},
-							});
-							window.fr.dialog.prompt({
-								title: "Create new Link",
-								message: "Enter the color for this link (leave empty for default):",
-								onOk: (res: string) => {
-									linkcolor = res;
-								},
-							});
-							window.fr.dialog.prompt({
-								title: "Create new Link",
-								message: "Enter the URL for this link:",
-								onOk: (res: string) => {
-									linkurl = res;
-								},
-							});
-							if (!linkname || linkname.trim() === "") return;
-							if (!linkurl || linkurl.trim() === "") return;
-							const newLink: linkProps = {
-								title: linkname,
-								icon: linkicon && linkicon.trim() !== "" ? linkicon : "default",
-								color: linkcolor && linkcolor.trim() !== "" ? linkcolor : "#ffffff",
-								href: linkurl,
-							};
-							const stored = window.localStorage.getItem("quicklinks");
-							const links = stored ? JSON.parse(stored) : [];
-							links.push(newLink);
-							setLinks(links);
-							window.localStorage.setItem("quicklinks", JSON.stringify(links));
+							);
 						}}
 					>
 						<div className="*:pointer-events-none *:select-none">

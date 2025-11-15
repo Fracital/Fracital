@@ -104,8 +104,8 @@ const LinkCard: React.FC<LinkCardProps> = ({ title, icon, brightness, color, hre
 									const stored = window.localStorage.getItem("quicklinks");
 									const links = stored ? JSON.parse(stored) : [];
 									links.splice(id, 1);
-									window.dispatchEvent(new Event("links-upd"));
 									window.localStorage.setItem("quicklinks", JSON.stringify(links));
+									window.dispatchEvent(new Event("links-upd"));
 								}}
 							>
 								<TrashIcon className="size-6" />
@@ -199,7 +199,8 @@ const LinkCard: React.FC<LinkCardProps> = ({ title, icon, brightness, color, hre
 										const links = stored ? JSON.parse(stored) : [];
 										links.splice(id, 1);
 										window.localStorage.setItem("quicklinks", JSON.stringify(links));
-										window.location.reload();
+										window.dispatchEvent(new Event("links-upd"));
+										// Avoid full reload; listeners will update UI
 									}}
 								>
 									<TrashIcon className="size-6" />

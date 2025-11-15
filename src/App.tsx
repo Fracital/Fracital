@@ -1,6 +1,6 @@
 import { createId } from "@paralleldrive/cuid2";
 import { useEffect, useRef, useState } from "react";
-import { RectangleStackIcon, PlusIcon, Cog6ToothIcon, ChevronLeftIcon, ChevronRightIcon, IdentificationIcon, EllipsisVerticalIcon, XMarkIcon } from "@heroicons/react/24/solid";
+import { RectangleStackIcon, PlusIcon, Cog6ToothIcon, ChevronLeftIcon, ChevronRightIcon } from "@heroicons/react/24/solid";
 import type { detailProps } from "./libs/eventBus";
 import XOR from "./libs/XOR";
 import { useLocation } from "react-router-dom";
@@ -16,7 +16,7 @@ import Settings from "./views/Settings";
 import ExternalSite from "./views/ExternalSite";
 import Files from "./views/Files/Files";
 
-// import { BareMuxConnection } from "@mercuryworkshop/bare-mux";
+import { BareMuxConnection } from "@mercuryworkshop/bare-mux";
 import { usePanelsStore, useSettingsStore, useTabsStore } from "./store";
 import { quickLinks } from "./libs/init";
 import { initTheme } from "./libs/theme";
@@ -24,11 +24,9 @@ import { MusicLibrary } from "./views/Music/MusicLibrary";
 import { View } from "./gui/View";
 import TabGroup from "./components/TabGroup";
 import { Login } from "./views/Login";
-import FavoriteModal from "./components/Modal/Favorite";
 import { ModalProvider } from "./components/Modal/ModalContext";
-import { SettingsPath } from "./types";
+import { getProxy, isWebOS, SettingsPath } from "./types";
 
-/*
 const regSw = async () => {
 	await navigator.serviceWorker.getRegistrations().then(registrations => {
 		registrations.forEach(registration => {
@@ -77,7 +75,7 @@ const regSw = async () => {
 	navigator.serviceWorker.register("/uv/sw.js", { scope: "/uv/service/" });
 	navigator.serviceWorker.register("/scramjet-sw.js", { scope: "/service/" });
 };
-regSw();*/
+if (!isWebOS) regSw();
 
 const App = () => {
 	Api();
@@ -103,12 +101,17 @@ const App = () => {
 	const updateTab = useTabsStore(state => state.updateTab);
 
 	const [platform, setPlatform] = useState<string>("");
-	const [proxy] = useState<string | undefined>(localStorage.getItem("proxy") || undefined);
-
-	const [mainHeight, setMainHeight] = useState<number | undefined>(document.querySelector<HTMLDivElement>("#main")?.getBoundingClientRect().height || 805);
-	const [shellHeight, setShellHeight] = useState<number | undefined>(document.querySelector<HTMLDivElement>("#shell")?.getBoundingClientRect().height || 72);
+	const [proxy, setProxy] = useState<"sj" | "uv">("sj");
 
 	const tabsRef = useRef<HTMLDivElement>(null);
+
+	useEffect(() => {
+		const getProx = async () => {
+			const proxy = await getProxy();
+			setProxy(proxy);
+		};
+		getProx();
+	}, []);
 
 	useEffect(() => {
 		initTheme();
@@ -143,10 +146,39 @@ const App = () => {
 				icon: detail.icon,
 				displayUrl: detail.url,
 			});
+
+			// Push to history for native pages (about: URLs)
+			// Proxied pages handle their own history in ExternalSite.tsx
+			// Use pushHistory which properly handles truncating forward history
+			if (detail.url.includes("about:") && !(detail as any).isHistoryNavigation) {
+				const iconStr = typeof detail.icon === "string" ? detail.icon : undefined;
+				useTabsStore.getState().pushHistory(detail.id, {
+					url: detail.url,
+					title: detail.title,
+					icon: iconStr,
+					displayUrl: detail.displayUrl,
+				});
+			}
 		};
 		window.addEventListener("proxy-navigate", handler);
 		return () => window.removeEventListener("proxy-navigate", handler);
 	}, []);
+
+	useEffect(() => {
+		const refreshHandler = (e: Event) => {
+			const detail = (e as CustomEvent).detail;
+			const tabId = detail?.tab;
+			if (tabId) {
+				const tab = tabs.find(t => t.id === tabId);
+				// Only refresh React pages (about: URLs), iframes handle their own refresh
+				if (tab && tab.url.includes("about:")) {
+					useTabsStore.getState().refreshTab(tabId);
+				}
+			}
+		};
+		window.addEventListener("reload-tab", refreshHandler);
+		return () => window.removeEventListener("reload-tab", refreshHandler);
+	}, [tabs]);
 
 	useEffect(() => {
 		let detectedPlatform = "";
@@ -165,22 +197,6 @@ const App = () => {
 			else detectedPlatform = "Unknown";
 		}
 		setPlatform(detectedPlatform);
-	}, []);
-
-	useEffect(() => {
-		const mainHeight = document.querySelector<HTMLDivElement>("#main")?.getBoundingClientRect().height;
-		setMainHeight(mainHeight);
-		const shellHeight = document.querySelector<HTMLDivElement>("#shell")?.getBoundingClientRect().height;
-		setShellHeight(shellHeight);
-
-		const handleWindowSize = () => {
-			const mainHeight = document.querySelector<HTMLDivElement>("#main")?.getBoundingClientRect().height;
-			setMainHeight(mainHeight);
-			const shellHeight = document.querySelector<HTMLDivElement>("#shell")?.getBoundingClientRect().height;
-			setShellHeight(shellHeight);
-		};
-		window.addEventListener("resize", handleWindowSize);
-		return () => window.removeEventListener("resize", handleWindowSize);
 	}, []);
 
 	const nextTab = () => {
@@ -231,8 +247,8 @@ const App = () => {
 					newTab({
 						id: createId(),
 						title: "New Tab",
-						url: "newtab",
-						displayUrl: "newtab",
+						url: "about:newtab",
+						displayUrl: "about:newtab",
 					});
 				}
 				if (e.ctrlKey && key === "w") {
@@ -257,8 +273,8 @@ const App = () => {
 					newTab({
 						id: createId(),
 						title: "New Tab",
-						url: "newtab",
-						displayUrl: "newtab",
+						url: "about:newtab",
+						displayUrl: "about:newtab",
 					});
 				}
 				if (e.altKey && key === "w") {
@@ -289,13 +305,13 @@ const App = () => {
 
 	return (
 		<ModalProvider>
-			<div className="flex flex-col size-full gap-2.5 p-3">
+			<div className="flex flex-col h-screen w-full gap-2.5 p-3 overflow-hidden">
 				<Shell />
-				<div className="flex flex-col size-full">
-					<div id="main" className="relative flex size-full gap-2.5" style={{ height: settings["floating-tabs"] ? "100%" : `calc(100% - calc(${shellHeight}px + calc(var(--spacing) * 2.5))` }}>
+				<div className="flex flex-col flex-1 min-h-0">
+					<div id="main" className="relative flex flex-1 min-h-0 gap-2.5">
 						<div
 							className={
-								"relative size-full bg-(--secondary) inset-shadow-(--inset-shadow-primary) rounded-xl overflow-hidden" +
+								"relative flex-1 min-h-0 bg-(--secondary) inset-shadow-(--inset-shadow-primary) rounded-xl overflow-hidden" +
 								" " +
 								`
                             ${settings}
@@ -304,27 +320,34 @@ const App = () => {
 						>
 							{tabs.length > 0 ? (
 								tabs.map(item => {
-									if (item.url === "newtab") {
-										return (
-											<Home
-												key={item.id}
-												className={
-													"absolute inset-0 duration-150" +
-													" " +
-													`
-                                                ${currentTab ? (currentTab.id !== item.id ? "opacity-0 translate-y-2 pointer-events-none" : "") : ""}
-                                            `
-												}
-											/>
-										);
-									} else if (item.url.includes("about:")) {
+									if (item.url.includes("about:")) {
 										const page = item.url.replace("about:", "").split("?")[0];
-										if (page === "settings") {
+										const viewKey = `${item.id}-${item.refreshKey ?? 0}`;
+										if (page === "newtab") {
 											return (
 												<div key={item.id}>
 													{currentTab && (
-														<View key={item.id} id={item.id}>
-															<Settings />
+														<View key={viewKey} id={item.id}>
+															<Home
+																key={viewKey}
+																className={
+																	"absolute inset-0 duration-150" +
+																	" " +
+																	`
+																${currentTab ? (currentTab.id !== item.id ? "opacity-0 translate-y-2 pointer-events-none" : "") : ""}
+															`
+																}
+															/>
+														</View>
+													)}
+												</div>
+											);
+										} else if (page === "settings") {
+											return (
+												<div key={item.id}>
+													{currentTab && (
+														<View key={viewKey} id={item.id}>
+															<Settings key={viewKey} />
 														</View>
 													)}
 												</div>
@@ -335,8 +358,8 @@ const App = () => {
 											return (
 												<div key={item.id}>
 													{currentTab && (
-														<View key={item.id} id={item.id}>
-															<MusicLibrary query={query} />
+														<View key={viewKey} id={item.id}>
+															<MusicLibrary key={viewKey} query={query} />
 														</View>
 													)}
 												</div>
@@ -346,8 +369,8 @@ const App = () => {
 											return (
 												<div key={item.id}>
 													{currentTab && (
-														<View key={item.id} id={item.id}>
-															<Files query={query} />
+														<View key={viewKey} id={item.id}>
+															<Files key={viewKey} query={query} />
 														</View>
 													)}
 												</div>
@@ -356,8 +379,8 @@ const App = () => {
 											return (
 												<div key={item.id}>
 													{currentTab && (
-														<View key={item.id} id={item.id}>
-															<Login query={pathname} />
+														<View key={viewKey} id={item.id}>
+															<Login key={viewKey} query={pathname} />
 														</View>
 													)}
 												</div>
@@ -387,12 +410,12 @@ const App = () => {
 						</div>
 						<div
 							className={
-								(settings["floating-tabs"] && "absolute py-2") +
+								(settings["floating-tabs"] && "absolute py-2 h-full") +
 								" " +
-								"flex flex-col h-full duration-150" +
+								"flex flex-col flex-shrink-0 duration-150" +
 								" " +
 								`
-                            ${settings["floating-tabs"] === true ? (panelsOpen ? "w-60 right-2" : "w-10 -right-1") : panelsOpen ? "w-78 right-2" : "w-10 -right-1"}
+                            ${settings["floating-tabs"] === true ? (panelsOpen ? "w-60 right-2" : "w-10 -right-1") : panelsOpen ? "w-78" : "w-10"}
                             ${settings["floating-tabs"] ? "gap-2" : "gap-2.5"}
                         `
 							}
@@ -431,10 +454,10 @@ const App = () => {
 							<div
 								ref={tabsRef}
 								className={
-									"flex flex-col bg-(--secondary) inset-shadow-(--inset-shadow-primary) overflow-hidden duration-150" +
+									"flex flex-col bg-(--secondary) inset-shadow-(--inset-shadow-primary) overflow-hidden duration-150 min-h-0" +
 									" " +
 									`
-                                ${currentPanel === "tabs" ? "h-2/3" : "h-1/3"}
+                                ${currentPanel === "tabs" ? "flex-[2]" : "flex-1"}
                                 ${panelsOpen ? "w-full" : "w-50"}
                                 ${settings["floating-tabs"] && panelsOpen ? "rounded-lg" : "rounded-xl"}
                                 ${settings["floating-tabs"] && "shadow-[0_0_16px_3px_#00000035]"}
@@ -446,7 +469,7 @@ const App = () => {
 								}}
 							>
 								<div
-									className={"relative flex w-full h-full overflow-auto gap-2 p-2 flex-col items-stretch duration-200"}
+									className={"relative flex w-full flex-1 min-h-0 overflow-auto gap-2 p-2 flex-col items-stretch duration-200"}
 									onDragOver={e => {
 										e.preventDefault();
 										const el = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null;
@@ -546,9 +569,9 @@ const App = () => {
 												newTab({
 													id: createId(),
 													title: "New Tab",
-													url: "newtab",
+													url: "about:newtab",
 													current: true,
-													displayUrl: "newtab",
+													displayUrl: "about:newtab",
 												});
 											}}
 										>
@@ -571,7 +594,7 @@ const App = () => {
 							</div>
 							<QuickPlayer
 								className={`
-                                ${currentPanel === "quickplayer" ? "h-2/3" : "h-1/3"}
+                                ${currentPanel === "quickplayer" ? "flex-2" : "flex-1"} min-h-0
                             `}
 								panelsOpen={panelsOpen}
 								onMouseDown={() => {
