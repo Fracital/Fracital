@@ -30,7 +30,7 @@ const ExternalSite = ({ url, className, current, id }: ExternalSiteProps) => {
 					icon,
 					displayUrl: url,
 				});
-				useTabsStore.getState().setHistory(id, [...(useTabsStore.getState().getHistory(id) || []), { url: url, title: title, icon: icon || undefined }]);
+				useTabsStore.getState().pushHistory(id, { url: url, title: title, icon: icon || undefined });
 				window.dispatchEvent(
 					new CustomEvent("updatedTab", {
 						detail: JSON.stringify({

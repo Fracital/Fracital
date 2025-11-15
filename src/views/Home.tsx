@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import LinkCard from "../components/LinkCard";
 import { isColorBright } from "../libs/colorBright";
@@ -21,16 +21,31 @@ interface HomeProps {
 
 const Home = ({ className }: HomeProps) => {
 	const settings = useSettingsStore(state => state.settings);
-	const [links] = useState<linkProps[]>(
-		(() => {
-			const stored = window.localStorage.getItem("quicklinks");
-			try {
-				return stored ? JSON.parse(stored) : quickLinks;
-			} catch {
-				return quickLinks;
-			}
-		})(),
-	);
+	
+	const getLinks = () => {
+		const stored = window.localStorage.getItem("quicklinks");
+		try {
+			return stored ? JSON.parse(stored) : quickLinks;
+		} catch {
+			return quickLinks;
+		}
+	};
+
+	const [links, setLinks] = useState<linkProps[]>(getLinks());
+
+	useEffect(() => {
+		const handleLinksUpdate = () => {
+			setLinks(getLinks());
+		};
+
+		window.addEventListener("links-upd", handleLinksUpdate);
+		window.addEventListener("storage", handleLinksUpdate);
+
+		return () => {
+			window.removeEventListener("links-upd", handleLinksUpdate);
+			window.removeEventListener("storage", handleLinksUpdate);
+		};
+	}, []);
 
 	return (
 		<div className={"flex flex-col items-center justify-center size-full p-2" + " " + className}>

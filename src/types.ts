@@ -75,6 +75,7 @@ export interface SongProps {
 
 export interface Track {
 	id: string;
+	folderName?: string;
 	title: string;
 	artists: string | string[];
 	album: string;
