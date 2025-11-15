@@ -16,6 +16,12 @@ export const getProxy = async (): Promise<"sj" | "uv"> => {
 	return data.proxy;
 };
 
+export const changeProxy = async (proxy: "sj" | "uv"): Promise<void> => {
+	const data = JSON.parse(await window.fr.fs.promises.readFile(SettingsPath, "utf8"));
+	data.proxy = proxy;
+	await window.fr.fs.promises.writeFile(SettingsPath, JSON.stringify(data, null, 2), "utf8");
+};
+
 export const dirExists = async (path: string): Promise<boolean> => {
 	return new Promise(resolve => {
 		window.fr.fs.stat(path, (err: any, stats: any) => {

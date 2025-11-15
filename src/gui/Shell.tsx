@@ -30,7 +30,7 @@ import type { linkProps } from "../views/Home";
 import { useModal } from "../components/Modal/ModalContext";
 import FavoriteModal from "../components/Modal/Favorite";
 import { Modal } from "../components/Modal/Modal";
-import { getProxy } from "../types";
+import { changeProxy, getProxy } from "../types";
 
 declare global {
 	interface Window {
@@ -266,12 +266,12 @@ const Shell = () => {
 		};
 	}, [currentTab?.url]);
 
-	const handleProxyChange = (e: Event) => {
+	const handleProxyChange = async (e: Event) => {
 		const customEvent = e as CustomEvent;
 		const newProxy = customEvent.detail.proxy;
 		if (newProxy === "sj" || newProxy === "uv") {
 			setProxy(newProxy);
-			window.localStorage.setItem("proxy", newProxy);
+			await changeProxy(newProxy);
 		}
 	};
 
