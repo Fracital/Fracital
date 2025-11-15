@@ -9,6 +9,7 @@ import { baremuxPath } from "@mercuryworkshop/bare-mux/node";
 import { server as wisp } from "@mercuryworkshop/wisp-js/server";
 import { uvPath } from "@titaniumnetwork-dev/ultraviolet";
 import { scramjetPath } from "@mercuryworkshop/scramjet/path";
+import { isWebOS } from "./src/types";
 
 // https://vite.dev/config/
 export default defineConfig({
@@ -18,7 +19,7 @@ export default defineConfig({
 	plugins: [
 		react(),
 		tailwindcss(),
-		viteStaticCopy({
+		!isWebOS ? viteStaticCopy({
 			targets: [
 				{
 					src: `${baremuxPath}/**/*`.replace(/\\/g, "/"),
@@ -41,7 +42,7 @@ export default defineConfig({
 					overwrite: false,
 				},
 			],
-		}),
+		}) : null,
 		{
 			name: "vite-wisp-server",
 			configureServer(server) {

@@ -20,7 +20,6 @@ import {
 import { StarIcon as StarIconOutline } from "@heroicons/react/24/outline";
 import { FireIcon, WrenchScrewdriverIcon, CheckBadgeIcon } from "@heroicons/react/24/solid";
 import { Suspense, useEffect, useState, useRef } from "react";
-import { Link } from "react-router-dom";
 import { ShellButton } from "../components/ShellButton";
 import { useTabsStore, useSettingsStore } from "../store";
 import { createId } from "@paralleldrive/cuid2";
@@ -31,6 +30,7 @@ import type { linkProps } from "../views/Home";
 import { useModal } from "../components/Modal/ModalContext";
 import FavoriteModal from "../components/Modal/Favorite";
 import { Modal } from "../components/Modal/Modal";
+import { getProxy } from "../types";
 
 declare global {
 	interface Window {
@@ -276,10 +276,11 @@ const Shell = () => {
 	};
 
 	useEffect(() => {
-		const storedProxy = window.localStorage.getItem("proxy");
-		if (storedProxy === "sj" || storedProxy === "uv") {
-			setProxy(storedProxy as "uv" | "sj");
+		const getProx = async () => {
+			const proxy = await getProxy();
+			setProxy(proxy);
 		}
+		getProx();
 	}, []);
 
 	useEffect(() => {

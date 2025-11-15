@@ -1,6 +1,6 @@
 import { createId } from "@paralleldrive/cuid2";
 import { useEffect, useRef, useState } from "react";
-import { RectangleStackIcon, PlusIcon, Cog6ToothIcon, ChevronLeftIcon, ChevronRightIcon, IdentificationIcon, EllipsisVerticalIcon, XMarkIcon } from "@heroicons/react/24/solid";
+import { RectangleStackIcon, PlusIcon, Cog6ToothIcon, ChevronLeftIcon, ChevronRightIcon } from "@heroicons/react/24/solid";
 import type { detailProps } from "./libs/eventBus";
 import XOR from "./libs/XOR";
 import { useLocation } from "react-router-dom";
@@ -24,9 +24,8 @@ import { MusicLibrary } from "./views/Music/MusicLibrary";
 import { View } from "./gui/View";
 import TabGroup from "./components/TabGroup";
 import { Login } from "./views/Login";
-import FavoriteModal from "./components/Modal/Favorite";
 import { ModalProvider } from "./components/Modal/ModalContext";
-import { SettingsPath } from "./types";
+import { getProxy, isWebOS, SettingsPath } from "./types";
 
 const regSw = async () => {
 	await navigator.serviceWorker.getRegistrations().then(registrations => {
@@ -76,7 +75,7 @@ const regSw = async () => {
 	navigator.serviceWorker.register("/uv/sw.js", { scope: "/uv/service/" });
 	navigator.serviceWorker.register("/scramjet-sw.js", { scope: "/service/" });
 };
-regSw();
+if (!isWebOS) regSw();
 
 const App = () => {
 	Api();
@@ -102,9 +101,17 @@ const App = () => {
 	const updateTab = useTabsStore(state => state.updateTab);
 
 	const [platform, setPlatform] = useState<string>("");
-	const [proxy] = useState<string | undefined>(localStorage.getItem("proxy") || undefined);
+	const [proxy, setProxy] = useState<"sj" | "uv">("sj");
 
 	const tabsRef = useRef<HTMLDivElement>(null);
+
+	useEffect(() => {
+		const getProx = async () => {
+			const proxy = await getProxy();
+			setProxy(proxy);
+		}
+		getProx();
+	}, []);
 
 	useEffect(() => {
 		initTheme();

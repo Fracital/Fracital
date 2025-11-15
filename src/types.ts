@@ -4,14 +4,17 @@ declare global {
 	}
 }
 
-const FilerFS: any = window.Filer;
-export const Filer: FilerFS = new FilerFS.FileSystem();
-
 // For webOS Builds of Fracital
 export const ThemePath = "/themes/";
 export const StaticThemePath = "/themes/";
 export const SettingsPath = "/settings.json";
 export const MusicPath = "/music/";
+export const isWebOS = false;
+
+export const getProxy = async (): Promise<"sj" | "uv"> => {
+	const data = JSON.parse(await window.fr.fs.promises.readFile(SettingsPath, "utf8"));
+	return data.proxy;
+}
 
 export const dirExists = async (path: string): Promise<boolean> => {
 	return new Promise(resolve => {
