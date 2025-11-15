@@ -4,7 +4,7 @@ declare global {
 	}
 }
 
-if (typeof sessionStorage === 'undefined') {
+if (typeof sessionStorage === "undefined") {
 	(globalThis as any).sessionStorage = {
 		length: 0,
 		clear: () => {},
@@ -14,7 +14,7 @@ if (typeof sessionStorage === 'undefined') {
 		setItem: (_key: string, _value: string) => {},
 	};
 }
-if (typeof location === 'undefined') {
+if (typeof location === "undefined") {
 	(globalThis as any).location = {
 		pathname: "/",
 	};
@@ -37,7 +37,7 @@ export const changeProxy = async (proxy: "sj" | "uv"): Promise<void> => {
 	const data = JSON.parse(await window.fr.fs.promises.readFile(`/home/${sessionStorage.getItem("currAcc")}/settings.json`, "utf8"));
 	data.proxy = proxy === "sj" ? "Scramjet" : proxy === "uv" ? "Ultraviolet" : "Scramjet";
 	await window.fr.fs.promises.writeFile(`/home/${sessionStorage.getItem("currAcc")}/settings.json`, JSON.stringify(data, null, 4), "utf8");
-}
+};
 
 export const dirExists = async (path: string): Promise<boolean> => {
 	return new Promise(resolve => {
