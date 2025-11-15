@@ -279,7 +279,7 @@ const Shell = () => {
 		const getProx = async () => {
 			const proxy = await getProxy();
 			setProxy(proxy);
-		}
+		};
 		getProx();
 	}, []);
 

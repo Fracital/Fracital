@@ -19,30 +19,32 @@ export default defineConfig({
 	plugins: [
 		react(),
 		tailwindcss(),
-		!isWebOS ? viteStaticCopy({
-			targets: [
-				{
-					src: `${baremuxPath}/**/*`.replace(/\\/g, "/"),
-					dest: "baremux",
-					overwrite: false,
-				},
-				{
-					src: `${epoxyPath}/**/*`.replace(/\\/g, "/"),
-					dest: "epoxy",
-					overwrite: false,
-				},
-				{
-					src: `${scramjetPath}/**/*`.replace(/\\/g, "/"),
-					dest: "scramjet",
-					overwrite: true,
-				},
-				{
-					src: `${uvPath}/**/*`.replace(/\\/g, "/"),
-					dest: "uv",
-					overwrite: false,
-				},
-			],
-		}) : null,
+		!isWebOS
+			? viteStaticCopy({
+					targets: [
+						{
+							src: `${baremuxPath}/**/*`.replace(/\\/g, "/"),
+							dest: "baremux",
+							overwrite: false,
+						},
+						{
+							src: `${epoxyPath}/**/*`.replace(/\\/g, "/"),
+							dest: "epoxy",
+							overwrite: false,
+						},
+						{
+							src: `${scramjetPath}/**/*`.replace(/\\/g, "/"),
+							dest: "scramjet",
+							overwrite: true,
+						},
+						{
+							src: `${uvPath}/**/*`.replace(/\\/g, "/"),
+							dest: "uv",
+							overwrite: false,
+						},
+					],
+				})
+			: null,
 		{
 			name: "vite-wisp-server",
 			configureServer(server) {
