@@ -238,7 +238,7 @@ const Shell = () => {
 	const [fullscreen] = useState<boolean>(false);
 
 	const [uvVersion] = useState("v3.2.10");
-	const [sjVersion] = useState(window.$scramjetVersion.version);
+	const [sjVersion] = useState(window.parent.$scramjetVersion.version);
 
 	const { openModal } = useModal();
 	const [isFavorited, setIsFavorited] = useState<boolean>(false);
