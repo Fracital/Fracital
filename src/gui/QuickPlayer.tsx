@@ -178,7 +178,7 @@ export const QuickPlayer = ({ panelsOpen, className, onMouseDown }: QuickPlayerP
 
 	const handleVolumeMouseMove = (e: MouseEvent) => {
 		if (!isVolumeDragging || !volumeStartRef.current) return;
-		setVolumeSlide(true)
+		setVolumeSlide(true);
 		const sensitivity = 0.0035;
 		const deltaPx = e.clientX - volumeStartRef.current.x;
 
@@ -197,7 +197,7 @@ export const QuickPlayer = ({ panelsOpen, className, onMouseDown }: QuickPlayerP
 
 	const handleVolumeMouseUp = () => {
 		if (isVolumeDragging) setIsVolumeDragging(false);
-		setVolumeSlide(false)
+		setVolumeSlide(false);
 		volumeStartRef.current = null;
 		setVolumeSliderPos(null);
 		setShowVolumeSlider(false);
@@ -216,7 +216,7 @@ export const QuickPlayer = ({ panelsOpen, className, onMouseDown }: QuickPlayerP
 			setMuted(true);
 		} else {
 			setMuted(false);
-			const restore = prevVolRef.current > 0 ? prevVolRef.current : (volume > 0 ? volume : 0.5);
+			const restore = prevVolRef.current > 0 ? prevVolRef.current : volume > 0 ? volume : 0.5;
 			if (audioRef.current) audioRef.current.volume = restore;
 			setVolume(restore);
 		}
@@ -236,7 +236,6 @@ export const QuickPlayer = ({ panelsOpen, className, onMouseDown }: QuickPlayerP
 			window.removeEventListener("mouseup", handleMouseUp);
 		};
 	}, [isDragging]);
-
 
 	useEffect(() => {
 		if (isVolumeDragging) {
@@ -288,50 +287,201 @@ export const QuickPlayer = ({ panelsOpen, className, onMouseDown }: QuickPlayerP
 					}
 					onMouseDown={onMouseDown}
 				>
-					{
-						playerView === "tracks" || !currentTrack ? (
-							<>
-								<div
-									className={"relative flex w-full flex-1 min-h-0 overflow-auto gap-2 p-2 px-3 flex-col duration-200"}
-								>
-									<div className="flex flex-col items-start">
-										{currentTrack ? (
-											<h1
-												className={
-													"ml-1.5 mt-1.5 text-2xl font-bold" +
-													" " +
-													`
+					{playerView === "tracks" || !currentTrack ? (
+						<>
+							<div className={"relative flex w-full flex-1 min-h-0 overflow-auto gap-2 p-2 px-3 flex-col duration-200"}>
+								<div className="flex flex-col items-start">
+									{currentTrack ? (
+										<h1
+											className={
+												"ml-1.5 mt-1.5 text-2xl font-bold" +
+												" " +
+												`
 												${settings.brightness === "dark" ? "text-[#ffffff]" : "text-[#000000]"}
 											`
+											}
+										>
+											Currently playing
+										</h1>
+									) : (
+										<h1
+											className={
+												"ml-1.5 mt-1.5 text-2xl font-bold" +
+												" " +
+												`
+												${settings.brightness === "dark" ? "text-[#ffffff97]" : "text-[#00000097]"}
+											`
+											}
+										>
+											Nothing playing
+										</h1>
+									)}
+									{currentTrack && (
+										<div className="flex items-center justify-between gap-2.5 p-1.5 w-full rounded-lg hover:bg-[#ffffff28] duration-150">
+											<div className="flex items-center gap-2.5">
+												{currentTrack.cover && <img className="size-10 rounded-md" src={currentTrack.cover} alt={currentTrack.title} />}
+												{!currentTrack.cover && (
+													<div
+														className={
+															"size-10 rounded-md flex justify-center items-center bg-(--primary) text-(--text-secondary) font-bold" +
+															" " +
+															`
+															${settings.brightness === "dark" ? "text-[#ffffff6a]" : "text-[#0000006a]"}
+														`
+														}
+													>
+														<MusicalNoteIcon className="size-6" />
+													</div>
+												)}
+												<div className="flex flex-col gap-1">
+													<h1
+														title={currentTrack.title}
+														className={
+															"text-md font-semibold leading-none" +
+															" " +
+															`
+															${settings.brightness === "dark" ? "text-[#ffffff]" : "text-[#000000]"}
+														`
+														}
+													>
+														{currentTrack.title.length > 22 ? currentTrack.title.slice(0, 22) + "..." : currentTrack.title}
+													</h1>
+													{Array.isArray(currentTrack.artists) && currentTrack.artists.length > 1 ? (
+														<div className="flex gap-1.5">
+															{currentTrack.explicit && <span className="flex justify-center items-center size-5 text-xs font-bold rounded-sm bg-[#ffffff46]">E</span>}
+															<div className="flex lg:flex-row flex-col gap-0.5">
+																{currentTrack.artists.map((artist, index) => (
+																	<div
+																		key={index}
+																		className={
+																			"flex justify-center items-center w-max" +
+																			" " +
+																			`
+																				${settings.brightness === "dark" ? "text-[#ffffff6a]" : "text-[#0000006a]"}
+																			`
+																		}
+																	>
+																		<span className="text-xs leading-none duration-150" key={index}>
+																			{artist}
+																		</span>
+																		{index < currentTrack.artists.length - 1 && <span>,</span>}
+																	</div>
+																))}
+															</div>
+															{isVolumeDragging && showVolumeSlider && volumeSliderPos && (
+																<div className="fixed z-50 select-none pointer-events-none" style={{ left: volumeSliderPos.x - 80, top: volumeSliderPos.y - 48 }}>
+																	<div className="px-3 py-2 rounded-lg shadow-[0_6px_24px_#00000050] bg-(--secondary) inset-shadow-(--inset-shadow-primary)">
+																		<div className="w-40 h-2 rounded-full bg-(--text-tertiary) overflow-hidden">
+																			<div style={{ width: `${Math.round(volume * 100)}%` }} className="h-full bg-white"></div>
+																		</div>
+																		<div className="mt-1 text-xs text-(--text-secondary) text-center font-medium">{Math.round(volume * 100)}%</div>
+																	</div>
+																</div>
+															)}
+														</div>
+													) : (
+														<h2
+															className={
+																"text-sm leading-none cursor-pointer duration-150" +
+																" " +
+																`
+																${settings.brightness === "dark" ? "text-[#ffffff6a]" : "text-[#0000006a]"}
+															`
+															}
+														>
+															{currentTrack.artists[0]}
+														</h2>
+													)}
+												</div>
+											</div>
+											<EllipsisHorizontalIcon
+												className={
+													"size-6 mr-2 stroke-current stroke-1.5 cursor-pointer duration-150" +
+													" " +
+													`
+													${settings.brightness === "dark" ? "text-[#ffffffac] hover:text-[#ffffff]" : "text-[#000000ac] hover:text-[#000000]"}
+												`
 												}
-											>
-												Currently playing
-											</h1>
-										) : (
+												onClick={e => {
+													e.preventDefault();
+													e.stopPropagation();
+
+													const items: MenuItem[] = [
+														{
+															title: "Add to queue",
+															icon: <PlusIcon className="size-5 stroke-current stroke-1" />,
+															onClick: () => {
+																addTrack(currentTrack);
+															},
+														},
+														{
+															title: "Restart track",
+															icon: <ArrowUturnLeftIcon className="size-5 stroke-current stroke-1" />,
+															onClick: () => {
+																setCurrentTime(0);
+																if (audioRef.current) {
+																	audioRef.current.pause();
+																	audioRef.current.currentTime = 0;
+																}
+															},
+														},
+													];
+
+													if (queue.filter(track => track.id === currentTrack.id).length > 1) {
+														items.push({
+															title: "Remove instances from queue",
+															icon: <MinusIcon className="size-5 stroke-current stroke-1" />,
+															onClick: () => {
+																removeTrack(currentTrack.id);
+															},
+														});
+													}
+
+													setContextMenu({
+														x: e.clientX,
+														y: e.clientY,
+														visible: true,
+														items: items,
+													});
+												}}
+											/>
+										</div>
+									)}
+								</div>
+								{queue && (
+									<div className="flex flex-col items-start">
+										{queue.length > 0 && (
 											<h1
 												className={
 													"ml-1.5 mt-1.5 text-2xl font-bold" +
 													" " +
 													`
-												${settings.brightness === "dark" ? "text-[#ffffff97]" : "text-[#00000097]"}
-											`
+													${settings.brightness === "dark" ? "text-[#ffffff]" : "text-[#000000]"}
+												`
 												}
 											>
-												Nothing playing
+												Queue
 											</h1>
 										)}
-										{currentTrack && (
-											<div className="flex items-center justify-between gap-2.5 p-1.5 w-full rounded-lg hover:bg-[#ffffff28] duration-150">
+										{queue.map(song => (
+											<div
+												key={song.id}
+												className="flex items-center justify-between gap-2.5 p-1.5 w-full rounded-lg hover:bg-[#ffffff28] duration-150"
+												onClick={() => {
+													setCurrentTrack(song);
+													removeTrack(song.id);
+												}}
+											>
 												<div className="flex items-center gap-2.5">
-													{currentTrack.cover && <img className="size-10 rounded-md" src={currentTrack.cover} alt={currentTrack.title} />}
-													{!currentTrack.cover && (
+													{song.cover && <img className="size-10 rounded-md" src={song.cover} alt={song.title} />}
+													{!song.cover && (
 														<div
 															className={
 																"size-10 rounded-md flex justify-center items-center bg-(--primary) text-(--text-secondary) font-bold" +
 																" " +
 																`
-															${settings.brightness === "dark" ? "text-[#ffffff6a]" : "text-[#0000006a]"}
-														`
+																	${settings.brightness === "dark" ? "text-[#ffffff6a]" : "text-[#0000006a]"}
+																`
 															}
 														>
 															<MusicalNoteIcon className="size-6" />
@@ -339,64 +489,51 @@ export const QuickPlayer = ({ panelsOpen, className, onMouseDown }: QuickPlayerP
 													)}
 													<div className="flex flex-col gap-1">
 														<h1
-															title={currentTrack.title}
+															title={song.title}
 															className={
 																"text-md font-semibold leading-none" +
 																" " +
 																`
-															${settings.brightness === "dark" ? "text-[#ffffff]" : "text-[#000000]"}
-														`
+																	${settings.brightness === "dark" ? "text-[#ffffff]" : "text-[#000000]"}
+																`
 															}
 														>
-															{currentTrack.title.length > 22 ? currentTrack.title.slice(0, 22) + "..." : currentTrack.title}
+															{song.title.length > 22 ? song.title.slice(0, 22) + "..." : song.title}
 														</h1>
-														{Array.isArray(currentTrack.artists) && currentTrack.artists.length > 1 ? (
+														{Array.isArray(song.artists) && song.artists.length > 1 ? (
 															<div className="flex gap-1.5">
-																{currentTrack.explicit && <span className="flex justify-center items-center size-5 text-xs font-bold rounded-sm bg-[#ffffff46]">E</span>}
+																{song.explicit && <span className="flex justify-center items-center size-5 text-xs font-bold rounded-sm bg-[#ffffff46]">E</span>}
 																<div className="flex lg:flex-row flex-col gap-0.5">
-																	{currentTrack.artists.map((artist, index) => (
+																	{song.artists.map((artist, index) => (
 																		<div
 																			key={index}
 																			className={
 																				"flex justify-center items-center w-max" +
 																				" " +
 																				`
-																				${settings.brightness === "dark" ? "text-[#ffffff6a]" : "text-[#0000006a]"}
-																			`
+																						${settings.brightness === "dark" ? "text-[#ffffff6a]" : "text-[#0000006a]"}
+																					`
 																			}
 																		>
 																			<span className="text-xs leading-none duration-150" key={index}>
 																				{artist}
 																			</span>
-																			{index < currentTrack.artists.length - 1 && <span>,</span>}
+																			{index < song.artists.length - 1 && <span>,</span>}
 																		</div>
 																	))}
 																</div>
-																{isVolumeDragging && showVolumeSlider && volumeSliderPos && (
-																	<div
-																		className="fixed z-50 select-none pointer-events-none"
-																		style={{ left: volumeSliderPos.x - 80, top: volumeSliderPos.y - 48 }}
-																	>
-																		<div className="px-3 py-2 rounded-lg shadow-[0_6px_24px_#00000050] bg-(--secondary) inset-shadow-(--inset-shadow-primary)">
-																			<div className="w-40 h-2 rounded-full bg-(--text-tertiary) overflow-hidden">
-																				<div style={{ width: `${Math.round(volume * 100)}%` }} className="h-full bg-white"></div>
-																			</div>
-																			<div className="mt-1 text-xs text-(--text-secondary) text-center font-medium">{Math.round(volume * 100)}%</div>
-																		</div>
-																	</div>
-																)}
 															</div>
 														) : (
 															<h2
 																className={
-																	"text-sm leading-none cursor-pointer duration-150" +
+																	"text-sm leading-none duration-150" +
 																	" " +
 																	`
-																${settings.brightness === "dark" ? "text-[#ffffff6a]" : "text-[#0000006a]"}
-															`
+																		${settings.brightness === "dark" ? "text-[#ffffff6a]" : "text-[#0000006a]"}
+																	`
 																}
 															>
-																{currentTrack.artists[0]}
+																{song.artists[0]}
 															</h2>
 														)}
 													</div>
@@ -406,8 +543,8 @@ export const QuickPlayer = ({ panelsOpen, className, onMouseDown }: QuickPlayerP
 														"size-6 mr-2 stroke-current stroke-1.5 cursor-pointer duration-150" +
 														" " +
 														`
-													${settings.brightness === "dark" ? "text-[#ffffffac] hover:text-[#ffffff]" : "text-[#000000ac] hover:text-[#000000]"}
-												`
+															${settings.brightness === "dark" ? "text-[#ffffffac] hover:text-[#ffffff]" : "text-[#000000ac] hover:text-[#000000]"}
+														`
 													}
 													onClick={e => {
 														e.preventDefault();
@@ -416,33 +553,19 @@ export const QuickPlayer = ({ panelsOpen, className, onMouseDown }: QuickPlayerP
 														const items: MenuItem[] = [
 															{
 																title: "Add to queue",
-																icon: <PlusIcon className="size-5 stroke-current stroke-1" />,
+																icon: null,
 																onClick: () => {
-																	addTrack(currentTrack);
+																	addTrack(song);
 																},
 															},
 															{
-																title: "Restart track",
-																icon: <ArrowUturnLeftIcon className="size-5 stroke-current stroke-1" />,
+																title: "Remove from queue",
+																icon: null,
 																onClick: () => {
-																	setCurrentTime(0);
-																	if (audioRef.current) {
-																		audioRef.current.pause();
-																		audioRef.current.currentTime = 0;
-																	}
+																	removeTrack(song.id);
 																},
 															},
 														];
-
-														if (queue.filter(track => track.id === currentTrack.id).length > 1) {
-															items.push({
-																title: "Remove instances from queue",
-																icon: <MinusIcon className="size-5 stroke-current stroke-1" />,
-																onClick: () => {
-																	removeTrack(currentTrack.id);
-																},
-															});
-														}
 
 														setContextMenu({
 															x: e.clientX,
@@ -453,244 +576,122 @@ export const QuickPlayer = ({ panelsOpen, className, onMouseDown }: QuickPlayerP
 													}}
 												/>
 											</div>
-										)}
+										))}
 									</div>
-									{queue && (
-										<div className="flex flex-col items-start">
-											{queue.length > 0 && (
-												<h1
-													className={
-														"ml-1.5 mt-1.5 text-2xl font-bold" +
-														" " +
-														`
-													${settings.brightness === "dark" ? "text-[#ffffff]" : "text-[#000000]"}
-												`
-													}
-												>
-													Queue
-												</h1>
-											)}
-											{queue.map((song) => (
-												<div
-													key={song.id}
-													className="flex items-center justify-between gap-2.5 p-1.5 w-full rounded-lg hover:bg-[#ffffff28] duration-150"
-													onClick={() => {
-														setCurrentTrack(song);
-														removeTrack(song.id);
-													}}
-												>
-													<div className="flex items-center gap-2.5">
-														{song.cover && <img className="size-10 rounded-md" src={song.cover} alt={song.title} />}
-														{!song.cover && (
-															<div
-																className={
-																	"size-10 rounded-md flex justify-center items-center bg-(--primary) text-(--text-secondary) font-bold" +
-																	" " +
-																	`
-																	${settings.brightness === "dark" ? "text-[#ffffff6a]" : "text-[#0000006a]"}
-																`
-																}
-															>
-																<MusicalNoteIcon className="size-6" />
-															</div>
-														)}
-														<div className="flex flex-col gap-1">
-															<h1
-																title={song.title}
-																className={
-																	"text-md font-semibold leading-none" +
-																	" " +
-																	`
-																	${settings.brightness === "dark" ? "text-[#ffffff]" : "text-[#000000]"}
-																`
-																}
-															>
-																{song.title.length > 22 ? song.title.slice(0, 22) + "..." : song.title}
-															</h1>
-															{Array.isArray(song.artists) && song.artists.length > 1 ? (
-																<div className="flex gap-1.5">
-																	{song.explicit && <span className="flex justify-center items-center size-5 text-xs font-bold rounded-sm bg-[#ffffff46]">E</span>}
-																	<div className="flex lg:flex-row flex-col gap-0.5">
-																		{song.artists.map((artist, index) => (
-																			<div
-																				key={index}
-																				className={
-																					"flex justify-center items-center w-max" +
-																					" " +
-																					`
-																						${settings.brightness === "dark" ? "text-[#ffffff6a]" : "text-[#0000006a]"}
-																					`
-																				}
-																			>
-																				<span className="text-xs leading-none duration-150" key={index}>
-																					{artist}
-																				</span>
-																				{index < song.artists.length - 1 && <span>,</span>}
-																			</div>
-																		))}
-																	</div>
-																</div>
-															) : (
-																<h2
-																	className={
-																		"text-sm leading-none duration-150" +
-																		" " +
-																		`
-																		${settings.brightness === "dark" ? "text-[#ffffff6a]" : "text-[#0000006a]"}
-																	`
-																	}
-																>
-																	{song.artists[0]}
-																</h2>
-															)}
-														</div>
-													</div>
-													<EllipsisHorizontalIcon
-														className={
-															"size-6 mr-2 stroke-current stroke-1.5 cursor-pointer duration-150" +
-															" " +
-															`
-															${settings.brightness === "dark" ? "text-[#ffffffac] hover:text-[#ffffff]" : "text-[#000000ac] hover:text-[#000000]"}
-														`
-														}
-														onClick={e => {
-															e.preventDefault();
-															e.stopPropagation();
-
-															const items: MenuItem[] = [
-																{
-																	title: "Add to queue",
-																	icon: null,
-																	onClick: () => {
-																		addTrack(song);
-																	},
-																},
-																{
-																	title: "Remove from queue",
-																	icon: null,
-																	onClick: () => {
-																		removeTrack(song.id);
-																	},
-																},
-															];
-
-															setContextMenu({
-																x: e.clientX,
-																y: e.clientY,
-																visible: true,
-																items: items,
-															});
-														}}
-													/>
-												</div>
-											))}
-										</div>
-									)}
-								</div>
-								<div>
-									<div className="relative flex justify-center items-center h-9">
-										<div
-											className={
-												"absolute flex p-2.5 gap-2 w-full items-center" +
-												" " +
-												`
-											${currentTrack ? "" : "-bottom-20"}
-										`
-											}
-										>
-											<span className="font-medium">{formatTime(currentTime)}</span>
-											<span ref={seekbarRef} className="w-full h-2 bg-(--text-tertiary) rounded-full overflow-hidden hover:h-2.5 cursor-pointer duration-150" onMouseDown={handleMouseDown} onClick={e => handleSeek(e.clientX)}>
-												<span style={{ width: `var(--current, 0%)` }} className={"flex h-full" + " " + `
-													${settings.brightness === "dark" ? "bg-white" : "bg-black"}
-												`}></span>
-											</span>
-											<span className="font-medium">{formatTime(duration)}</span>
-										</div>
-									</div>
+								)}
+							</div>
+							<div>
+								<div className="relative flex justify-center items-center h-9">
 									<div
 										className={
-											"flex min-max-1 w-full p-1.5 items-start justify-between gap-0.5" +
+											"absolute flex p-2.5 gap-2 w-full items-center" +
 											" " +
 											`
-										${settings.brightness === "dark" ? "bg-[#ffffff10]" : "bg-[#00000025]"}
-									`
+											${currentTrack ? "" : "-bottom-20"}
+										`
 										}
 									>
-										<div
-											className={
-												"flex gap-0.5 duration-150" +
-												" " +
+										<span className="font-medium">{formatTime(currentTime)}</span>
+										<span ref={seekbarRef} className="w-full h-2 bg-(--text-tertiary) rounded-full overflow-hidden hover:h-2.5 cursor-pointer duration-150" onMouseDown={handleMouseDown} onClick={e => handleSeek(e.clientX)}>
+											<span
+												style={{ width: `var(--current, 0%)` }}
+												className={
+													"flex h-full" +
+													" " +
+													`
+													${settings.brightness === "dark" ? "bg-white" : "bg-black"}
 												`
+												}
+											></span>
+										</span>
+										<span className="font-medium">{formatTime(duration)}</span>
+									</div>
+								</div>
+								<div
+									className={
+										"flex min-max-1 w-full p-1.5 items-start justify-between gap-0.5" +
+										" " +
+										`
+										${settings.brightness === "dark" ? "bg-[#ffffff10]" : "bg-[#00000025]"}
+									`
+									}
+								>
+									<div
+										className={
+											"flex gap-0.5 duration-150" +
+											" " +
+											`
 											${currentTrack ? "" : "opacity-0 translate-y-2 pointer-events-none"}
 										`
-											}
-										>
-											<div className="flex gap-0.5">
-												<button
-													ref={playRef}
-													title={platform.includes("Mac") ? "Play ⌃ + P" : "Play: Alt + S"}
-													className="flex items-center justify-center p-2 hover:bg-[#ffffff10] text-(--text-secondary) hover:text-(--text-primary) rounded-md cursor-pointer duration-150"
-													onClick={() => {
-														if (audioRef.current?.paused) {
-															audioRef.current?.play();
-															setIsPlaying(true);
-														} else {
-															audioRef.current?.pause();
-															setIsPlaying(false);
-														}
-													}}
-												>
-													{isPlaying === false ? <PlayIcon className="size-5 text-current stroke-current stroke-0.5 pointer-events-none" /> : <PauseIcon className="size-5 text-current stroke-current stroke-0.5 pointer-events-none" />}
-												</button>
-											</div>
-											<div className="flex gap-0.5">
-												<div title={platform.includes("Mac") ? "Play ⌃ + P" : "Play: Alt + S"} className="flex items-center justify-center p-2 hover:bg-[#ffffff10] text-(--text-secondary) hover:text-(--text-primary) rounded-md cursor-pointer duration-150" onClick={() => {}}>
-													<HeartOutline className="size-5 text-current stroke-current stroke-3 pointer-events-none" />
-												</div>
-												<div
-													title="Drag left/right to change volume"
-													className="flex items-center justify-center p-2 hover:bg-[#ffffff10] text-(--text-secondary) hover:text-(--text-primary) rounded-md cursor-ew-resize duration-150"
-													onMouseDown={handleVolumeMouseDown}
-													onClick={toggleMute}
-												>
-													{muted || volume === 0 ? <SpeakerXMarkIcon className="size-5 text-current pointer-events-none" /> : <SpeakerWaveIcon className="size-5 text-current pointer-events-none" />}
-												</div>
-											</div>
-										</div>
+										}
+									>
 										<div className="flex gap-0.5">
-											<div
-												title={platform.includes("Mac") ? "Library ⌃ + T" : "New Tab: Alt + T"}
-												className="flex items-center justify-center p-2 hover:bg-[#ffffff10] text-(--text-secondary) hover:text-(--text-primary) rounded-md cursor-pointer duration-200"
+											<button
+												ref={playRef}
+												title={platform.includes("Mac") ? "Play ⌃ + P" : "Play: Alt + S"}
+												className="flex items-center justify-center p-2 hover:bg-[#ffffff10] text-(--text-secondary) hover:text-(--text-primary) rounded-md cursor-pointer duration-150"
 												onClick={() => {
-													newTab({
-														id: createId(),
-														title: "Music Library",
-														url: "about:music",
-														current: true,
-														displayUrl: "about:music",
-														icon: <MusicalNoteIcon className="size-5" />,
-													});
+													if (audioRef.current?.paused) {
+														audioRef.current?.play();
+														setIsPlaying(true);
+													} else {
+														audioRef.current?.pause();
+														setIsPlaying(false);
+													}
 												}}
 											>
-												<MusicalNoteIcon className="size-5 duration-150" />
+												{isPlaying === false ? <PlayIcon className="size-5 text-current stroke-current stroke-0.5 pointer-events-none" /> : <PauseIcon className="size-5 text-current stroke-current stroke-0.5 pointer-events-none" />}
+											</button>
+										</div>
+										<div className="flex gap-0.5">
+											<div title={platform.includes("Mac") ? "Play ⌃ + P" : "Play: Alt + S"} className="flex items-center justify-center p-2 hover:bg-[#ffffff10] text-(--text-secondary) hover:text-(--text-primary) rounded-md cursor-pointer duration-150" onClick={() => {}}>
+												<HeartOutline className="size-5 text-current stroke-current stroke-3 pointer-events-none" />
 											</div>
-											<div title={platform.includes("Mac") ? "Toggle Big Player" : "Toggle Big Player"} className="flex items-center justify-center p-2 hover:bg-[#ffffff10] text-(--text-secondary) hover:text-(--text-primary) rounded-md cursor-pointer duration-150" onClick={() => {
+											<div title="Drag left/right to change volume" className="flex items-center justify-center p-2 hover:bg-[#ffffff10] text-(--text-secondary) hover:text-(--text-primary) rounded-md cursor-ew-resize duration-150" onMouseDown={handleVolumeMouseDown} onClick={toggleMute}>
+												{muted || volume === 0 ? <SpeakerXMarkIcon className="size-5 text-current pointer-events-none" /> : <SpeakerWaveIcon className="size-5 text-current pointer-events-none" />}
+											</div>
+										</div>
+									</div>
+									<div className="flex gap-0.5">
+										<div
+											title={platform.includes("Mac") ? "Library ⌃ + T" : "New Tab: Alt + T"}
+											className="flex items-center justify-center p-2 hover:bg-[#ffffff10] text-(--text-secondary) hover:text-(--text-primary) rounded-md cursor-pointer duration-200"
+											onClick={() => {
+												newTab({
+													id: createId(),
+													title: "Music Library",
+													url: "about:music",
+													current: true,
+													displayUrl: "about:music",
+													icon: <MusicalNoteIcon className="size-5" />,
+												});
+											}}
+										>
+											<MusicalNoteIcon className="size-5 duration-150" />
+										</div>
+										<div
+											title={platform.includes("Mac") ? "Toggle Big Player" : "Toggle Big Player"}
+											className="flex items-center justify-center p-2 hover:bg-[#ffffff10] text-(--text-secondary) hover:text-(--text-primary) rounded-md cursor-pointer duration-150"
+											onClick={() => {
 												if (playerView === "tracks") {
 													changeView("bigplayer");
 												} else {
 													changeView("tracks");
 												}
-											}}>
-												<RectangleGroupIcon className="size-5 text-current pointer-events-none" />
-											</div>
+											}}
+										>
+											<RectangleGroupIcon className="size-5 text-current pointer-events-none" />
 										</div>
 									</div>
 								</div>
-							</>
-						) : (
-							<div className={"relative flex flex-col w-full items-center flex-1 min-h-0 overflow-auto gap-2 p-2 px-2.5 duration-200"}>
-								<div className="flex flex-col items-center justify-evenly h-full">
-									<div className="group relative flex items-center justify-center w-4/5 cursor-pointer" 												onClick={() => {
+							</div>
+						</>
+					) : (
+						<div className={"relative flex flex-col w-full items-center flex-1 min-h-0 overflow-auto gap-2 p-2 px-2.5 duration-200"}>
+							<div className="flex flex-col items-center justify-evenly h-full">
+								<div
+									className="group relative flex items-center justify-center w-4/5 cursor-pointer"
+									onClick={() => {
 										if (audioRef.current?.paused) {
 											audioRef.current?.play();
 											setIsPlaying(true);
@@ -698,9 +699,12 @@ export const QuickPlayer = ({ panelsOpen, className, onMouseDown }: QuickPlayerP
 											audioRef.current?.pause();
 											setIsPlaying(false);
 										}
-									}}>
-										<div className="absolute flex gap-3 opacity-0 group-hover:opacity-100 group duration-150">
-											<button className="text-white/60 hover:text-white cursor-pointer duration-150" onClick={() => {
+									}}
+								>
+									<div className="absolute flex gap-3 opacity-0 group-hover:opacity-100 group duration-150">
+										<button
+											className="text-white/60 hover:text-white cursor-pointer duration-150"
+											onClick={() => {
 												if (!audioRef.current) return;
 												if (audioRef.current.currentTime > 2.5) {
 													audioRef.current.currentTime = 0;
@@ -712,52 +716,73 @@ export const QuickPlayer = ({ panelsOpen, className, onMouseDown }: QuickPlayerP
 													audioRef.current.currentTime = 0;
 													setCurrentTime(0);
 												}
-											}}>
-												<BackwardIcon className="size-12" />
-											</button>
-											{isPlaying === false ? <PlayIcon className="size-12 text-current stroke-current stroke-0.5 pointer-events-none" /> : <PauseIcon className="size-12 text-current stroke-current stroke-1 pointer-events-none" />}
-											<button className="text-white/60 hover:text-white cursor-pointer duration-150" onClick={() => {
+											}}
+										>
+											<BackwardIcon className="size-12" />
+										</button>
+										{isPlaying === false ? <PlayIcon className="size-12 text-current stroke-current stroke-0.5 pointer-events-none" /> : <PauseIcon className="size-12 text-current stroke-current stroke-1 pointer-events-none" />}
+										<button
+											className="text-white/60 hover:text-white cursor-pointer duration-150"
+											onClick={() => {
 												playNext();
-											}}>
-												<ForwardIcon className="size-12" />
-											</button>
-										</div>
-										<div className={"absolute flex flex-col items-center w-4/5 gap-3 z-10 text-white duration-150 pointer-events-none" + " " + `
-											${volumeSlide ? "" : "opacity-0 pointer-events-none"}
-										`}>
-											<span className="font-semibold text-2xl">{Math.round(volume * 100)}%</span>
-											<span className={"flex w-full h-2 bg-[#ffffff40] rounded-full"}>
-												<span style={{ width: `${Math.round(volume * 100)}%` }} className="h-full bg-white rounded-full"></span>
-											</span>
-										</div>
-										<img src={currentTrack?.cover} alt={currentTrack?.title} className="rounded-xl shadow-[0_0_20px_0px_#00000080]" />
+											}}
+										>
+											<ForwardIcon className="size-12" />
+										</button>
 									</div>
-									<div className="flex flex-col items-center justify-center w-full gap-2">
-										<div className="flex flex-col items-center gap-1.5">
-											<h1 className="font-bold text-2xl leading-none">{currentTrack?.title}</h1>
-											<h2 className="font-semibold text-lg leading-none mt-0.5">
-												{Array.isArray(currentTrack?.artists) ? currentTrack.artists.join(", ") : currentTrack?.artists ?? ""}
-											</h2>
-										</div>
-										<div className="flex w-full">
-											<div className="relative flex justify-center items-center w-full h-9">
-												<div className={"flex p-2.5 gap-2 w-full items-center"}>
-													<span className="font-medium">{formatTime(currentTime)}</span>
-													<span ref={seekbarRef} className="w-full h-2 bg-(--text-tertiary) rounded-full overflow-hidden hover:h-2.5 cursor-pointer duration-150" onMouseDown={handleMouseDown} onClick={e => handleSeek(e.clientX)}>
-														<span style={{ width: `var(--current, 0%)` }} className={"flex h-full" + " " + `
+									<div
+										className={
+											"absolute flex flex-col items-center w-4/5 gap-3 z-10 text-white duration-150 pointer-events-none" +
+											" " +
+											`
+											${volumeSlide ? "" : "opacity-0 pointer-events-none"}
+										`
+										}
+									>
+										<span className="font-semibold text-2xl">{Math.round(volume * 100)}%</span>
+										<span className={"flex w-full h-2 bg-[#ffffff40] rounded-full"}>
+											<span style={{ width: `${Math.round(volume * 100)}%` }} className="h-full bg-white rounded-full"></span>
+										</span>
+									</div>
+									<img src={currentTrack?.cover} alt={currentTrack?.title} className="rounded-xl shadow-[0_0_20px_0px_#00000080]" />
+								</div>
+								<div className="flex flex-col items-center justify-center w-full gap-2">
+									<div className="flex flex-col items-center gap-1.5">
+										<h1 className="font-bold text-2xl leading-none">{currentTrack?.title}</h1>
+										<h2 className="font-semibold text-lg leading-none mt-0.5">{Array.isArray(currentTrack?.artists) ? currentTrack.artists.join(", ") : (currentTrack?.artists ?? "")}</h2>
+									</div>
+									<div className="flex w-full">
+										<div className="relative flex justify-center items-center w-full h-9">
+											<div className={"flex p-2.5 gap-2 w-full items-center"}>
+												<span className="font-medium">{formatTime(currentTime)}</span>
+												<span ref={seekbarRef} className="w-full h-2 bg-(--text-tertiary) rounded-full overflow-hidden hover:h-2.5 cursor-pointer duration-150" onMouseDown={handleMouseDown} onClick={e => handleSeek(e.clientX)}>
+													<span
+														style={{ width: `var(--current, 0%)` }}
+														className={
+															"flex h-full" +
+															" " +
+															`
 															${settings.brightness === "dark" ? "bg-white" : "bg-black"}
-														`}></span>
-													</span>
-													<span className="font-medium">{formatTime(duration)}</span>
-												</div>
+														`
+														}
+													></span>
+												</span>
+												<span className="font-medium">{formatTime(duration)}</span>
 											</div>
 										</div>
-										<div className="flex gap-2 items-center justify-center">
-										</div>
-										<div className="relative flex gap-2 items-center justify-center">
-											<button title="Options" className={" cursor-pointer duration-150" + " " + `
+									</div>
+									<div className="flex gap-2 items-center justify-center"></div>
+									<div className="relative flex gap-2 items-center justify-center">
+										<button
+											title="Options"
+											className={
+												" cursor-pointer duration-150" +
+												" " +
+												`
 												${settings.brightness === "dark" ? "text-[#ffffffac] hover:text-[#ffffff]" : "text-[#000000ac] hover:text-[#000000]"}
-											`} onClick={(e: React.MouseEvent) => {
+											`
+											}
+											onClick={(e: React.MouseEvent) => {
 												e.preventDefault();
 												e.stopPropagation();
 
@@ -800,52 +825,61 @@ export const QuickPlayer = ({ panelsOpen, className, onMouseDown }: QuickPlayerP
 													visible: true,
 													items,
 												});
-											}}>
-												<EllipsisHorizontalIcon className="size-8 stroke-0.5 stroke-current" />
-											</button>
-											<button title="Volume" className={"cursor-pointer duration-150" + " " + `
+											}}
+										>
+											<EllipsisHorizontalIcon className="size-8 stroke-0.5 stroke-current" />
+										</button>
+										<button
+											title="Volume"
+											className={
+												"cursor-pointer duration-150" +
+												" " +
+												`
 												${settings.brightness === "dark" ? "text-[#ffffffac] hover:text-[#ffffff]" : "text-[#000000ac] hover:text-[#000000]"}
-											`} onMouseDown={handleVolumeMouseDown} onClick={toggleMute}>
-												{muted || volume === 0 ? <SpeakerXMarkIcon className="size-8 stroke-0.5 stroke-current" /> : <SpeakerWaveIcon className="size-8 stroke-0.5 stroke-current" />}
-											</button>
-											<button
-												title="Repeat"
-												className={
-													"cursor-pointer duration-150" +
-													" " +
-													`
-												${
-													settings.brightness === "dark"
-														? loop
-															? "text-white hover:text-white/60"
-															: "text-[#ffffffac] hover:text-[#ffffff]"
-														: loop
-														? "text-[#000000] hover:text-[#00000099]"
-														: "text-[#000000ac] hover:text-[#000000]"
-												}
 											`
-												}
-												onClick={() => {
-													setLoop((prev) => !prev);
-												}}
-											>
-												<ArrowPathRoundedSquareIcon className="size-8 stroke-0.5 stroke-current" />
-											</button>
-											<button title="Queue" className={"cursor-pointer duration-150" + " " + `
+											}
+											onMouseDown={handleVolumeMouseDown}
+											onClick={toggleMute}
+										>
+											{muted || volume === 0 ? <SpeakerXMarkIcon className="size-8 stroke-0.5 stroke-current" /> : <SpeakerWaveIcon className="size-8 stroke-0.5 stroke-current" />}
+										</button>
+										<button
+											title="Repeat"
+											className={
+												"cursor-pointer duration-150" +
+												" " +
+												`
+												${settings.brightness === "dark" ? (loop ? "text-white hover:text-white/60" : "text-[#ffffffac] hover:text-[#ffffff]") : loop ? "text-[#000000] hover:text-[#00000099]" : "text-[#000000ac] hover:text-[#000000]"}
+											`
+											}
+											onClick={() => {
+												setLoop(prev => !prev);
+											}}
+										>
+											<ArrowPathRoundedSquareIcon className="size-8 stroke-0.5 stroke-current" />
+										</button>
+										<button
+											title="Queue"
+											className={
+												"cursor-pointer duration-150" +
+												" " +
+												`
 												${settings.brightness === "dark" ? "text-white/60 hover:text-white" : "text-[#000000ac] hover:text-[#000000]"}
-											`} onClick={() => {
+											`
+											}
+											onClick={() => {
 												if (playerView === "bigplayer") {
-													changeView("tracks")
+													changeView("tracks");
 												}
-											}}>
-												<QueueListIcon className="size-7 stroke-0.5 stroke-current" />
-											</button>
-										</div>
+											}}
+										>
+											<QueueListIcon className="size-7 stroke-0.5 stroke-current" />
+										</button>
 									</div>
 								</div>
 							</div>
-						)
-					}
+						</div>
+					)}
 					<audio
 						ref={audioRef}
 						src={currentTrack?.src}

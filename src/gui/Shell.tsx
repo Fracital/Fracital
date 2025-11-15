@@ -15,7 +15,7 @@ import {
 	ArrowRightIcon,
 	FolderArrowDownIcon,
 	FolderIcon,
-	StarIcon as StarIconSolid
+	StarIcon as StarIconSolid,
 } from "@heroicons/react/24/solid";
 import { StarIcon as StarIconOutline } from "@heroicons/react/24/outline";
 import { FireIcon, WrenchScrewdriverIcon, CheckBadgeIcon } from "@heroicons/react/24/solid";
@@ -225,7 +225,7 @@ const Shell = () => {
 	const newTab = useTabsStore(state => state.newTab);
 	const tabs = useTabsStore(state => state.tabs);
 	const currentTab = tabs.find(tab => tab.current === true);
-	const updateTab = useTabsStore(state => state.updateTab)
+	const updateTab = useTabsStore(state => state.updateTab);
 
 	const settings = useSettingsStore(state => state.settings);
 
@@ -293,16 +293,20 @@ const Shell = () => {
 		<div id="shell" className={"flex justify-between gap-2.5 p-1 rounded-xl duration-200"}>
 			<div className="flex items-center justify-start gap-2.5">
 				<div className="relative flex items-center justify-center gap-0.5">
-					<button className="group relative flex items-center justify-center mr-1 cursor-pointer" title={`Home - Go to the homepage`} onMouseDown={() => {
-						if (currentTab) {
-							updateTab(currentTab.id, {
-								url: "about:newtab",
-								displayUrl: "about:newtab",
-								title: "New Tab",
-								icon: null,
-							});
-						}
-					}}>
+					<button
+						className="group relative flex items-center justify-center mr-1 cursor-pointer"
+						title={`Home - Go to the homepage`}
+						onMouseDown={() => {
+							if (currentTab) {
+								updateTab(currentTab.id, {
+									url: "about:newtab",
+									displayUrl: "about:newtab",
+									title: "New Tab",
+									icon: null,
+								});
+							}
+						}}
+					>
 						<svg viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg" className="size-9 group-hover:-translate-y-1 group-hover:opacity-0 duration-150 pointer-events-none">
 							<circle cx="64" cy="64" r="64" className="fill-(--logo-primary)" />
 							<path
@@ -325,17 +329,25 @@ const Shell = () => {
 						/>
 					</button>
 					<div ref={navButtonsRef} className={`flex items-center justify-center gap-0.5 duration-150`}>
-						<button className={"group size-8 p-1 rounded-md cursor-pointer duration-150" + " " + `
+						<button
+							className={
+								"group size-8 p-1 rounded-md cursor-pointer duration-150" +
+								" " +
+								`
 							${settings.brightness === "light" ? "text-(--text-tertiary) hover:text-(--text-primary) hover:bg-[#00000018]" : "text-(--text-primary) hover:text-(--text-secondary) hover:bg-[#ffffff10]"}
-						`} title="Refresh Page" onClick={() => {
-							window.dispatchEvent(
-								new CustomEvent("reload-tab", {
-									detail: {
-										tab: tabs.find(tab => tab.current)?.id ?? null,
-									},
-								}),
-							);
-						}}>
+						`
+							}
+							title="Refresh Page"
+							onClick={() => {
+								window.dispatchEvent(
+									new CustomEvent("reload-tab", {
+										detail: {
+											tab: tabs.find(tab => tab.current)?.id ?? null,
+										},
+									}),
+								);
+							}}
+						>
 							<ArrowPathIcon className={"size-full stroke-current stroke-1 text-(--text-tertiary) cursor-pointer group-hover:text-(--text-primary) group-hover:rotate-180 duration-300"} />
 						</button>
 						<button

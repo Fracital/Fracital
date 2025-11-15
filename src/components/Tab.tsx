@@ -22,7 +22,7 @@ export const Tab = ({ title, url, id, icon }: TabProps) => {
 	const setCurrentTab = useTabsStore(state => state.setCurrentTab);
 	const closeTab = useTabsStore(state => state.closeTab);
 	const settings = useSettingsStore(state => state.settings);
-	
+
 	// Read title and icon directly from store instead of local state
 	const thisTab = tabs.find(tab => tab.id === id);
 	const currTitle = thisTab?.title ?? title;

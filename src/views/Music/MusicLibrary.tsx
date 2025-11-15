@@ -233,9 +233,7 @@ export const MusicLibrary = ({ query }: MusicLibraryProps) => {
 								)}
 								<div className="flex flex-col gap-1 justify-center pr-2">
 									<span className="text-xl font-medium">{song.title}</span>
-									<span className="text-md text-[#ffffff88]">
-										{Array.isArray(song.artists) ? song.artists.join(", ") : song.artists}
-									</span>
+									<span className="text-md text-[#ffffff88]">{Array.isArray(song.artists) ? song.artists.join(", ") : song.artists}</span>
 								</div>
 								<div id="play" title="Play track" className="flex items-center justify-center p-2 bg-[#ffffff10] hover:bg-[#ffffff18] rounded-full cursor-pointer duration-150">
 									<PlayIcon id="play" className="size-5 pointer-events-none" />

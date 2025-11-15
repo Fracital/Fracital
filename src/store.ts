@@ -61,12 +61,14 @@ export const useTabsStore = create<{
 	tabsOpen: false,
 	newTab: (props: TabProps) => {
 		const id = props.id ?? createId();
-		const initialHistory = [{
-			url: props.url,
-			title: props.title,
-			icon: typeof props.icon === 'string' ? props.icon : undefined,
-			displayUrl: props.displayUrl
-		}] as any;
+		const initialHistory = [
+			{
+				url: props.url,
+				title: props.title,
+				icon: typeof props.icon === "string" ? props.icon : undefined,
+				displayUrl: props.displayUrl,
+			},
+		] as any;
 		const tabWithId: TabProps = { ...props, id, current: true, history: initialHistory, historyIndex: 0 } as TabProps;
 		set(state => ({
 			tabs: state.tabs.map(tab => ({ ...tab, current: false })).concat(tabWithId as TabProps & { current: boolean }),
@@ -290,7 +292,7 @@ export const useFilesStore = create<{
 	fileTree: FileEntry[] | null;
 	setCurrentDirectory: (path: string) => void;
 	setFileTree: (tree: any) => void;
-}>((set) => {
+}>(set => {
 	const debouncedReadDir = debounce(async (path: string) => {
 		try {
 			const dir = await window.fr.fs.promises.readdir(path);

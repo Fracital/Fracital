@@ -21,7 +21,7 @@ interface HomeProps {
 
 const Home = ({ className }: HomeProps) => {
 	const settings = useSettingsStore(state => state.settings);
-	
+
 	const getLinks = () => {
 		const stored = window.localStorage.getItem("quicklinks");
 		try {

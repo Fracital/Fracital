@@ -144,12 +144,12 @@ const App = () => {
 			// Proxied pages handle their own history in ExternalSite.tsx
 			// Use pushHistory which properly handles truncating forward history
 			if (detail.url.includes("about:") && !(detail as any).isHistoryNavigation) {
-				const iconStr = typeof detail.icon === 'string' ? detail.icon : undefined;
+				const iconStr = typeof detail.icon === "string" ? detail.icon : undefined;
 				useTabsStore.getState().pushHistory(detail.id, {
 					url: detail.url,
 					title: detail.title,
 					icon: iconStr,
-					displayUrl: detail.displayUrl
+					displayUrl: detail.displayUrl,
 				});
 			}
 		};
@@ -335,8 +335,7 @@ const App = () => {
 													)}
 												</div>
 											);
-										}
-										else if (page === "settings") {
+										} else if (page === "settings") {
 											return (
 												<div key={item.id}>
 													{currentTab && (
