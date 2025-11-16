@@ -432,72 +432,64 @@ export const QuickPlayer = ({ panelsOpen, className, onMouseDown }: QuickPlayerP
 														visible: true,
 														items: items,
 													});
-												}} />
-											</div>
-										)}
-									</div>
-									{queue && (
-										<div className="flex flex-col items-start">
-											{queue.length > 0 && (
-												<h1 className={`ml-1.5 mt-1.5 text-2xl font-bold`}>
-													Queue
-												</h1>
-											)}
-											{queue.map((song) => (
-												<div 
-													key={song.id} 
-													draggable 
-													onDragStart={(e) => handleDragStart(e, song.id)}
-													onDragOver={(e) => handleDragOver(e, song.id)}
-													onDragLeave={handleDragLeave}
-													onDrop={(e) => handleDrop(e, song.id)}
-													onDragEnd={handleDragEnd}
-													className={`flex items-center justify-between gap-2.5 p-1.5 w-full rounded-lg cursor-move duration-150 ${
-														draggedTrack === song.id ? "opacity-50" : "hover:bg-[#ffffff28]"
-													} ${
-														dragOverTrack === song.id && dropPosition === "before" 
-															? "border-t-2 border-(--accent)" 
-															: dragOverTrack === song.id && dropPosition === "after"
-															? "border-b-2 border-(--accent)"
-															: ""
-													}`} 
-													onClick={() => {
-														setCurrentTrack(song);
-														removeTrack(song.id);
-													}}>
-													<div className="flex items-center gap-2.5">
-														{song.cover && <img className="size-10 rounded-md" src={song.cover} alt={song.title} />}
-														{!song.cover && (
-															<div className={`size-10 rounded-md flex justify-center items-center bg-(--primary) text-(--text-secondary) inset-shadow-(--inset-shadow-primary) font-bold`}>
-																<MusicalNoteIcon className="size-6" />
-															</div>
-														)}
-														<div className="flex flex-col gap-1">
-															<h1 title={song.title} className={`text-md font-semibold leading-none`}>
-																{song.title.length > 22 ? song.title.slice(0, 22) + "..." : song.title}
-															</h1>
-															{Array.isArray(song.artists) && song.artists.length > 1 ? (
-																<div className="flex gap-1.5">
-																	{song.explicit && <span className="flex justify-center items-center size-5 text-xs font-bold rounded-sm bg-[#ffffff46]">E</span>}
-																	<div className="flex lg:flex-row flex-col gap-0.5">
-																		{song.artists.map((artist, index) => (
-																			<div key={index}className={`flex justify-center items-center w-max`}>
-																				<span className="text-xs leading-none duration-150" key={index}>
-																					{artist}
-																				</span>
-																				{index < song.artists.length - 1 && <span>,</span>}
-																			</div>
-																		))}
-																	</div>
-																</div>
-															) : (
-																<h2 className={`text-sm leading-none duration-150`}>
-																	{song.artists[0]}
-																</h2>
-															)}
+												}}
+											/>
+										</div>
+									)}
+								</div>
+								{queue && (
+									<div className="flex flex-col items-start">
+										{queue.length > 0 && <h1 className={`ml-1.5 mt-1.5 text-2xl font-bold`}>Queue</h1>}
+										{queue.map(song => (
+											<div
+												key={song.id}
+												draggable
+												onDragStart={e => handleDragStart(e, song.id)}
+												onDragOver={e => handleDragOver(e, song.id)}
+												onDragLeave={handleDragLeave}
+												onDrop={e => handleDrop(e, song.id)}
+												onDragEnd={handleDragEnd}
+												className={`flex items-center justify-between gap-2.5 p-1.5 w-full rounded-lg cursor-move duration-150 ${draggedTrack === song.id ? "opacity-50" : "hover:bg-[#ffffff28]"} ${
+													dragOverTrack === song.id && dropPosition === "before" ? "border-t-2 border-(--accent)" : dragOverTrack === song.id && dropPosition === "after" ? "border-b-2 border-(--accent)" : ""
+												}`}
+												onClick={() => {
+													setCurrentTrack(song);
+													removeTrack(song.id);
+												}}
+											>
+												<div className="flex items-center gap-2.5">
+													{song.cover && <img className="size-10 rounded-md" src={song.cover} alt={song.title} />}
+													{!song.cover && (
+														<div className={`size-10 rounded-md flex justify-center items-center bg-(--primary) text-(--text-secondary) inset-shadow-(--inset-shadow-primary) font-bold`}>
+															<MusicalNoteIcon className="size-6" />
 														</div>
+													)}
+													<div className="flex flex-col gap-1">
+														<h1 title={song.title} className={`text-md font-semibold leading-none`}>
+															{song.title.length > 22 ? song.title.slice(0, 22) + "..." : song.title}
+														</h1>
+														{Array.isArray(song.artists) && song.artists.length > 1 ? (
+															<div className="flex gap-1.5">
+																{song.explicit && <span className="flex justify-center items-center size-5 text-xs font-bold rounded-sm bg-[#ffffff46]">E</span>}
+																<div className="flex lg:flex-row flex-col gap-0.5">
+																	{song.artists.map((artist, index) => (
+																		<div key={index} className={`flex justify-center items-center w-max`}>
+																			<span className="text-xs leading-none duration-150" key={index}>
+																				{artist}
+																			</span>
+																			{index < song.artists.length - 1 && <span>,</span>}
+																		</div>
+																	))}
+																</div>
+															</div>
+														) : (
+															<h2 className={`text-sm leading-none duration-150`}>{song.artists[0]}</h2>
+														)}
 													</div>
-													<EllipsisHorizontalIcon className={`size-6 mr-2 stroke-current stroke-1.5 cursor-pointer duration-150`} onClick={e => {
+												</div>
+												<EllipsisHorizontalIcon
+													className={`size-6 mr-2 stroke-current stroke-1.5 cursor-pointer duration-150`}
+													onClick={e => {
 														e.preventDefault();
 														e.stopPropagation();
 

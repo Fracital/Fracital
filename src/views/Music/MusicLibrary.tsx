@@ -214,11 +214,15 @@ export const MusicLibrary = ({ query }: MusicLibraryProps) => {
 						<span className="text-lg text-text-tertiary">No songs found.</span>
 					) : (
 						library.map((song, index) => (
-							<div key={index} className={`flex items-center gap-2 p-2.5 w-max rounded-xl ${settings.brightness === "dark" ? "bg-[#ffffff20] hover:bg-[#ffffff28]" : "bg-[#00000028] hover:bg-[#00000038]"} duration-150`} onClick={(e: React.MouseEvent<HTMLElement>) => {
-								if ((e.target as HTMLElement).id === "options") return;
-								if (currentTrack === song) return;
-								setCurrentTrack(song);
-							}}>
+							<div
+								key={index}
+								className={`flex items-center gap-2 p-2.5 w-max rounded-xl ${settings.brightness === "dark" ? "bg-[#ffffff20] hover:bg-[#ffffff28]" : "bg-[#00000028] hover:bg-[#00000038]"} duration-150`}
+								onClick={(e: React.MouseEvent<HTMLElement>) => {
+									if ((e.target as HTMLElement).id === "options") return;
+									if (currentTrack === song) return;
+									setCurrentTrack(song);
+								}}
+							>
 								{song.cover ? (
 									<img src={song.cover} className="size-12 rounded-md object-cover" />
 								) : (
