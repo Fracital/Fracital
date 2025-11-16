@@ -1,7 +1,6 @@
 import { createId } from "@paralleldrive/cuid2";
 import { useEffect, useRef, useState } from "react";
 import { QueueListIcon, MusicalNoteIcon, PlusIcon, MinusIcon, ArrowUturnLeftIcon, BackwardIcon, ForwardIcon, RectangleGroupIcon, ArrowPathRoundedSquareIcon, SpeakerWaveIcon, SpeakerXMarkIcon, BarsArrowUpIcon, BackspaceIcon } from "@heroicons/react/24/solid";
-import { HeartIcon as HeartOutline } from "@heroicons/react/24/outline";
 import { PlayIcon, PauseIcon, EllipsisHorizontalIcon } from "@heroicons/react/24/solid";
 import { useMusicStore, useSettingsStore, useTabsStore } from "../store";
 import { ContextMenu, type MenuItem } from "../components/ContextMenu";
@@ -22,12 +21,17 @@ export const QuickPlayer = ({ panelsOpen, className, onMouseDown }: QuickPlayerP
 	const removeTrack = useMusicStore(state => state.removeTrack);
 	const playNext = useMusicStore(state => state.playNext);
 	const playPrev = useMusicStore(state => state.playPrev);
+	const reorderQueue = useMusicStore(state => state.reorderQueue);
 	const newTab = useTabsStore(state => state.newTab);
 	const playerView = useMusicStore(state => state.playerView);
 	const changeView = useMusicStore(state => state.changeView);
 
 	const [platform, setPlatform] = useState<string>("");
 	const [brightness, setBrightness] = useState<"dark" | "light">("dark");
+
+	const [draggedTrack, setDraggedTrack] = useState<string | null>(null);
+	const [dragOverTrack, setDragOverTrack] = useState<string | null>(null);
+	const [dropPosition, setDropPosition] = useState<"before" | "after" | null>(null);
 
 	const [isPlaying, setIsPlaying] = useState<boolean>(false);
 	const [currentTime, setCurrentTime] = useState(0);
@@ -264,6 +268,50 @@ export const QuickPlayer = ({ panelsOpen, className, onMouseDown }: QuickPlayerP
 		};
 	}, [isVolumeDragging]);
 
+	const handleDragStart = (e: React.DragEvent, trackId: string) => {
+		setDraggedTrack(trackId);
+		e.dataTransfer.effectAllowed = "move";
+		e.dataTransfer.setData("text/plain", trackId);
+	};
+
+	const handleDragOver = (e: React.DragEvent, trackId: string) => {
+		e.preventDefault();
+		if (!draggedTrack || draggedTrack === trackId) return;
+
+		const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+		const midPoint = rect.top + rect.height / 2;
+		const position = e.clientY < midPoint ? "before" : "after";
+
+		setDragOverTrack(trackId);
+		setDropPosition(position);
+	};
+
+	const handleDragLeave = () => {
+		setDragOverTrack(null);
+		setDropPosition(null);
+	};
+
+	const handleDrop = (e: React.DragEvent, targetId: string) => {
+		e.preventDefault();
+		if (!draggedTrack || draggedTrack === targetId) return;
+
+		const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+		const midPoint = rect.top + rect.height / 2;
+		const placeBefore = e.clientY < midPoint;
+
+		reorderQueue(draggedTrack, targetId, placeBefore);
+
+		setDraggedTrack(null);
+		setDragOverTrack(null);
+		setDropPosition(null);
+	};
+
+	const handleDragEnd = () => {
+		setDraggedTrack(null);
+		setDragOverTrack(null);
+		setDropPosition(null);
+	};
+
 	return (
 		<div
 			className={
@@ -410,10 +458,27 @@ export const QuickPlayer = ({ panelsOpen, className, onMouseDown }: QuickPlayerP
 												</h1>
 											)}
 											{queue.map((song) => (
-												<div key={song.id} className="flex items-center justify-between gap-2.5 p-1.5 w-full rounded-lg hover:bg-[#ffffff28] duration-150" onClick={() => {
-													setCurrentTrack(song);
-													removeTrack(song.id);
-												}}>
+												<div 
+													key={song.id} 
+													draggable 
+													onDragStart={(e) => handleDragStart(e, song.id)}
+													onDragOver={(e) => handleDragOver(e, song.id)}
+													onDragLeave={handleDragLeave}
+													onDrop={(e) => handleDrop(e, song.id)}
+													onDragEnd={handleDragEnd}
+													className={`flex items-center justify-between gap-2.5 p-1.5 w-full rounded-lg cursor-move duration-150 ${
+														draggedTrack === song.id ? "opacity-50" : "hover:bg-[#ffffff28]"
+													} ${
+														dragOverTrack === song.id && dropPosition === "before" 
+															? "border-t-2 border-(--accent)" 
+															: dragOverTrack === song.id && dropPosition === "after"
+															? "border-b-2 border-(--accent)"
+															: ""
+													}`} 
+													onClick={() => {
+														setCurrentTrack(song);
+														removeTrack(song.id);
+													}}>
 													<div className="flex items-center gap-2.5">
 														{song.cover && <img className="size-10 rounded-md" src={song.cover} alt={song.title} />}
 														{!song.cover && (

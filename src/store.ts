@@ -219,6 +219,7 @@ export const useMusicStore = create<{
 	playPrev: () => boolean;
 
 	changeView: (view: "tracks" | "bigplayer") => void;
+	reorderQueue: (draggedId: string, targetId: string, placeBefore: boolean) => void;
 }>((set, get) => ({
 	src: "",
 	currentTrack: null,
@@ -287,6 +288,22 @@ export const useMusicStore = create<{
 		return false;
 	},
 	changeView: (view: "tracks" | "bigplayer") => set({ playerView: view }),
+	reorderQueue: (draggedId: string, targetId: string, placeBefore: boolean) => {
+		const { queue } = get();
+		const draggedIndex = queue.findIndex(t => t.id === draggedId);
+		const targetIndex = queue.findIndex(t => t.id === targetId);
+
+		if (draggedIndex === -1 || targetIndex === -1) return;
+
+		const newQueue = [...queue];
+		const [draggedTrack] = newQueue.splice(draggedIndex, 1);
+
+		const adjustedTargetIndex = draggedIndex < targetIndex ? targetIndex - 1 : targetIndex;
+		const insertIndex = placeBefore ? adjustedTargetIndex : adjustedTargetIndex + 1;
+
+		newQueue.splice(insertIndex, 0, draggedTrack);
+		set({ queue: newQueue });
+	},
 }));
 
 interface FileEntry {

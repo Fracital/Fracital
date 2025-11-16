@@ -214,7 +214,7 @@ export const MusicLibrary = ({ query }: MusicLibraryProps) => {
 						<span className="text-lg text-text-tertiary">No songs found.</span>
 					) : (
 						library.map((song, index) => (
-							<div key={index} className={`flex items-center gap-2 p-2.5 w-max rounded-xl ${settings.brightness === "dark" ? "bg-[#ffffff10] hover:bg-[#ffffff18]" : "bg-[#00000010] hover:bg-[#0000 0018]"} duration-150`} onClick={(e: React.MouseEvent<HTMLElement>) => {
+							<div key={index} className={`flex items-center gap-2 p-2.5 w-max rounded-xl ${settings.brightness === "dark" ? "bg-[#ffffff20] hover:bg-[#ffffff28]" : "bg-[#00000028] hover:bg-[#00000038]"} duration-150`} onClick={(e: React.MouseEvent<HTMLElement>) => {
 								if ((e.target as HTMLElement).id === "options") return;
 								if (currentTrack === song) return;
 								setCurrentTrack(song);
@@ -226,7 +226,7 @@ export const MusicLibrary = ({ query }: MusicLibraryProps) => {
 										<MusicalNoteIcon className="size-6 text-current" />
 									</div>
 								)}
-								<div className="flex flex-col gap-1 justify-center pr-2">
+								<div className="flex flex-col gap-1 justify-center pr-2 pointer-events-none">
 									<span className="text-xl font-medium">{song.title}</span>
 									<span className="text-md">
 										{Array.isArray(song.artists) ? song.artists.join(", ") : song.artists}
