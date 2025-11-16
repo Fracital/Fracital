@@ -20,16 +20,7 @@ const globalAudioState = {
 	audioElement: null as HTMLAudioElement | null,
 };
 
-export const AudvisVisualizer = ({
-	audioRef,
-	isPlaying,
-	width = 300,
-	height = 100,
-	color = "#ffffff",
-	opacity = 1,
-	scale = 1,
-	className = "",
-}: AudvisVisualizerProps) => {
+export const AudvisVisualizer = ({ audioRef, isPlaying, width = 300, height = 100, color = "#ffffff", opacity = 1, scale = 1, className = "" }: AudvisVisualizerProps) => {
 	const [analyser, setAnalyser] = useState<AnalyserNode | null>(null);
 
 	useEffect(() => {
@@ -80,13 +71,7 @@ export const AudvisVisualizer = ({
 				transition: "all 0.3s ease",
 			}}
 		>
-			<AudioVisualizer
-				analyser={analyser}
-				isActive={isPlaying}
-				width={width}
-				height={height}
-				color={color}
-			/>
+			<AudioVisualizer analyser={analyser} isActive={isPlaying} width={width} height={height} color={color} />
 		</div>
 	);
 };

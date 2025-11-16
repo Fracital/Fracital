@@ -284,7 +284,10 @@ const Settings = ({ className }: SettingsProps) => {
 						<div className="flex flex-col gap-2">
 							<label className="flex items-center justify-between cursor-pointer select-none">
 								<span className="text-xl font-medium">All visualizers</span>
-								<input type="checkbox" checked={settings["disable-visualizers"] === false ? true : false} onChange={async () => {
+								<input
+									type="checkbox"
+									checked={settings["disable-visualizers"] === false ? true : false}
+									onChange={async () => {
 										const next = !(settings["disable-visualizers"] ?? false);
 										const newSettings = {
 											...settings,
@@ -295,12 +298,8 @@ const Settings = ({ className }: SettingsProps) => {
 									}}
 									className="sr-only peer"
 								/>
-								<span className={"relative inline-block w-12 h-7 transition-colors duration-200 rounded-full" + " " +
-									`${settings["disable-visualizers"] === false ? "bg-(--accent)" : `${settings.brightness === "dark" ? "bg-[#ffffff10] hover:bg-[#ffffff20]" : "bg-[#00000025] hover:bg-[#00000035]"}`}`
-								}>
-									<span className={"absolute left-1 top-1 w-5 h-5 bg-white rounded-full shadow transform transition-transform duration-200" + " " +
-										`${settings["disable-visualizers"] === false ? "translate-x-5" : ""}`
-									} />
+								<span className={"relative inline-block w-12 h-7 transition-colors duration-200 rounded-full" + " " + `${settings["disable-visualizers"] === false ? "bg-(--accent)" : `${settings.brightness === "dark" ? "bg-[#ffffff10] hover:bg-[#ffffff20]" : "bg-[#00000025] hover:bg-[#00000035]"}`}`}>
+									<span className={"absolute left-1 top-1 w-5 h-5 bg-white rounded-full shadow transform transition-transform duration-200" + " " + `${settings["disable-visualizers"] === false ? "translate-x-5" : ""}`} />
 								</span>
 							</label>
 
@@ -318,12 +317,8 @@ const Settings = ({ className }: SettingsProps) => {
 									className="sr-only peer"
 									disabled={settings["disable-visualizers"] ?? false}
 								/>
-								<span className={"relative inline-block w-12 h-7 transition-colors duration-200 rounded-full" + " " +
-									`${settings["tracks-visualizer"] ? "bg-(--accent)" : `${settings.brightness === "dark" ? "bg-[#ffffff10] hover:bg-[#ffffff20]" : "bg-[#00000025] hover:bg-[#00000035]"}`}`
-								}>
-									<span className={"absolute left-1 top-1 w-5 h-5 bg-white rounded-full shadow transform transition-transform duration-200" + " " +
-										`${settings["tracks-visualizer"] ? "translate-x-5" : ""}`
-									} />
+								<span className={"relative inline-block w-12 h-7 transition-colors duration-200 rounded-full" + " " + `${settings["tracks-visualizer"] ? "bg-(--accent)" : `${settings.brightness === "dark" ? "bg-[#ffffff10] hover:bg-[#ffffff20]" : "bg-[#00000025] hover:bg-[#00000035]"}`}`}>
+									<span className={"absolute left-1 top-1 w-5 h-5 bg-white rounded-full shadow transform transition-transform duration-200" + " " + `${settings["tracks-visualizer"] ? "translate-x-5" : ""}`} />
 								</span>
 							</label>
 
@@ -341,20 +336,8 @@ const Settings = ({ className }: SettingsProps) => {
 									className="sr-only peer"
 									disabled={settings["disable-visualizers"] ?? false}
 								/>
-								<span
-									className={
-										"relative inline-block w-12 h-7 transition-colors duration-200 rounded-full" +
-										" " +
-										`${settings["big-player-visualizer"] ? "bg-(--accent)" : `${settings.brightness === "dark" ? "bg-[#ffffff10] hover:bg-[#ffffff20]" : "bg-[#00000025] hover:bg-[#00000035]"}`}`
-									}
-								>
-									<span
-										className={
-											"absolute left-1 top-1 w-5 h-5 bg-white rounded-full shadow transform transition-transform duration-200" +
-											" " +
-											`${settings["big-player-visualizer"] ? "translate-x-5" : ""}`
-										}
-									/>
+								<span className={"relative inline-block w-12 h-7 transition-colors duration-200 rounded-full" + " " + `${settings["big-player-visualizer"] ? "bg-(--accent)" : `${settings.brightness === "dark" ? "bg-[#ffffff10] hover:bg-[#ffffff20]" : "bg-[#00000025] hover:bg-[#00000035]"}`}`}>
+									<span className={"absolute left-1 top-1 w-5 h-5 bg-white rounded-full shadow transform transition-transform duration-200" + " " + `${settings["big-player-visualizer"] ? "translate-x-5" : ""}`} />
 								</span>
 							</label>
 						</div>

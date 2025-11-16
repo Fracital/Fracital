@@ -405,10 +405,18 @@ const App = () => {
 								<Home />
 							)}
 						</div>
-						<div className={(settings["floating-tabs"] && "absolute py-2 h-full") + " " + "flex flex-col shrink-0 duration-150" + " " + `
+						<div
+							className={
+								(settings["floating-tabs"] && "absolute py-2 h-full") +
+								" " +
+								"flex flex-col shrink-0 duration-150" +
+								" " +
+								`
                             ${settings["floating-tabs"] === true ? (panelsOpen ? "w-60 right-2" : "w-10 -right-1") : panelsOpen ? "w-78" : "w-10"}
                             ${settings["floating-tabs"] ? "gap-2" : "gap-2.5"}
-						`}>
+						`
+							}
+						>
 							<div
 								className={
 									"flex w-full h-max p-1.5 py-2 gap-2 items-center justify-between bg-(--secondary) hover:bg-(--tertiary) inset-shadow-(--inset-shadow-primary) *:pointer-events-none cursor-pointer duration-150" +
