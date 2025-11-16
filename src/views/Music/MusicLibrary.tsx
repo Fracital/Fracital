@@ -185,7 +185,6 @@ export const MusicLibrary = ({ query }: MusicLibraryProps) => {
 			// @ts-expect-error types
 			watcher.close();
 			intervalId = window.setTimeout(() => {
-				// re-establish watcher after a short delay to avoid multiple triggers
 				readLibrary();
 				// @ts-expect-error types
 				watcher = window.fr.fs.watch(MusicPath, { recursive: true }, () => {
@@ -212,18 +211,14 @@ export const MusicLibrary = ({ query }: MusicLibraryProps) => {
 				<h1 className="text-3xl font-bold">Library</h1>
 				<div className="flex flex-wrap gap-2">
 					{library.length === 0 ? (
-						<span className="text-lg text-[#ffffff80]">No songs found.</span>
+						<span className="text-lg text-text-tertiary">No songs found.</span>
 					) : (
 						library.map((song, index) => (
-							<div
-								key={index}
-								className="flex items-center gap-2 p-2.5 w-max rounded-xl bg-[#ffffff10] hover:bg-[#ffffff18] duration-150"
-								onClick={(e: React.MouseEvent<HTMLElement>) => {
-									if ((e.target as HTMLElement).id === "options") return;
-									if (currentTrack === song) return;
-									setCurrentTrack(song);
-								}}
-							>
+							<div key={index} className={`flex items-center gap-2 p-2.5 w-max rounded-xl ${settings.brightness === "dark" ? "bg-[#ffffff10] hover:bg-[#ffffff18]" : "bg-[#00000010] hover:bg-[#0000 0018]"} duration-150`} onClick={(e: React.MouseEvent<HTMLElement>) => {
+								if ((e.target as HTMLElement).id === "options") return;
+								if (currentTrack === song) return;
+								setCurrentTrack(song);
+							}}>
 								{song.cover ? (
 									<img src={song.cover} className="size-12 rounded-md object-cover" />
 								) : (
@@ -233,95 +228,167 @@ export const MusicLibrary = ({ query }: MusicLibraryProps) => {
 								)}
 								<div className="flex flex-col gap-1 justify-center pr-2">
 									<span className="text-xl font-medium">{song.title}</span>
-									<span className="text-md text-[#ffffff88]">{Array.isArray(song.artists) ? song.artists.join(", ") : song.artists}</span>
+									<span className="text-md">
+										{Array.isArray(song.artists) ? song.artists.join(", ") : song.artists}
+									</span>
 								</div>
-								<div id="play" title="Play track" className="flex items-center justify-center p-2 bg-[#ffffff10] hover:bg-[#ffffff18] rounded-full cursor-pointer duration-150">
+								<div id="play" title="Play track" className={`flex items-center justify-center p-2 rounded-full ${settings.brightness === "dark" ? "bg-[#ffffff10] hover:bg-[#ffffff18]" : "bg-[#00000010] hover:bg-[#0000 0018]"} cursor-pointer duration-150`}>
 									<PlayIcon id="play" className="size-5 pointer-events-none" />
 								</div>
-								<div
-									id="options"
-									title="Track options"
-									className="flex items-center justify-center p-2 bg-[#ffffff10] hover:bg-[#ffffff18] rounded-full cursor-pointer duration-150"
-									onClick={e => {
-										const rect = (e.target as HTMLElement).getBoundingClientRect();
-										const x = rect.left;
-										const y = rect.bottom;
-										console.log(rect);
+								<div id="options" title="Track options" className={`flex items-center justify-center p-2 ${settings.brightness === "dark" ? "bg-[#ffffff10] hover:bg-[#ffffff18]" : "bg-[#00000010] hover:bg-[#0000 0018]"} rounded-full cursor-pointer duration-150`} onClick={e => {
+									const rect = (e.target as HTMLElement).getBoundingClientRect();
+									const x = rect.left;
+									const y = rect.bottom;
+									console.log(rect);
 
-										const items: MenuItem[] = [
-											{
-												title: "Play",
-												onClick: () => {
-													setCurrentTrack(song);
-												},
-												icon: null,
+									const items: MenuItem[] = [
+										{
+											title: "Play",
+											onClick: () => {
+												setCurrentTrack(song);
 											},
-											{
-												title: "Add to Queue",
-												onClick: () => {
+											icon: null,
+										},
+										{
+											title: "Play next",
+											onClick: () => {
+												try {
+													const store: any = useMusicStore;
+													const state = store.getState();
+													const existingQueue = Array.isArray(state.queue) ? state.queue : [];
+													const filteredQueue = existingQueue.filter((t: any) => t.id !== song.id);
+													const newQueue = [song, ...filteredQueue];
+													store.setState({ queue: newQueue });
+													setContextMenu(null);
+												} catch (err) {
+													console.error("Failed to add track to top of queue, falling back to append:", err);
 													addTrack(song);
-												},
-												icon: null,
+													setContextMenu(null);
+												}
 											},
-											{
-												title: "Remove from Library",
-												onClick: async () => {
+											icon: null,
+										},
+										{
+											title: "Add to Queue",
+											onClick: () => {
+												addTrack(song);
+											},
+											icon: null,
+										},
+										{
+											title: "Add Album Art",
+											onClick: () => {
+												(async () => {
 													try {
 														if (!song.folderName) {
-															window.fr.dialog.alert({
-																title: "Error",
-																message: "Cannot delete track: folder information missing.",
-															});
+															window.fr.dialog.alert({ title: "Error", message: "Cannot add album art: folder information missing." });
 															return;
 														}
 
-														const folderPath = `${MusicPath}/${song.folderName}`;
-														try {
-															await window.fr.fs.promises.readdir(folderPath);
-														} catch {
-															window.fr.dialog.alert({
-																title: "Error",
-																message: "Track folder not found. It may have already been deleted.",
-															});
-															setLibrary(prev => prev.filter(s => s.id !== song.id));
-															return;
-														}
+														const input = document.createElement("input");
+														input.type = "file";
+														input.accept = "image/*";
+														input.onchange = async (e) => {
+															const file = (e.target as HTMLInputElement).files?.[0];
+															if (!file) return;
 
-														await window.fr.sh.promises.rm(folderPath, { recursive: true, force: true });
-														if (song.src) {
-															try {
-																URL.revokeObjectURL(song.src);
-															} catch {}
-														}
+															const reader = new FileReader();
+															reader.onload = async (ev) => {
+																const dataUrl = ev.target?.result as string;
+																const folderPath = `${MusicPath}/${song.folderName}`;
 
-														try {
-															removeTrack(song.id);
-														} catch {}
+																let tags: any = {};
+																try {
+																	const existing = await window.fr.fs.promises.readFile(`${folderPath}/tags.json`, "utf8");
+																	tags = JSON.parse(existing);
+																} catch {
+																	tags = {};
+																}
 
-														setLibrary(prev => prev.filter(s => s.id !== song.id));
-														window.fr.dialog.alert({
-															title: "Track Removed",
-															message: `"${song.title}" has been removed from your library.`,
-														});
+																tags.cover = dataUrl;
 
-														if (currentTrack && currentTrack.id === song.id) {
-															playNext();
-														}
+																try {
+																	await window.fr.fs.promises.writeFile(`${folderPath}/tags.json`, JSON.stringify(tags, null, 2));
+																} catch (err) {
+																	console.error("Failed to write tags.json:", err);
+																	window.fr.dialog.alert({ title: "Error", message: "Failed to save album art to disk." });
+																	return;
+																}
+
+																setLibrary(prev => prev.map(s => (s.id === song.id ? { ...s, cover: dataUrl } : s)));
+
+																window.fr.dialog.alert({ title: "Album Art Added", message: `Album art added for "${song.title}".` });
+																setContextMenu(null);
+															};
+															reader.readAsDataURL(file);
+														};
+														input.click();
 													} catch (err) {
-														console.error("Failed to remove track:", err);
+														console.error("Add album art failed:", err);
+														window.fr.dialog.alert({ title: "Error", message: "An error occurred while adding album art." });
+													}
+												})();
+											},
+											icon: null,
+										},
+										{
+											title: "Remove from Library",
+											onClick: async () => {
+												try {
+													if (!song.folderName) {
 														window.fr.dialog.alert({
 															title: "Error",
-															message: "An error occurred while removing the track.",
+															message: "Cannot delete track: folder information missing.",
 														});
+														return;
 													}
-												},
-												icon: null,
-											},
-										];
 
-										setContextMenu({ x, y, visible: true, items });
-									}}
-								>
+													const folderPath = `${MusicPath}/${song.folderName}`;
+													try {
+														await window.fr.fs.promises.readdir(folderPath);
+													} catch {
+														window.fr.dialog.alert({
+															title: "Error",
+															message: "Track folder not found. It may have already been deleted.",
+														});
+														setLibrary(prev => prev.filter(s => s.id !== song.id));
+														return;
+													}
+
+													await window.fr.sh.promises.rm(folderPath, { recursive: true, force: true });
+													if (song.src) {
+														try {
+															URL.revokeObjectURL(song.src);
+														} catch {}
+													}
+
+													try {
+														removeTrack(song.id);
+													} catch {}
+
+													setLibrary(prev => prev.filter(s => s.id !== song.id));
+													window.fr.dialog.alert({
+														title: "Track Removed",
+														message: `"${song.title}" has been removed from your library.`,
+													});
+
+													if (currentTrack && currentTrack.id === song.id) {
+														playNext();
+													}
+												} catch (err) {
+													console.error("Failed to remove track:", err);
+													window.fr.dialog.alert({
+														title: "Error",
+														message: "An error occurred while removing the track.",
+													});
+												}
+											},
+											icon: null,
+										},
+									];
+
+									setContextMenu({ x, y, visible: true, items });
+								}}>
 									<EllipsisHorizontalIcon id="options" className="size-5 stroke-current stroke-1 pointer-events-none" />
 								</div>
 							</div>
@@ -336,43 +403,30 @@ export const MusicLibrary = ({ query }: MusicLibraryProps) => {
 				<div className="flex flex-col gap-2 items-center">
 					<div className="flex flex-col gap-2">
 						<div className="flex gap-2 items-end">
-							<div
-								className={
-									"group relative flex justify-center size-30 items-center rounded-xl overflow-hidden bg-(--primary) inset-shadow-(--inset-shadow-primary)" +
-									" " +
-									`
+							<div className={"group relative flex justify-center size-30 items-center rounded-xl overflow-hidden bg-(--primary) inset-shadow-(--inset-shadow-primary)" + " " + `
                                 ${albumCover === false ? "cursor-pointer" : ""}
-                            `
-								}
-								onMouseDown={() => {
-									const input = document.createElement("input");
-									input.type = "file";
-									input.accept = "image/png, image/jpeg, image/jpg, image/webp, image/gif";
-									input.onchange = e => {
-										const file = (e.target as HTMLInputElement).files?.[0];
-										if (file) {
-											const reader = new FileReader();
-											reader.onload = e => {
-												if (albumCoverRef.current && typeof e.target?.result === "string") {
-													albumCoverRef.current.src = e.target.result;
-													setAlbumCover(e.target.result);
-												}
-											};
-											reader.readAsDataURL(file);
-										}
-									};
-									input.click();
-								}}
-							>
-								<div
-									className={
-										"flex flex-col gap-1.5 justify-center items-center group-hover:text-[#ffffffac] text-[#ffffff68] duration-150 pointer-events-none" +
-										" " +
-										`
-                                    ${albumCover !== false ? "absolute opacity-0" : ""}
-                                `
+                            `} onMouseDown={() => {
+								const input = document.createElement("input");
+								input.type = "file";
+								input.accept = "image/png, image/jpeg, image/jpg, image/webp, image/gif";
+								input.onchange = e => {
+									const file = (e.target as HTMLInputElement).files?.[0];
+									if (file) {
+										const reader = new FileReader();
+										reader.onload = e => {
+											if (albumCoverRef.current && typeof e.target?.result === "string") {
+												albumCoverRef.current.src = e.target.result;
+												setAlbumCover(e.target.result);
+											}
+										};
+										reader.readAsDataURL(file);
 									}
-								>
+								};
+								input.click();
+							}}>
+								<div className={"flex flex-col gap-1.5 justify-center items-center group-hover:opacity-80 duration-150 pointer-events-none" + " " +`
+                                    ${albumCover !== false ? "absolute opacity-0" : ""}
+                                `}>
 									<PlusIcon className="size-5 stroke-current stroke-1" />
 									<span className="text-sm font-semibold">Album Art</span>
 								</div>
@@ -383,64 +437,52 @@ export const MusicLibrary = ({ query }: MusicLibraryProps) => {
                                 `}
 								/>
 							</div>
-							<label className="relative flex  h-max cursor-pointer bg-(--primary) rounded-lg inset-shadow-(--inset-shadow-primary) p-4 hover:bg-(--primary-hover) text-[#ffffff88] transition-colors">
+							<label className="relative flex  h-max cursor-pointer bg-(--primary) rounded-lg inset-shadow-(--inset-shadow-primary) p-4 hover:bg-(--primary-hover) transition-colors">
 								<div className="relative flex gap-2 justify-center items-center">
 									<span className="text-sm font-semibold">{filename ? filename : "Upload Audio file"}</span>
-									<PlusIcon
-										className={
-											"size-4.5 stroke-current stroke-0.5" +
-											" " +
-											`
+									<PlusIcon className={"size-4.5 stroke-current stroke-0.5" + " " + `
                                         ${filename ? "absolute opacity-0" : ""}
-                                    `
-										}
-									/>
+                                    `} />
 								</div>
-								<input
-									ref={audioRef}
-									type="file"
-									accept="audio/*"
-									className="hidden"
-									onChange={async e => {
-										const file = e.target.files?.[0];
-										if (file) {
-											setAudio(true);
-											const tags = await readTags(file);
+								<input ref={audioRef} type="file" accept="audio/*" className="hidden" onChange={async e => {
+									const file = e.target.files?.[0];
+									if (file) {
+										setAudio(true);
+										const tags = await readTags(file);
 
-											setFileName(file.name);
-											const { title, artist, album, genre, year, picture } = tags as AudioTags;
-											console.log(artist);
-											if (titleRef.current && title) {
-												titleRef.current.value = title;
-											}
-											if (artistRef.current && artist) {
-												artistRef.current.value = artist;
-											}
-											if (albumRef.current && album) {
-												albumRef.current.value = album;
-											}
-											if (genreRef.current && genre) {
-												// @ts-expect-error you know it works buddy
-												genreRef.current.value = genre;
-											}
-											if (yearRef.current && year) {
-												// @ts-expect-error you know it works buddy
-												yearRef.current.value = year;
-											}
-											if (albumCoverRef.current && picture && picture.data) {
-												const uint8 = Uint8Array.from(picture.data);
-												const blob = new Blob([uint8], { type: picture.format });
-												const reader = new FileReader();
-												reader.onload = e => {
-													const dataUrl = e.target?.result as string;
-													if (albumCoverRef.current) albumCoverRef.current.src = dataUrl;
-													setAlbumCover(dataUrl);
-												};
-												reader.readAsDataURL(blob);
-											}
+										setFileName(file.name);
+										const { title, artist, album, genre, year, picture } = tags as AudioTags;
+										console.log(artist);
+										if (titleRef.current && title) {
+											titleRef.current.value = title;
 										}
-									}}
-								/>
+										if (artistRef.current && artist) {
+											artistRef.current.value = artist;
+										}
+										if (albumRef.current && album) {
+											albumRef.current.value = album;
+										}
+										if (genreRef.current && genre) {
+											// @ts-expect-error you know it works buddy
+											genreRef.current.value = genre;
+										}
+										if (yearRef.current && year) {
+											// @ts-expect-error you know it works buddy
+											yearRef.current.value = year;
+										}
+										if (albumCoverRef.current && picture && picture.data) {
+											const uint8 = Uint8Array.from(picture.data);
+											const blob = new Blob([uint8], { type: picture.format });
+											const reader = new FileReader();
+											reader.onload = e => {
+												const dataUrl = e.target?.result as string;
+												if (albumCoverRef.current) albumCoverRef.current.src = dataUrl;
+												setAlbumCover(dataUrl);
+											};
+											reader.readAsDataURL(blob);
+										}
+									}
+								}} />
 							</label>
 						</div>
 						<div className="flex flex-col gap-1.5">
@@ -450,7 +492,7 @@ export const MusicLibrary = ({ query }: MusicLibraryProps) => {
 						<div className="flex flex-col gap-1.5">
 							<span className="text-lg font-semibold">Artist(s)</span>
 							<input ref={artistRef} type="text" className="pl-3 p-2 bg-(--primary) rounded-lg inset-shadow-(--inset-shadow-primary) focus-within:inset-shadow-(--inset-shadow-accent) focus-visible:outline-0 duration-150" />
-							<span className="text-md text-[#ffffff88] mb-2">seperate each artist by ","</span>
+							<span className="text-md mb-2">seperate each artist by ","</span>
 						</div>
 						<div className="flex flex-col gap-1.5">
 							<span className="text-lg font-semibold">Album</span>

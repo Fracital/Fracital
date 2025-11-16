@@ -34,6 +34,9 @@ export const init = async () => {
 					proxy: "sj",
 					quicklinks: JSON.stringify(quickLinks),
 					"floating-tabs": false,
+					"disable-visualizers": false,
+					"tracks-visualizer": true,
+					"big-player-visualizer": true,
 				},
 				null,
 				4,
@@ -86,7 +89,7 @@ export const init = async () => {
 				version: "1.0.0",
 				license: "[Apache 2.0](https://www.apache.org/licenses/LICENSE-2.0.txt)",
 				color: "#e4b174",
-				brightness: "light",
+				brightness: "dark",
 			}),
 		);
 		await window.fr.fs.promises.writeFile(`${ThemePath}/amber/index.css`, amberTheme);

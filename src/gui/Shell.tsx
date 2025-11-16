@@ -13,7 +13,6 @@ import {
 	ArrowPathIcon,
 	ArrowLeftIcon,
 	ArrowRightIcon,
-	FolderArrowDownIcon,
 	FolderIcon,
 	StarIcon as StarIconSolid,
 } from "@heroicons/react/24/solid";
@@ -235,7 +234,7 @@ const Shell = () => {
 	const uvRef = useRef<HTMLDivElement>(null);
 	const sjRef = useRef<HTMLDivElement>(null);
 
-	const [fullscreen] = useState<boolean>(false);
+	const [isFullscreen, setIsFullscreen] = useState<boolean>(Boolean(document.fullscreenElement));
 
 	const [uvVersion] = useState("v3.2.10");
 	const [sjVersion] = useState(window.parent.$scramjetVersion.version);
@@ -244,6 +243,10 @@ const Shell = () => {
 	const [isFavorited, setIsFavorited] = useState<boolean>(false);
 
 	useEffect(() => {
+		const handleFullscreenChange = () => {
+			setIsFullscreen(Boolean(document.fullscreenElement));
+		};
+		window.addEventListener("fullscreenchange", handleFullscreenChange);
 		const checkFavorited = () => {
 			const currLinks = JSON.parse(window.localStorage.getItem("quicklinks") || "[]");
 			const hrefs = currLinks.map((link: linkProps) => link.href);
@@ -263,6 +266,7 @@ const Shell = () => {
 		return () => {
 			window.removeEventListener("links-upd", handleLinksUpdate);
 			window.removeEventListener("storage", checkFavorited);
+			window.removeEventListener("fullscreenchange", handleFullscreenChange);
 		};
 	}, [currentTab?.url]);
 
@@ -510,63 +514,43 @@ const Shell = () => {
 					</div>
 					<ChevronUpDownIcon className="size-5 text-(--text-tertiary) group-hover:text-(--text-secondary) stroke-current stroke-1 cursor-pointer duration-150" />
 				</div>
-				<ShellButton
-					title={["Enter Fullscreen", "Exit Fullscreen"]}
-					type="toggle"
-					icon={
-						fullscreen
-							? [<ArrowsPointingInIcon className="size-6 text-current stroke-current stroke-0.5" />, <ArrowsPointingOutIcon className="size-6 text-current stroke-current stroke-0.5" />]
-							: [<ArrowsPointingOutIcon className="size-6 text-current stroke-current stroke-0.5" />, <ArrowsPointingInIcon className="size-6 text-current stroke-current stroke-0.5" />]
-					}
-					registerListeners={toggleState => {
-						const handleFullscreenChange = () => {
-							toggleState(document.fullscreenElement ? 1 : 0);
-						};
-						window.addEventListener("fullscreenchange", handleFullscreenChange);
-						return () => {
-							window.removeEventListener("fullscreenchange", handleFullscreenChange);
-						};
-					}}
-					onClick={() => {
-						if (document.fullscreenElement) {
-							document.exitFullscreen();
-						} else {
-							if (document.body) {
-								document.body.requestFullscreen().catch(err => {
-									console.error("Error attempting to enable full-screen mode:", err);
-								});
-							}
+				<ShellButton title={isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen"} onClick={() => {
+					if (document.fullscreenElement) {
+						document.exitFullscreen();
+					} else {
+						if (document.body) {
+							document.body.requestFullscreen().catch(err => {
+								console.error("Error attempting to enable full-screen mode:", err);
+							});
 						}
-					}}
-				></ShellButton>
-				<ShellButton
-					title="File Manager"
-					type="icon"
-					icon={<FolderIcon className="size-6" />}
-					onClick={() =>
-						newTab({
-							id: createId(),
-							title: "File Manager",
-							url: "about:files",
-							icon: <FolderIcon className="size-5" />,
-							displayUrl: "about:files",
-						})
 					}
-				></ShellButton>
-				<ShellButton
-					title="Settings"
-					type="icon"
-					icon={<Cog6ToothIcon className="size-6" />}
-					onClick={() =>
-						newTab({
-							id: createId(),
-							title: "Settings",
-							url: "about:settings",
-							icon: <Cog6ToothIcon className="size-5" />,
-							displayUrl: "about:settings",
-						})
-					}
-				></ShellButton>
+				}}>
+					{isFullscreen ? (
+						<ArrowsPointingInIcon className="size-6 text-current stroke-current stroke-0.5" />
+					) : (
+						<ArrowsPointingOutIcon className="size-6 text-current stroke-current stroke-0.5" />
+					)}
+				</ShellButton>
+				{/* <ShellButton title="File Manager" type="icon" icon={<FolderIcon className="size-6" />} onClick={() =>
+					newTab({
+						id: createId(),
+						title: "File Manager",
+						url: "about:files",
+						icon: <FolderIcon className="size-5" />,
+						displayUrl: "about:files",
+					})
+				}></ShellButton> */}
+				<ShellButton title="Settings" onClick={() =>
+					newTab({
+						id: createId(),
+						title: "Settings",
+						url: "about:settings",
+						icon: <Cog6ToothIcon className="size-5" />,
+						displayUrl: "about:settings",
+					})
+				}>
+					<Cog6ToothIcon className="size-6" />
+				</ShellButton>
 				{/* <UserCard avatar={
                     <UserCircleIcon className={"size-8" + " " + `
                         ${

@@ -253,12 +253,29 @@ export const useMusicStore = create<{
 		set({ currentTrack: track, src: track.src, playedHistory: nextHistory });
 	},
 	playNext: () => {
-		const { queue, currentTrack } = get();
-		if (!currentTrack || queue.length === 0) return;
+		const { queue, currentTrack, playedHistory } = get();
+		if (queue.length === 0) return;
 
-		const index = queue.findIndex(t => t.id === currentTrack.id);
-		const next = queue[index + 1];
-		if (next) set({ currentTrack: next });
+		if (currentTrack) {
+			const index = queue.findIndex(t => t.id === currentTrack.id);
+			if (index !== -1 && index < queue.length - 1) {
+				const next = queue[index + 1];
+				const updatedQueue = queue.filter((_, i) => i !== index);
+				const nextHistory = [...playedHistory, currentTrack];
+				set({ currentTrack: next, queue: updatedQueue, playedHistory: nextHistory });
+			} else if (index !== -1) {
+				const updatedQueue = queue.filter((_, i) => i !== index);
+				const nextHistory = [...playedHistory, currentTrack];
+				set({ currentTrack: null, queue: updatedQueue, playedHistory: nextHistory });
+			} else if (queue.length > 0) {
+				const next = queue[0];
+				const nextHistory = [...playedHistory, currentTrack];
+				set({ currentTrack: next, queue: queue.slice(1), playedHistory: nextHistory });
+			}
+		} else if (queue.length > 0) {
+			const next = queue[0];
+			set({ currentTrack: next, queue: queue.slice(1) });
+		}
 	},
 	playPrev: () => {
 		const { playedHistory } = get();

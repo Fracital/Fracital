@@ -19,6 +19,7 @@
 		"@fortawesome/free-brands-svg-icons": "^7.1.0",
 		"@fortawesome/react-fontawesome": "^3.1.0",
 		"@heroicons/react": "^2.2.0",
+		"audvis": "^0.2.4",
 		"@hono/node-server": "^1.19.6",
 		"@mercuryworkshop/bare-mux": "^2.1.7",
 		"@mercuryworkshop/epoxy-transport": "^2.1.28",

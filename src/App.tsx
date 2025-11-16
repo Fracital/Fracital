@@ -1,6 +1,6 @@
 import { createId } from "@paralleldrive/cuid2";
 import { useEffect, useRef, useState } from "react";
-import { RectangleStackIcon, PlusIcon, Cog6ToothIcon, ChevronLeftIcon, ChevronRightIcon } from "@heroicons/react/24/solid";
+import { RectangleStackIcon, PlusIcon, Cog6ToothIcon, ChevronLeftIcon, ChevronRightIcon, RadioIcon } from "@heroicons/react/24/solid";
 import type { detailProps } from "./libs/eventBus";
 import XOR from "./libs/XOR";
 import { useLocation } from "react-router-dom";
@@ -18,7 +18,7 @@ import Files from "./views/Files/Files";
 
 import { BareMuxConnection } from "@mercuryworkshop/bare-mux";
 import { usePanelsStore, useSettingsStore, useTabsStore } from "./store";
-import { quickLinks } from "./libs/init";
+import { init, quickLinks } from "./libs/init";
 import { initTheme } from "./libs/theme";
 import { MusicLibrary } from "./views/Music/MusicLibrary";
 import { View } from "./gui/View";
@@ -78,6 +78,7 @@ const regSw = async () => {
 if (!isWebOS) regSw();
 
 const App = () => {
+	init();
 	Api();
 	const settings = useSettingsStore(state => state.settings);
 	const setSettings = useSettingsStore(state => state.setSettings);
@@ -147,9 +148,6 @@ const App = () => {
 				displayUrl: detail.url,
 			});
 
-			// Push to history for native pages (about: URLs)
-			// Proxied pages handle their own history in ExternalSite.tsx
-			// Use pushHistory which properly handles truncating forward history
 			if (detail.url.includes("about:") && !(detail as any).isHistoryNavigation) {
 				const iconStr = typeof detail.icon === "string" ? detail.icon : undefined;
 				useTabsStore.getState().pushHistory(detail.id, {
@@ -170,7 +168,6 @@ const App = () => {
 			const tabId = detail?.tab;
 			if (tabId) {
 				const tab = tabs.find(t => t.id === tabId);
-				// Only refresh React pages (about: URLs), iframes handle their own refresh
 				if (tab && tab.url.includes("about:")) {
 					useTabsStore.getState().refreshTab(tabId);
 				}
@@ -309,15 +306,15 @@ const App = () => {
 				<Shell />
 				<div className="flex flex-col flex-1 min-h-0">
 					<div id="main" className="relative flex flex-1 min-h-0 gap-2.5">
-						<div
-							className={
-								"relative flex-1 min-h-0 bg-(--secondary) inset-shadow-(--inset-shadow-primary) rounded-xl overflow-hidden" +
-								" " +
-								`
-                            ${settings}
-                        `
-							}
-						>
+						{/* ad and promotion bar */}
+						{/* <div className={"relative flex flex-col min-h-0 bg-(--secondary) inset-shadow-(--inset-shadow-primary) p-3 gap-2.5 rounded-xl overflow-hidden"}>
+							<div className="flex items-center justify-center w-full px-2 gap-2">
+								<span className="text-lg font-medium">Ad</span>
+								<RadioIcon className="size-5" />
+							</div>
+							<div className="w-60 h-80 bg-[#ffffff18] rounded-xl"></div>
+						</div> */}
+						<div className={"relative flex-1 min-h-0 bg-(--secondary) inset-shadow-(--inset-shadow-primary) rounded-xl overflow-hidden"}>
 							{tabs.length > 0 ? (
 								tabs.map(item => {
 									if (item.url.includes("about:")) {
@@ -408,18 +405,10 @@ const App = () => {
 								<Home />
 							)}
 						</div>
-						<div
-							className={
-								(settings["floating-tabs"] && "absolute py-2 h-full") +
-								" " +
-								"flex flex-col flex-shrink-0 duration-150" +
-								" " +
-								`
+						<div className={(settings["floating-tabs"] && "absolute py-2 h-full") + " " + "flex flex-col shrink-0 duration-150" + " " + `
                             ${settings["floating-tabs"] === true ? (panelsOpen ? "w-60 right-2" : "w-10 -right-1") : panelsOpen ? "w-78" : "w-10"}
                             ${settings["floating-tabs"] ? "gap-2" : "gap-2.5"}
-                        `
-							}
-						>
+						`}>
 							<div
 								className={
 									"flex w-full h-max p-1.5 py-2 gap-2 items-center justify-between bg-(--secondary) hover:bg-(--tertiary) inset-shadow-(--inset-shadow-primary) *:pointer-events-none cursor-pointer duration-150" +
