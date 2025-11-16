@@ -514,22 +514,21 @@ const Shell = () => {
 					</div>
 					<ChevronUpDownIcon className="size-5 text-(--text-tertiary) group-hover:text-(--text-secondary) stroke-current stroke-1 cursor-pointer duration-150" />
 				</div>
-				<ShellButton title={isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen"} onClick={() => {
-					if (document.fullscreenElement) {
-						document.exitFullscreen();
-					} else {
-						if (document.body) {
-							document.body.requestFullscreen().catch(err => {
-								console.error("Error attempting to enable full-screen mode:", err);
-							});
+				<ShellButton
+					title={isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen"}
+					onClick={() => {
+						if (document.fullscreenElement) {
+							document.exitFullscreen();
+						} else {
+							if (document.body) {
+								document.body.requestFullscreen().catch(err => {
+									console.error("Error attempting to enable full-screen mode:", err);
+								});
+							}
 						}
-					}
-				}}>
-					{isFullscreen ? (
-						<ArrowsPointingInIcon className="size-6 text-current stroke-current stroke-0.5" />
-					) : (
-						<ArrowsPointingOutIcon className="size-6 text-current stroke-current stroke-0.5" />
-					)}
+					}}
+				>
+					{isFullscreen ? <ArrowsPointingInIcon className="size-6 text-current stroke-current stroke-0.5" /> : <ArrowsPointingOutIcon className="size-6 text-current stroke-current stroke-0.5" />}
 				</ShellButton>
 				{/* <ShellButton title="File Manager" type="icon" icon={<FolderIcon className="size-6" />} onClick={() =>
 					newTab({
@@ -540,15 +539,18 @@ const Shell = () => {
 						displayUrl: "about:files",
 					})
 				}></ShellButton> */}
-				<ShellButton title="Settings" onClick={() =>
-					newTab({
-						id: createId(),
-						title: "Settings",
-						url: "about:settings",
-						icon: <Cog6ToothIcon className="size-5" />,
-						displayUrl: "about:settings",
-					})
-				}>
+				<ShellButton
+					title="Settings"
+					onClick={() =>
+						newTab({
+							id: createId(),
+							title: "Settings",
+							url: "about:settings",
+							icon: <Cog6ToothIcon className="size-5" />,
+							displayUrl: "about:settings",
+						})
+					}
+				>
 					<Cog6ToothIcon className="size-6" />
 				</ShellButton>
 				{/* <UserCard avatar={
