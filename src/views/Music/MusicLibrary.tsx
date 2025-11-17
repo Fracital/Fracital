@@ -216,7 +216,7 @@ export const MusicLibrary = ({ query }: MusicLibraryProps) => {
 						library.map((song, index) => (
 							<div
 								key={index}
-								className={`flex items-center gap-2 p-2.5 w-max rounded-xl ${settings.brightness === "dark" ? "bg-[#ffffff20] hover:bg-[#ffffff28]" : "bg-[#00000028] hover:bg-[#00000038]"} duration-150`}
+								className={`group flex items-center gap-2 p-2.5 w-max rounded-xl ${settings.brightness === "dark" ? "bg-[#ffffff20] hover:bg-[#ffffff28]" : "bg-[#00000028] hover:bg-[#00000038]"} duration-150`}
 								onClick={(e: React.MouseEvent<HTMLElement>) => {
 									if ((e.target as HTMLElement).id === "options") return;
 									if (currentTrack === song) return;
@@ -224,18 +224,19 @@ export const MusicLibrary = ({ query }: MusicLibraryProps) => {
 								}}
 							>
 								{song.cover ? (
-									<img src={song.cover} className="size-12 rounded-md object-cover" />
+									<div className="relative flex items-center justify-center size-12 rounded-md overflow-hidden">
+										<PlayIcon className="absolute size-6 scale-80 opacity-0 group-hover:opacity-100 group-hover:scale-100 duration-150" style={{ filter: "drop-shadow: 0 0 5px #000000" }} />
+										<img src={song.cover} className="size-full object-cover" />
+									</div>
 								) : (
-									<div className="size-12 rounded-md bg-(--primary) flex items-center justify-center text-(--text-tertiary) font-bold">
+									<div className="relative size-12 rounded-md bg-(--primary) flex items-center justify-center text-(--text-tertiary) font-bold">
+										<PlayIcon className="absolute size-6 text-(--text-primary) scale-80 opacity-0 group-hover:opacity-100 group-hover:scale-100 duration-150" style={{ filter: "drop-shadow: 0 0 5px #000000" }} />
 										<MusicalNoteIcon className="size-6 text-current" />
 									</div>
 								)}
 								<div className="flex flex-col gap-1 justify-center pr-2 pointer-events-none">
 									<span className="text-xl font-medium">{song.title}</span>
 									<span className="text-md">{Array.isArray(song.artists) ? song.artists.join(", ") : song.artists}</span>
-								</div>
-								<div id="play" title="Play track" className={`flex items-center justify-center p-2 rounded-full ${settings.brightness === "dark" ? "bg-[#ffffff10] hover:bg-[#ffffff18]" : "bg-[#00000010] hover:bg-[#0000 0018]"} cursor-pointer duration-150`}>
-									<PlayIcon id="play" className="size-5 pointer-events-none" />
 								</div>
 								<div
 									id="options"
