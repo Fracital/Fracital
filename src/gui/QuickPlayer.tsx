@@ -685,27 +685,39 @@ export const QuickPlayer = ({ panelsOpen, className, onMouseDown }: QuickPlayerP
 										</div>
 									)}
 									<div className="absolute group flex gap-3 opacity-0 group-hover:opacity-100 duration-150 z-10">
-										<button className="opacity-80 hover:opacity-100 cursor-pointer duration-150" style={{filter: "drop-shadow(0px 0px 10px #000)"}} onClick={e => {
-											e.stopPropagation();
-											if (!audioRef.current) return;
-											if (audioRef.current.currentTime > 2.5) {
-												audioRef.current.currentTime = 0;
-												setCurrentTime(0);
-												return;
-											}
-											const didGoBack = playPrev();
-											if (!didGoBack) {
-												audioRef.current.currentTime = 0;
-												setCurrentTime(0);
-											}
-										}}>
+										<button
+											className="opacity-80 hover:opacity-100 cursor-pointer duration-150"
+											style={{ filter: "drop-shadow(0px 0px 10px #000)" }}
+											onClick={e => {
+												e.stopPropagation();
+												if (!audioRef.current) return;
+												if (audioRef.current.currentTime > 2.5) {
+													audioRef.current.currentTime = 0;
+													setCurrentTime(0);
+													return;
+												}
+												const didGoBack = playPrev();
+												if (!didGoBack) {
+													audioRef.current.currentTime = 0;
+													setCurrentTime(0);
+												}
+											}}
+										>
 											<BackwardIcon className="size-12" />
 										</button>
-										{isPlaying === false ? <PlayIcon style={{filter: "drop-shadow(0px 0px 10px #000)"}} className="size-12 text-current stroke-current stroke-0.5 pointer-events-none" /> : <PauseIcon style={{filter: "drop-shadow(0px 0px 10px #000)"}} className="size-12 text-current stroke-current stroke-1 pointer-events-none" />}
-										<button className="opacity-80 hover:opacity-100 cursor-pointer duration-150" style={{filter: "drop-shadow(0px 0px 10px #000)"}} onClick={e => {
-											e.stopPropagation();
-											playNext();
-										}}>
+										{isPlaying === false ? (
+											<PlayIcon style={{ filter: "drop-shadow(0px 0px 10px #000)" }} className="size-12 text-current stroke-current stroke-0.5 pointer-events-none" />
+										) : (
+											<PauseIcon style={{ filter: "drop-shadow(0px 0px 10px #000)" }} className="size-12 text-current stroke-current stroke-1 pointer-events-none" />
+										)}
+										<button
+											className="opacity-80 hover:opacity-100 cursor-pointer duration-150"
+											style={{ filter: "drop-shadow(0px 0px 10px #000)" }}
+											onClick={e => {
+												e.stopPropagation();
+												playNext();
+											}}
+										>
 											<ForwardIcon className="size-12" />
 										</button>
 									</div>
