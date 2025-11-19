@@ -112,6 +112,8 @@ export const RufflePlayer = ({
 						}
 						// Notify parent component that player is ready
 						if (onPlayerReady) {
+							rufflePlayer.style.height = "100%";
+							rufflePlayer.style.width = "100%";
 							onPlayerReady(rufflePlayer);
 						}
 					})

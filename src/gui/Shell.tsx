@@ -15,10 +15,14 @@ import {
 	ArrowRightIcon,
 	FolderIcon,
 	StarIcon as StarIconSolid,
-	PuzzlePieceIcon,
+	EllipsisVerticalIcon,
+	FireIcon,
+	WrenchScrewdriverIcon,
+	CheckBadgeIcon,
+	MusicalNoteIcon,
+	PlayIcon,
 } from "@heroicons/react/24/solid";
 import { StarIcon as StarIconOutline } from "@heroicons/react/24/outline";
-import { FireIcon, WrenchScrewdriverIcon, CheckBadgeIcon } from "@heroicons/react/24/solid";
 import { Suspense, useEffect, useState, useRef } from "react";
 import { ShellButton } from "../components/ShellButton";
 import { useTabsStore, useSettingsStore } from "../store";
@@ -31,6 +35,7 @@ import { useModal } from "../components/Modal/ModalContext";
 import FavoriteModal from "../components/Modal/Favorite";
 import { Modal } from "../components/Modal/Modal";
 import { changeProxy, getProxy } from "../types";
+import { ContextMenu, type MenuItem } from "../components/ContextMenu";
 
 declare global {
 	interface Window {
@@ -242,6 +247,7 @@ const Shell = () => {
 
 	const { openModal } = useModal();
 	const [isFavorited, setIsFavorited] = useState<boolean>(false);
+	const [contextMenu, setContextMenu] = useState<null | { x: number; y: number; visible: boolean; items: MenuItem[] }>(null);
 
 	useEffect(() => {
 		const handleFullscreenChange = () => {
@@ -531,28 +537,61 @@ const Shell = () => {
 				>
 					{isFullscreen ? <ArrowsPointingInIcon className="size-6 text-current stroke-current stroke-0.5" /> : <ArrowsPointingOutIcon className="size-6 text-current stroke-current stroke-0.5" />}
 				</ShellButton>
-				{/* <ShellButton title="File Manager" type="icon" icon={<FolderIcon className="size-6" />} onClick={() =>
-					newTab({
-						id: createId(),
-						title: "File Manager",
-						url: "about:files",
-						icon: <FolderIcon className="size-5" />,
-						displayUrl: "about:files",
-					})
-				}></ShellButton> */}
 				<ShellButton
-					title="Games"
-					onClick={() =>
-						newTab({
-							id: createId(),
-							title: "Games",
-							url: "about:games",
-							icon: <PuzzlePieceIcon className="size-5" />,
-							displayUrl: "about:games",
-						})
-					}
+					title="Page selector"
+					onClick={(e: React.MouseEvent) => {
+						const items: MenuItem[] = [
+							{
+								title: "File Manager",
+								onClick: () => {
+									newTab({
+										id: createId(),
+										title: "File Manager",
+										url: "about:files",
+										icon: <FolderIcon className="size-5" />,
+										displayUrl: "about:files",
+									});
+								},
+								icon: <FolderIcon className="size-5" />,
+							},
+							{
+								title: "Games",
+								onClick: () => {
+									newTab({
+										id: createId(),
+										title: "Games",
+										url: "about:games",
+										icon: <EllipsisVerticalIcon className="size-5" />,
+										displayUrl: "about:games",
+									});
+								},
+								icon: <PlayIcon className="size-5" />,
+							},
+							{
+								title: "Music",
+								onClick: () => {
+									newTab({
+										id: createId(),
+										title: "Music Library",
+										url: "about:music",
+										current: true,
+										displayUrl: "about:music",
+										icon: <MusicalNoteIcon className="size-5" />,
+									});
+								},
+								icon: <MusicalNoteIcon className="size-5" />,
+							},
+						];
+
+						setContextMenu({
+							x: e.clientX,
+							y: e.clientY,
+							visible: true,
+							items: items,
+						});
+					}}
 				>
-					<PuzzlePieceIcon className="size-6" />
+					<EllipsisVerticalIcon className="size-6" />
 				</ShellButton>
 				<ShellButton
 					title="Settings"
@@ -576,6 +615,7 @@ const Shell = () => {
                     `} />
                 } id="anon" display="Guest" handle="anon" /> */}
 			</div>
+			{contextMenu?.visible && <ContextMenu items={contextMenu.items} position={{ x: contextMenu.x, y: contextMenu.y }} onClose={() => setContextMenu(null)} />}
 		</div>
 	);
 };

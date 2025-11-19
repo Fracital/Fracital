@@ -25,6 +25,7 @@ export const changeProxy = async (proxy: "sj" | "uv"): Promise<void> => {
 
 export const dirExists = async (path: string): Promise<boolean> => {
 	return new Promise(resolve => {
+		if (typeof window.fr === "undefined" || typeof window.fr.fs === "undefined") return resolve(false);
 		window.fr.fs.stat(path, (err: any, stats: any) => {
 			if (err) {
 				if (err.code === "ENOENT") {
@@ -43,6 +44,7 @@ export const dirExists = async (path: string): Promise<boolean> => {
 
 export const fileExists = async (path: string): Promise<boolean> => {
 	return new Promise(resolve => {
+		if (typeof window.fr === "undefined" || typeof window.fr.fs === "undefined") return resolve(false);
 		window.fr.fs.stat(path, (err: any, stats: any) => {
 			if (err) {
 				if (err.code === "ENOENT") {
