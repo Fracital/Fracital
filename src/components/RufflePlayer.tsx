@@ -49,7 +49,7 @@ export const RufflePlayer = ({
 		let cleanup: (() => void) | undefined;
 
 		const loadRuffle = async () => {
-            // @ts-expect-error - window.RufflePlayer rah
+			// @ts-expect-error - window.RufflePlayer rah
 			while (!window.RufflePlayer) {
 				await new Promise(resolve => setTimeout(resolve, 100));
 			}
@@ -87,19 +87,20 @@ export const RufflePlayer = ({
 					const uint8Array = data instanceof Uint8Array ? data : new Uint8Array(data);
 					console.log("Loading SWF with data, size:", uint8Array.length);
 					console.log("First few bytes:", Array.from(uint8Array.slice(0, 10)));
-					loadOptions = { 
+					loadOptions = {
 						data: uint8Array,
-						...config 
+						...config,
 					};
 				} else {
 					console.log("Loading SWF from URL:", src);
-					loadOptions = { 
+					loadOptions = {
 						url: src,
-						...config 
+						...config,
 					};
 				}
 
-				rufflePlayer.load(loadOptions)
+				rufflePlayer
+					.load(loadOptions)
 					.then(() => {
 						setLoading(false);
 						setError(null);
@@ -147,19 +148,16 @@ export const RufflePlayer = ({
 	}, [volume]);
 
 	return (
-		<div 
-			className={`relative flex items-center justify-center ${className}`}
-			style={{ width, height }}
-		>
+		<div className={`relative flex items-center justify-center ${className}`} style={{ width, height }}>
 			<div
 				ref={containerRef}
 				className="w-full h-full"
-				style={{ 
-					width: "100%", 
+				style={{
+					width: "100%",
 					height: "100%",
 					display: "flex",
 					alignItems: "center",
-					justifyContent: "center"
+					justifyContent: "center",
 				}}
 			/>
 			{loading && (

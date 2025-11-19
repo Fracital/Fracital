@@ -312,63 +312,92 @@ const App = () => {
 							<div className="w-60 h-80 bg-[#ffffff18] rounded-xl"></div>
 						</div> */}
 						<div className={"relative flex-1 min-h-0 bg-(--secondary) inset-shadow-(--inset-shadow-primary) rounded-xl overflow-hidden"}>
-						{tabs.length > 0 ? (
-							tabs.map(item => {
-								if (item.url.includes("about:")) {
-									const pageName = getPageFromUrl(item.url);
-									const viewKey = `${item.id}-${item.refreshKey ?? 0}`;
+							{tabs.length > 0 ? (
+								tabs.map(item => {
+									if (item.url.includes("about:")) {
+										const pageName = getPageFromUrl(item.url);
+										const viewKey = `${item.id}-${item.refreshKey ?? 0}`;
 
-									if (!pageName || !aboutPages[pageName]) {
+										if (!pageName || !aboutPages[pageName]) {
 											return (
 												<div key={item.id}>
 													{currentTab && (
 														<View key={viewKey} id={item.id}>
-															<Home key={viewKey} className={"absolute inset-0 duration-150" + " " + `
+															<Home
+																key={viewKey}
+																className={
+																	"absolute inset-0 duration-150" +
+																	" " +
+																	`
 																${currentTab ? (currentTab.id !== item.id ? "opacity-0 translate-y-2 pointer-events-none" : "") : ""}
-															`} />
+															`
+																}
+															/>
 														</View>
 													)}
 												</div>
 											);
 										}
 
-									const pageConfig = aboutPages[pageName];
-									const PageComponent = pageConfig.component;
+										const pageConfig = aboutPages[pageName];
+										const PageComponent = pageConfig.component;
 
-									const query = pageConfig.hasQuery ? getQueryFromUrl(item.url) : undefined;
+										const query = pageConfig.hasQuery ? getQueryFromUrl(item.url) : undefined;
 
-									if (pageName === "newtab") {
+										if (pageName === "newtab") {
+											return (
+												<div key={item.id}>
+													{currentTab && (
+														<View key={viewKey} id={item.id}>
+															<PageComponent
+																key={viewKey}
+																className={
+																	"absolute inset-0 duration-150" +
+																	" " +
+																	`
+															${currentTab ? (currentTab.id !== item.id ? "opacity-0 translate-y-2 pointer-events-none" : "") : ""}
+														`
+																}
+																query={query}
+															/>
+														</View>
+													)}
+												</div>
+											);
+										}
+
 										return (
 											<div key={item.id}>
-												{currentTab && (
-													<View key={viewKey} id={item.id}>
-														<PageComponent key={viewKey} className={"absolute inset-0 duration-150" + " " + `
-															${currentTab ? (currentTab.id !== item.id ? "opacity-0 translate-y-2 pointer-events-none" : "") : ""}
-														`} query={query} />
-													</View>
-												)}
+												<View key={viewKey} id={item.id}>
+													<PageComponent
+														key={viewKey}
+														query={query}
+														className={
+															"absolute inset-0 duration-150" +
+															" " +
+															`
+														${currentTab ? (currentTab.id !== item.id ? "opacity-0 translate-y-2 pointer-events-none" : "") : ""}
+													`
+														}
+													/>
+												</View>
 											</div>
 										);
-									}
-
-									return (
-										<div key={item.id}>
-											<View key={viewKey} id={item.id}>
-												<PageComponent 
-													key={viewKey} 
-													query={query}
-													className={"absolute inset-0 duration-150" + " " + `
-														${currentTab ? (currentTab.id !== item.id ? "opacity-0 translate-y-2 pointer-events-none" : "") : ""}
-													`}
-												/>
-											</View>
-										</div>
-									);
 									} else {
 										return (
-											<ExternalSite id={item.id} current={currentTab?.id === item.id} key={item.id} url={proxy === "sj" ? "/service/" + XOR.encode(item.url) : "/uv/service/" + XOR.encode(item.url)} className={"absolute inset-0" + " " + `
+											<ExternalSite
+												id={item.id}
+												current={currentTab?.id === item.id}
+												key={item.id}
+												url={proxy === "sj" ? "/service/" + XOR.encode(item.url) : "/uv/service/" + XOR.encode(item.url)}
+												className={
+													"absolute inset-0" +
+													" " +
+													`
 												${currentTab ? (currentTab.id !== item.id ? "opacity-0 pointer-events-none" : "") : ""}
-                                            `}/>
+                                            `
+												}
+											/>
 										);
 									}
 								})
@@ -376,19 +405,41 @@ const App = () => {
 								<Home />
 							)}
 						</div>
-						<div className={(settings["floating-tabs"] && "absolute py-2 h-full") + " " + "flex flex-col shrink-0 duration-150" + " " + `
+						<div
+							className={
+								(settings["floating-tabs"] && "absolute py-2 h-full") +
+								" " +
+								"flex flex-col shrink-0 duration-150" +
+								" " +
+								`
                             ${settings["floating-tabs"] === true ? (panelsOpen ? "w-60 right-2" : "w-10 -right-1") : panelsOpen ? "w-78" : "w-10"}
                             ${settings["floating-tabs"] ? "gap-2" : "gap-2.5"}
-						`}>
-							<div className={"flex w-full h-max p-1.5 py-2 gap-2 items-center justify-between bg-(--secondary) hover:bg-(--tertiary) inset-shadow-(--inset-shadow-primary) *:pointer-events-none cursor-pointer duration-150" + " " + `
+						`
+							}
+						>
+							<div
+								className={
+									"flex w-full h-max p-1.5 py-2 gap-2 items-center justify-between bg-(--secondary) hover:bg-(--tertiary) inset-shadow-(--inset-shadow-primary) *:pointer-events-none cursor-pointer duration-150" +
+									" " +
+									`
                                 ${settings["floating-tabs"] && panelsOpen ? "rounded-lg" : "rounded-xl"}
                                 ${settings["floating-tabs"] && panelsOpen ? "shadow-[0_0_16px_3px_#00000035]" : ""}
-                            `} title={panelsOpen ? "Close Panels" : "Open Panels"} onMouseDown={() => {
-								panelsOpen ? setPanelsOpen(false) : setPanelsOpen(true);
-							}}>
-								<ChevronLeftIcon className={"size-6 stroke-2 stroke-current" + " " + `
+                            `
+								}
+								title={panelsOpen ? "Close Panels" : "Open Panels"}
+								onMouseDown={() => {
+									panelsOpen ? setPanelsOpen(false) : setPanelsOpen(true);
+								}}
+							>
+								<ChevronLeftIcon
+									className={
+										"size-6 stroke-2 stroke-current" +
+										" " +
+										`
                                     ${panelsOpen ? "opacity-0" : "opacity-100"}
-                                `} />
+                                `
+									}
+								/>
 								{panelsOpen && (
 									<>
 										<span className="font-semibold">Close Panels</span>
@@ -397,105 +448,139 @@ const App = () => {
 								)}
 							</div>
 							{/* tabs panel */}
-							<div ref={tabsRef} className={"flex flex-col bg-(--secondary) inset-shadow-(--inset-shadow-primary) overflow-hidden duration-150 min-h-0" + " " + `
+							<div
+								ref={tabsRef}
+								className={
+									"flex flex-col bg-(--secondary) inset-shadow-(--inset-shadow-primary) overflow-hidden duration-150 min-h-0" +
+									" " +
+									`
                                 ${currentPanel === "tabs" ? "flex-2" : "flex-1"}
                                 ${panelsOpen ? "w-full" : "w-50"}
                                 ${settings["floating-tabs"] && panelsOpen ? "rounded-lg" : "rounded-xl"}
                                 ${settings["floating-tabs"] && "shadow-[0_0_16px_3px_#00000035]"}
-                            `} onMouseDown={() => {
-								setPanelsOpen(true);
-								setCurrentPanel("tabs");
-							}}>
-								<div className={"relative flex w-full flex-1 min-h-0 overflow-auto gap-2 p-2 flex-col items-stretch duration-200"} onDragOver={e => {
-									e.preventDefault();
-									const el = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null;
-									const tabEl = el?.closest("[data-url][id]") as HTMLElement | null;
-									if (tabEl && tabEl.id) {
-										const rect = tabEl.getBoundingClientRect();
-										const y = e.clientY - rect.top;
-										return;
-									}
-									const groupHeader = el?.closest("[data-group-id]") as HTMLElement | null;
-									if (groupHeader) {
-										return;
-									}
-									const groupWrapper = el?.closest("[data-group-wrapper]") as HTMLElement | null;
-									if (groupWrapper) {
-										return;
-									}
-								}} onDrop={e => {
-									e.preventDefault();
-									const draggedId = e.dataTransfer.getData("text/tab-id");
-									if (!draggedId) return;
-
-									const el = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null;
-									if (!el) {
-										updateTab(draggedId, { groupId: undefined });
-										return;
-									}
-
-									const tabEl = el.closest("[data-url][id]") as HTMLElement | null;
-									if (tabEl && tabEl.id) {
-										const targetId = tabEl.id;
-										if (targetId === draggedId) return;
-										const targetTab = tabs.find(t => t.id === targetId);
-										const targetGroupId = targetTab?.groupId;
-										const rect = tabEl.getBoundingClientRect();
-										const y = e.clientY - rect.top;
-										const placeBefore = y < rect.height / 2;
-										updateTab(draggedId, { groupId: targetGroupId });
-										useTabsStore.getState().moveTabRelative(draggedId, targetId, placeBefore);
-										return;
-									}
-
-									const groupHeader = el.closest("[data-group-id]") as HTMLElement | null;
-									const groupWrapper = el.closest("[data-group-wrapper]") as HTMLElement | null;
-									const gid = groupHeader?.getAttribute("data-group-id") || groupWrapper?.getAttribute("data-group-wrapper");
-									if (gid) {
-										updateTab(draggedId, { groupId: gid });
-										const groupTabs = tabs.filter(t => t.groupId === gid);
-										if (groupTabs.length > 0) {
-											const lastId = groupTabs[groupTabs.length - 1].id;
-											useTabsStore.getState().moveTabRelative(draggedId, lastId, false);
+                            `
+								}
+								onMouseDown={() => {
+									setPanelsOpen(true);
+									setCurrentPanel("tabs");
+								}}
+							>
+								<div
+									className={"relative flex w-full flex-1 min-h-0 overflow-auto gap-2 p-2 flex-col items-stretch duration-200"}
+									onDragOver={e => {
+										e.preventDefault();
+										const el = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null;
+										const tabEl = el?.closest("[data-url][id]") as HTMLElement | null;
+										if (tabEl && tabEl.id) {
+											const rect = tabEl.getBoundingClientRect();
+											const y = e.clientY - rect.top;
+											return;
 										}
-										return;
-									}
+										const groupHeader = el?.closest("[data-group-id]") as HTMLElement | null;
+										if (groupHeader) {
+											return;
+										}
+										const groupWrapper = el?.closest("[data-group-wrapper]") as HTMLElement | null;
+										if (groupWrapper) {
+											return;
+										}
+									}}
+									onDrop={e => {
+										e.preventDefault();
+										const draggedId = e.dataTransfer.getData("text/tab-id");
+										if (!draggedId) return;
 
-									updateTab(draggedId, { groupId: undefined });
-								}}>
+										const el = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null;
+										if (!el) {
+											updateTab(draggedId, { groupId: undefined });
+											return;
+										}
+
+										const tabEl = el.closest("[data-url][id]") as HTMLElement | null;
+										if (tabEl && tabEl.id) {
+											const targetId = tabEl.id;
+											if (targetId === draggedId) return;
+											const targetTab = tabs.find(t => t.id === targetId);
+											const targetGroupId = targetTab?.groupId;
+											const rect = tabEl.getBoundingClientRect();
+											const y = e.clientY - rect.top;
+											const placeBefore = y < rect.height / 2;
+											updateTab(draggedId, { groupId: targetGroupId });
+											useTabsStore.getState().moveTabRelative(draggedId, targetId, placeBefore);
+											return;
+										}
+
+										const groupHeader = el.closest("[data-group-id]") as HTMLElement | null;
+										const groupWrapper = el.closest("[data-group-wrapper]") as HTMLElement | null;
+										const gid = groupHeader?.getAttribute("data-group-id") || groupWrapper?.getAttribute("data-group-wrapper");
+										if (gid) {
+											updateTab(draggedId, { groupId: gid });
+											const groupTabs = tabs.filter(t => t.groupId === gid);
+											if (groupTabs.length > 0) {
+												const lastId = groupTabs[groupTabs.length - 1].id;
+												useTabsStore.getState().moveTabRelative(draggedId, lastId, false);
+											}
+											return;
+										}
+
+										updateTab(draggedId, { groupId: undefined });
+									}}
+								>
 									{groups.length > 0 && groups.map(group => <TabGroup key={group.id} id={group.id} name={group.name} icon={group.icon} />)}
 									{(() => {
 										const ungrouped = tabs.filter(t => !t.groupId);
 										if (tabs.length === 0) {
 											return (
-												<span className={"absolute left-1/2 top-1/2 -translate-1/2 w-max font-semibold text-lg duration-150" + " " + `
+												<span
+													className={
+														"absolute left-1/2 top-1/2 -translate-1/2 w-max font-semibold text-lg duration-150" +
+														" " +
+														`
 													${tabs.length < 0 ? "opacity-0" : ""}
-												`}>No tabs open</span>
+												`
+													}
+												>
+													No tabs open
+												</span>
 											);
 										}
 
 										return ungrouped.length > 0 ? ungrouped.map(item => <Tab title={item.title} url={item.url} id={item.id} icon={item.icon} displayUrl={item.url} key={item.id} />) : null;
 									})()}
 								</div>
-								<div className={"flex min-max-1 w-full p-1.5 items-start justify-between gap-0.5" + " " + `
+								<div
+									className={
+										"flex min-max-1 w-full p-1.5 items-start justify-between gap-0.5" +
+										" " +
+										`
                                     ${settings.brightness === "dark" ? "bg-[#ffffff10]" : "bg-[#00000025]"}
-                                `}>
+                                `
+									}
+								>
 									<div className="flex gap-0.5">
-										<button title={platform.includes("Mac") ? "New Tab ⌃ + T" : "New Tab: Alt + T"} className="flex items-center justify-center p-2 hover:bg-[#ffffff10] text-(--text-secondary) hover:text-(--text-primary) rounded-md cursor-pointer duration-200" onClick={() => {
-											newTab({
-												id: createId(),
-												title: "New Tab",
-												url: "about:newtab",
-												current: true,
-												displayUrl: "about:newtab",
-											});
-										}}>
+										<button
+											title={platform.includes("Mac") ? "New Tab ⌃ + T" : "New Tab: Alt + T"}
+											className="flex items-center justify-center p-2 hover:bg-[#ffffff10] text-(--text-secondary) hover:text-(--text-primary) rounded-md cursor-pointer duration-200"
+											onClick={() => {
+												newTab({
+													id: createId(),
+													title: "New Tab",
+													url: "about:newtab",
+													current: true,
+													displayUrl: "about:newtab",
+												});
+											}}
+										>
 											<PlusIcon className="size-5 stroke-current stroke-1 duration-150" />
 										</button>
-										<button title={platform.includes("Mac") ? "New Group ⌃ + T" : "New Group: Alt + T"} className="flex items-center justify-center p-2 hover:bg-[#ffffff10] text-(--text-secondary) hover:text-(--text-primary) rounded-md cursor-pointer duration-200" onClick={() => {
-											const groupId = createId();
-											newGroup(groupId, `Group ${groups.length + 1}`);
-										}}>
+										<button
+											title={platform.includes("Mac") ? "New Group ⌃ + T" : "New Group: Alt + T"}
+											className="flex items-center justify-center p-2 hover:bg-[#ffffff10] text-(--text-secondary) hover:text-(--text-primary) rounded-md cursor-pointer duration-200"
+											onClick={() => {
+												const groupId = createId();
+												newGroup(groupId, `Group ${groups.length + 1}`);
+											}}
+										>
 											<RectangleStackIcon className="size-4.5 duration-150" />
 											<PlusIcon className="size-3 stroke-current stroke-1 duration-150" />
 										</button>
@@ -503,12 +588,16 @@ const App = () => {
 									<div className="flex gap-0.5 items-center h-full"></div>
 								</div>
 							</div>
-							<QuickPlayer className={`
+							<QuickPlayer
+								className={`
                                 ${currentPanel === "quickplayer" ? "flex-2" : "flex-1"} min-h-0
-                            `} panelsOpen={panelsOpen} onMouseDown={() => {
-								setPanelsOpen(true);
-								setCurrentPanel("quickplayer");
-							}} />
+                            `}
+								panelsOpen={panelsOpen}
+								onMouseDown={() => {
+									setPanelsOpen(true);
+									setCurrentPanel("quickplayer");
+								}}
+							/>
 						</div>
 					</div>
 				</div>

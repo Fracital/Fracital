@@ -122,19 +122,23 @@ export const init = async () => {
 				const arrayBuffer = await response.arrayBuffer();
 				// Create folder for the game
 				await window.fr.fs.promises.mkdir(`${GamesPath}/bfe`);
-			// Write the SWF file
-			await window.fr.fs.promises.writeFile(`${GamesPath}/bfe/game.swf`, window.fr.buffer.from(arrayBuffer));
-			// Create metadata file
-			const now = new Date().toISOString();
-			await window.fr.fs.promises.writeFile(
-				`${GamesPath}/bfe/index.json`,
-				JSON.stringify({
-					title: "Banned From Equestria",
-					type: "flash",
-					createdAt: now,
-					modifiedAt: now,
-				}, null, 2)
-			);
+				// Write the SWF file
+				await window.fr.fs.promises.writeFile(`${GamesPath}/bfe/game.swf`, window.fr.buffer.from(arrayBuffer));
+				// Create metadata file
+				const now = new Date().toISOString();
+				await window.fr.fs.promises.writeFile(
+					`${GamesPath}/bfe/index.json`,
+					JSON.stringify(
+						{
+							title: "Banned From Equestria",
+							type: "flash",
+							createdAt: now,
+							modifiedAt: now,
+						},
+						null,
+						2,
+					),
+				);
 				console.log("%cFracital%c: %cinit%c() -> %cdirectory%c /games created with default game", "color: #fb74fe", "color: #ff7b72", "color: #c7a1f2", "color: #79c0ff", "color: #56d364", "color: #e2b340");
 			}
 		} catch (err) {
