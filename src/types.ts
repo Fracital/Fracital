@@ -9,6 +9,7 @@ export const ThemePath = "/themes/";
 export const StaticThemePath = "/themes/";
 export const SettingsPath = "/settings.json";
 export const MusicPath = "/music/";
+export const GamesPath = "/games/";
 export const isWebOS = false;
 
 export const getProxy = async (): Promise<"sj" | "uv"> => {

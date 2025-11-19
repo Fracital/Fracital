@@ -657,7 +657,7 @@ export const QuickPlayer = ({ panelsOpen, className, onMouseDown }: QuickPlayerP
 						</>
 					) : (
 						<div className={"relative flex flex-col w-full items-center flex-1 min-h-0 overflow-auto gap-2 p-2 px-2.5 duration-200"}>
-							<div className="flex flex-col items-center justify-evenly h-full">
+							<div className="flex flex-col items-center justify-evenly h-full w-full">
 								<div
 									className="group relative flex items-center justify-center w-4/5 cursor-pointer"
 									onMouseEnter={() => setIsHoveringCover(true)}
@@ -680,7 +680,7 @@ export const QuickPlayer = ({ panelsOpen, className, onMouseDown }: QuickPlayerP
 										</div>
 									)}
 									{settings["big-player-visualizer"] === true && settings["disable-visualizers"] !== true && showVisualizer && (
-										<div className={`absolute rounded-xl overflow-hidden duration-300 ${isHoveringCover === false ? "opacity-100 scale-100" : "opacity-0 scale-95"}`}>
+										<div className={`absolute rounded-xl overflow-hidden duration-300 drop-shadow-xl ${isHoveringCover === false ? "opacity-100 scale-100" : "opacity-0 scale-95"}`}>
 											<AudvisVisualizer audioRef={audioRef} isPlaying={isPlaying} width={140} height={30} color={brightness === "dark" ? "#FFFFFF" : "#000000"} opacity={visualizerOpacity} scale={visualizerScale} />
 										</div>
 									)}

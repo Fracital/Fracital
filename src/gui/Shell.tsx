@@ -15,6 +15,7 @@ import {
 	ArrowRightIcon,
 	FolderIcon,
 	StarIcon as StarIconSolid,
+	PuzzlePieceIcon,
 } from "@heroicons/react/24/solid";
 import { StarIcon as StarIconOutline } from "@heroicons/react/24/outline";
 import { FireIcon, WrenchScrewdriverIcon, CheckBadgeIcon } from "@heroicons/react/24/solid";
@@ -514,20 +515,17 @@ const Shell = () => {
 					</div>
 					<ChevronUpDownIcon className="size-5 text-(--text-tertiary) group-hover:text-(--text-secondary) stroke-current stroke-1 cursor-pointer duration-150" />
 				</div>
-				<ShellButton
-					title={isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen"}
-					onClick={() => {
-						if (document.fullscreenElement) {
-							document.exitFullscreen();
-						} else {
-							if (document.body) {
-								document.body.requestFullscreen().catch(err => {
-									console.error("Error attempting to enable full-screen mode:", err);
-								});
-							}
+				<ShellButton title={isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen"} onClick={() => {
+					if (document.fullscreenElement) {
+						document.exitFullscreen();
+					} else {
+						if (document.body) {
+							document.body.requestFullscreen().catch(err => {
+								console.error("Error attempting to enable full-screen mode:", err);
+							});
 						}
-					}}
-				>
+					}
+				}}>
 					{isFullscreen ? <ArrowsPointingInIcon className="size-6 text-current stroke-current stroke-0.5" /> : <ArrowsPointingOutIcon className="size-6 text-current stroke-current stroke-0.5" />}
 				</ShellButton>
 				{/* <ShellButton title="File Manager" type="icon" icon={<FolderIcon className="size-6" />} onClick={() =>
@@ -539,18 +537,26 @@ const Shell = () => {
 						displayUrl: "about:files",
 					})
 				}></ShellButton> */}
-				<ShellButton
-					title="Settings"
-					onClick={() =>
-						newTab({
-							id: createId(),
-							title: "Settings",
-							url: "about:settings",
-							icon: <Cog6ToothIcon className="size-5" />,
-							displayUrl: "about:settings",
-						})
-					}
-				>
+				<ShellButton title="Games" onClick={() =>
+					newTab({
+						id: createId(),
+						title: "Games",
+						url: "about:games",
+						icon: <PuzzlePieceIcon className="size-5" />,
+						displayUrl: "about:games",
+					})
+				}>
+					<PuzzlePieceIcon className="size-6" />
+				</ShellButton>
+				<ShellButton title="Settings" onClick={() =>
+					newTab({
+						id: createId(),
+						title: "Settings",
+						url: "about:settings",
+						icon: <Cog6ToothIcon className="size-5" />,
+						displayUrl: "about:settings",
+					})
+				}>
 					<Cog6ToothIcon className="size-6" />
 				</ShellButton>
 				{/* <UserCard avatar={

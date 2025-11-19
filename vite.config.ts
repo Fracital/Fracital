@@ -15,6 +15,12 @@ import { isWebOS } from "./src/types";
 export default defineConfig({
 	optimizeDeps: {
 		include: ["music-metadata"],
+		exclude: ["@ruffle-rs/ruffle"],
+	},
+	server: {
+		fs: {
+			allow: [".."],
+		},
 	},
 	plugins: [
 		react(),
