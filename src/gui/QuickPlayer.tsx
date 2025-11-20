@@ -644,12 +644,15 @@ export const QuickPlayer = ({ panelsOpen, className, onMouseDown }: QuickPlayerP
 											<div className="flex flex-col gap-1.5">
 												<div className="flex justify-between items-center">
 													<label className="text-xs text-(--text-secondary)">Bass</label>
-													<span className="text-xs font-mono text-(--text-secondary)">{eqBass > 0 ? '+' : ''}{eqBass.toFixed(1)} dB</span>
+													<span className="text-xs font-mono text-(--text-secondary)">
+														{eqBass > 0 ? "+" : ""}
+														{eqBass.toFixed(1)} dB
+													</span>
 												</div>
 												<div className="relative flex items-center">
 													<div className="absolute inset-0 flex justify-between items-center pointer-events-none px-0.5 z-0">
 														{Array.from({ length: 13 }).map((_, i) => (
-															<div key={i} className={`w-0.5 h-2 rounded-full ${i === 12 ? 'bg-(--accent)' : 'bg-(--text-tertiary) opacity-30'}`}></div>
+															<div key={i} className={`w-0.5 h-2 rounded-full ${i === 12 ? "bg-(--accent)" : "bg-(--text-tertiary) opacity-30"}`}></div>
 														))}
 													</div>
 													<input
@@ -658,14 +661,14 @@ export const QuickPlayer = ({ panelsOpen, className, onMouseDown }: QuickPlayerP
 														max="12"
 														step="0.5"
 														value={eqBass}
-														onChange={(e) => setEqBass(parseFloat(e.target.value))}
+														onChange={e => setEqBass(parseFloat(e.target.value))}
 														className="eq-slider w-full relative z-10"
 														style={{
 															background: `linear-gradient(to right, 
 																var(--accent) 0%, 
 																var(--accent) ${((eqBass + 12) / 24) * 100}%, 
 																var(--secondary) ${((eqBass + 12) / 24) * 100}%, 
-																var(--secondary) 100%)`
+																var(--secondary) 100%)`,
 														}}
 													/>
 												</div>
@@ -675,12 +678,15 @@ export const QuickPlayer = ({ panelsOpen, className, onMouseDown }: QuickPlayerP
 											<div className="flex flex-col gap-1.5">
 												<div className="flex justify-between items-center">
 													<label className="text-xs text-(--text-secondary)">Mid</label>
-													<span className="text-xs font-mono text-(--text-secondary)">{eqMid > 0 ? '+' : ''}{eqMid.toFixed(1)} dB</span>
+													<span className="text-xs font-mono text-(--text-secondary)">
+														{eqMid > 0 ? "+" : ""}
+														{eqMid.toFixed(1)} dB
+													</span>
 												</div>
 												<div className="relative flex items-center">
 													<div className="absolute inset-0 flex justify-between items-center pointer-events-none px-0.5 z-0">
 														{Array.from({ length: 13 }).map((_, i) => (
-															<div key={i} className={`w-0.5 h-2 rounded-full ${i === 12 ? 'bg-(--accent)' : 'bg-(--text-tertiary) opacity-30'}`}></div>
+															<div key={i} className={`w-0.5 h-2 rounded-full ${i === 12 ? "bg-(--accent)" : "bg-(--text-tertiary) opacity-30"}`}></div>
 														))}
 													</div>
 													<input
@@ -689,14 +695,14 @@ export const QuickPlayer = ({ panelsOpen, className, onMouseDown }: QuickPlayerP
 														max="12"
 														step="0.5"
 														value={eqMid}
-														onChange={(e) => setEqMid(parseFloat(e.target.value))}
+														onChange={e => setEqMid(parseFloat(e.target.value))}
 														className="eq-slider w-full relative z-10"
 														style={{
 															background: `linear-gradient(to right, 
 																var(--accent) 0%, 
 																var(--accent) ${((eqMid + 12) / 24) * 100}%, 
 																var(--secondary) ${((eqMid + 12) / 24) * 100}%, 
-																var(--secondary) 100%)`
+																var(--secondary) 100%)`,
 														}}
 													/>
 												</div>
@@ -706,12 +712,15 @@ export const QuickPlayer = ({ panelsOpen, className, onMouseDown }: QuickPlayerP
 											<div className="flex flex-col gap-1.5">
 												<div className="flex justify-between items-center">
 													<label className="text-xs text-(--text-secondary)">Treble</label>
-													<span className="text-xs font-mono text-(--text-secondary)">{eqTreble > 0 ? '+' : ''}{eqTreble.toFixed(1)} dB</span>
+													<span className="text-xs font-mono text-(--text-secondary)">
+														{eqTreble > 0 ? "+" : ""}
+														{eqTreble.toFixed(1)} dB
+													</span>
 												</div>
 												<div className="relative flex items-center">
 													<div className="absolute inset-0 flex justify-between items-center pointer-events-none px-0.5 z-0">
 														{Array.from({ length: 13 }).map((_, i) => (
-															<div key={i} className={`w-0.5 h-2 rounded-full ${i === 12 ? 'bg-(--accent)' : 'bg-(--text-tertiary) opacity-30'}`}></div>
+															<div key={i} className={`w-0.5 h-2 rounded-full ${i === 12 ? "bg-(--accent)" : "bg-(--text-tertiary) opacity-30"}`}></div>
 														))}
 													</div>
 													<input
@@ -720,14 +729,14 @@ export const QuickPlayer = ({ panelsOpen, className, onMouseDown }: QuickPlayerP
 														max="12"
 														step="0.5"
 														value={eqTreble}
-														onChange={(e) => setEqTreble(parseFloat(e.target.value))}
+														onChange={e => setEqTreble(parseFloat(e.target.value))}
 														className="eq-slider w-full relative z-10"
 														style={{
 															background: `linear-gradient(to right, 
 																var(--accent) 0%, 
 																var(--accent) ${((eqTreble + 12) / 24) * 100}%, 
 																var(--secondary) ${((eqTreble + 12) / 24) * 100}%, 
-																var(--secondary) 100%)`
+																var(--secondary) 100%)`,
 														}}
 													/>
 												</div>
@@ -815,13 +824,17 @@ export const QuickPlayer = ({ panelsOpen, className, onMouseDown }: QuickPlayerP
 										</button>
 									</div>
 									<div className="flex gap-0.5">
-										<div title={platform.includes("Mac") ? "Toggle Big Player" : "Toggle Big Player"} className="flex items-center justify-center p-2 hover:bg-[#ffffff10] text-(--text-secondary) hover:text-(--text-primary) rounded-md cursor-pointer duration-150" onClick={() => {
-											if (playerView === "tracks") {
-												changeView("bigplayer");
-											} else {
-												changeView("tracks");
-											}
-										}}>
+										<div
+											title={platform.includes("Mac") ? "Toggle Big Player" : "Toggle Big Player"}
+											className="flex items-center justify-center p-2 hover:bg-[#ffffff10] text-(--text-secondary) hover:text-(--text-primary) rounded-md cursor-pointer duration-150"
+											onClick={() => {
+												if (playerView === "tracks") {
+													changeView("bigplayer");
+												} else {
+													changeView("tracks");
+												}
+											}}
+										>
 											<RectangleGroupIcon className="size-5 text-current pointer-events-none" />
 										</div>
 									</div>

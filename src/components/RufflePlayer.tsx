@@ -145,13 +145,17 @@ export const RufflePlayer = ({
 
 	return (
 		<div className={`relative flex items-center justify-center ${className}`} style={{ width, height }}>
-			<div ref={containerRef} className="w-full h-full" style={{
-				width: "100%",
-				height: "100%",
-				display: "flex",
-				alignItems: "center",
-				justifyContent: "center",
-			}} />
+			<div
+				ref={containerRef}
+				className="w-full h-full"
+				style={{
+					width: "100%",
+					height: "100%",
+					display: "flex",
+					alignItems: "center",
+					justifyContent: "center",
+				}}
+			/>
 			{loading && (
 				<div className="absolute inset-0 flex items-center justify-center bg-(--primary)">
 					<div className="flex flex-col items-center gap-3">
