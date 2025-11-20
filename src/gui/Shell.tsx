@@ -21,6 +21,8 @@ import {
 	CheckBadgeIcon,
 	MusicalNoteIcon,
 	PlayIcon,
+	PuzzlePieceIcon,
+	Bars3Icon,
 } from "@heroicons/react/24/solid";
 import { StarIcon as StarIconOutline } from "@heroicons/react/24/outline";
 import { Suspense, useEffect, useState, useRef } from "react";
@@ -538,6 +540,20 @@ const Shell = () => {
 					{isFullscreen ? <ArrowsPointingInIcon className="size-6 text-current stroke-current stroke-0.5" /> : <ArrowsPointingOutIcon className="size-6 text-current stroke-current stroke-0.5" />}
 				</ShellButton>
 				<ShellButton
+					title="Settings"
+					onClick={() =>
+						newTab({
+							id: createId(),
+							title: "Settings",
+							url: "about:settings",
+							icon: <Cog6ToothIcon className="size-5" />,
+							displayUrl: "about:settings",
+						})
+					}
+				>
+					<Cog6ToothIcon className="size-6" />
+				</ShellButton>
+				<ShellButton
 					title="Page selector"
 					onClick={(e: React.MouseEvent) => {
 						const items: MenuItem[] = [
@@ -561,7 +577,7 @@ const Shell = () => {
 										id: createId(),
 										title: "Games",
 										url: "about:games",
-										icon: <EllipsisVerticalIcon className="size-5" />,
+										icon: <PlayIcon className="size-5" />,
 										displayUrl: "about:games",
 									});
 								},
@@ -591,21 +607,7 @@ const Shell = () => {
 						});
 					}}
 				>
-					<EllipsisVerticalIcon className="size-6" />
-				</ShellButton>
-				<ShellButton
-					title="Settings"
-					onClick={() =>
-						newTab({
-							id: createId(),
-							title: "Settings",
-							url: "about:settings",
-							icon: <Cog6ToothIcon className="size-5" />,
-							displayUrl: "about:settings",
-						})
-					}
-				>
-					<Cog6ToothIcon className="size-6" />
+					<Bars3Icon className="size-6 stroke-1 stroke-current" />
 				</ShellButton>
 				{/* <UserCard avatar={
                     <UserCircleIcon className={"size-8" + " " + `

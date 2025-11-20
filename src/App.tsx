@@ -412,7 +412,7 @@ const App = () => {
 								"flex flex-col shrink-0 duration-150" +
 								" " +
 								`
-                            ${settings["floating-tabs"] === true ? (panelsOpen ? "w-60 right-2" : "w-10 -right-1") : panelsOpen ? "w-78" : "w-10"}
+                            ${settings["floating-tabs"] === true ? (panelsOpen ? "w-74 right-2" : "w-10 -right-1") : panelsOpen ? "w-78" : "w-10"}
                             ${settings["floating-tabs"] ? "gap-2" : "gap-2.5"}
 						`
 							}

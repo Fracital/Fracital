@@ -29,7 +29,7 @@ const FavoriteModal = () => {
 	const randomColor = Math.floor(Math.random() * colorsCards.length);
 	const [selecting, setSelecting] = useState<"color" | "icon" | "preview">("preview");
 	const [color, setColor] = useState<string>(colorsCards[randomColor]);
-	const [icon, setIcon] = useState<string>(data.icon ?? "");
+	const [icon, setIcon] = useState<string>(typeof data.icon === "string" ? data.icon : "");
 	const [name, setName] = useState<string>(data.name ?? "");
 	const [url, setUrl] = useState<string>(data.url ?? "");
 
@@ -61,24 +61,24 @@ const FavoriteModal = () => {
 										setSelecting("icon");
 									}}
 								>
-									<div className="absolute flex size-full opacity-100 group-hover:opacity-80 duration-150" style={{ backgroundColor: color }}></div>
-									{icon === "gifticon" ? (
-										<GiftIcon className="size-10 z-10" />
-									) : icon === "musicalicon" ? (
-										<MusicalNoteIcon className="size-10 z-10" />
-									) : icon === "puzzleicon" ? (
-										<PuzzlePieceIcon className="size-10 z-10" />
-									) : icon === "shoppingicon" ? (
-										<ShoppingBagIcon className="size-10 z-10" />
-									) : icon === "brieficon" ? (
-										<BriefcaseIcon className="size-10 z-10" />
-									) : icon === "newspapericon" ? (
-										<NewspaperIcon className="size-10 z-10" />
-									) : icon.includes("https://") ? (
-										<img src={icon} alt={data.name} className="size-10 z-10" />
-									) : (
-										<GlobeAltIcon className="size-10 z-10" />
-									)}
+								<div className="absolute flex size-full opacity-100 group-hover:opacity-80 duration-150" style={{ backgroundColor: color }}></div>
+								{icon === "gifticon" ? (
+									<GiftIcon className="size-10 z-10" />
+								) : icon === "musicalicon" ? (
+									<MusicalNoteIcon className="size-10 z-10" />
+								) : icon === "puzzleicon" ? (
+									<PuzzlePieceIcon className="size-10 z-10" />
+								) : icon === "shoppingicon" ? (
+									<ShoppingBagIcon className="size-10 z-10" />
+								) : icon === "brieficon" ? (
+									<BriefcaseIcon className="size-10 z-10" />
+								) : icon === "newspapericon" ? (
+									<NewspaperIcon className="size-10 z-10" />
+								) : typeof icon === "string" && icon.includes("https://") ? (
+									<img src={icon} alt={data.name} className="size-10 z-10" />
+								) : (
+									<GlobeAltIcon className="size-10 z-10" />
+								)}
 								</div>
 								<div
 									className={"group flex items-center justify-center col-span-2 rounded-lg opacity-90 hover:opacity-100 cursor-pointer duration-150"}

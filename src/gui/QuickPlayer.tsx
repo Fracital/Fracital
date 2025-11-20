@@ -1,6 +1,6 @@
 import { createId } from "@paralleldrive/cuid2";
 import { useEffect, useRef, useState } from "react";
-import { QueueListIcon, MusicalNoteIcon, PlusIcon, MinusIcon, ArrowUturnLeftIcon, BackwardIcon, ForwardIcon, RectangleGroupIcon, ArrowPathRoundedSquareIcon, SpeakerWaveIcon, SpeakerXMarkIcon, BarsArrowUpIcon, BackspaceIcon } from "@heroicons/react/24/solid";
+import { QueueListIcon, MusicalNoteIcon, PlusIcon, MinusIcon, ArrowUturnLeftIcon, BackwardIcon, ForwardIcon, RectangleGroupIcon, ArrowPathRoundedSquareIcon, SpeakerWaveIcon, SpeakerXMarkIcon, BarsArrowUpIcon, BackspaceIcon, AdjustmentsHorizontalIcon } from "@heroicons/react/24/solid";
 import { PlayIcon, PauseIcon, EllipsisHorizontalIcon } from "@heroicons/react/24/solid";
 import { useMusicStore, useSettingsStore, useTabsStore } from "../store";
 import { ContextMenu, type MenuItem } from "../components/ContextMenu";
@@ -65,6 +65,17 @@ export const QuickPlayer = ({ panelsOpen, className, onMouseDown }: QuickPlayerP
 	const [showVisualizer] = useState(true);
 	const [visualizerScale] = useState(1);
 	const [visualizerOpacity] = useState(1);
+
+	// Audio EQ state
+	const [showEQ, setShowEQ] = useState(false);
+	const [eqBass, setEqBass] = useState(0);
+	const [eqMid, setEqMid] = useState(0);
+	const [eqTreble, setEqTreble] = useState(0);
+	const audioContextRef = useRef<AudioContext | null>(null);
+	const sourceNodeRef = useRef<MediaElementAudioSourceNode | null>(null);
+	const bassFilterRef = useRef<BiquadFilterNode | null>(null);
+	const midFilterRef = useRef<BiquadFilterNode | null>(null);
+	const trebleFilterRef = useRef<BiquadFilterNode | null>(null);
 
 	useEffect(() => {
 		if (settings.brightness) {
@@ -140,6 +151,73 @@ export const QuickPlayer = ({ panelsOpen, className, onMouseDown }: QuickPlayerP
 			audioRef.current.muted = muted;
 		}
 	}, [muted]);
+
+	// Initialize Web Audio API for EQ
+	useEffect(() => {
+		if (!audioRef.current || audioContextRef.current) return;
+
+		try {
+			const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+			const source = audioContext.createMediaElementSource(audioRef.current);
+
+			// Create EQ filters
+			const bassFilter = audioContext.createBiquadFilter();
+			bassFilter.type = "lowshelf";
+			bassFilter.frequency.value = 200;
+			bassFilter.gain.value = eqBass;
+
+			const midFilter = audioContext.createBiquadFilter();
+			midFilter.type = "peaking";
+			midFilter.frequency.value = 1000;
+			midFilter.Q.value = 1;
+			midFilter.gain.value = eqMid;
+
+			const trebleFilter = audioContext.createBiquadFilter();
+			trebleFilter.type = "highshelf";
+			trebleFilter.frequency.value = 3000;
+			trebleFilter.gain.value = eqTreble;
+
+			// Connect the audio graph
+			source.connect(bassFilter);
+			bassFilter.connect(midFilter);
+			midFilter.connect(trebleFilter);
+			trebleFilter.connect(audioContext.destination);
+
+			audioContextRef.current = audioContext;
+			sourceNodeRef.current = source;
+			bassFilterRef.current = bassFilter;
+			midFilterRef.current = midFilter;
+			trebleFilterRef.current = trebleFilter;
+		} catch (error) {
+			console.error("Failed to initialize audio context:", error);
+		}
+
+		return () => {
+			if (audioContextRef.current) {
+				audioContextRef.current.close();
+				audioContextRef.current = null;
+			}
+		};
+	}, []);
+
+	// Update EQ filters when values change
+	useEffect(() => {
+		if (bassFilterRef.current) {
+			bassFilterRef.current.gain.value = eqBass;
+		}
+	}, [eqBass]);
+
+	useEffect(() => {
+		if (midFilterRef.current) {
+			midFilterRef.current.gain.value = eqMid;
+		}
+	}, [eqMid]);
+
+	useEffect(() => {
+		if (trebleFilterRef.current) {
+			trebleFilterRef.current.gain.value = eqTreble;
+		}
+	}, [eqTreble]);
 
 	useEffect(() => {
 		if (currentTime === duration) {
@@ -557,6 +635,118 @@ export const QuickPlayer = ({ panelsOpen, className, onMouseDown }: QuickPlayerP
 										<span className="font-medium">{formatTime(duration)}</span>
 									</div>
 								</div>
+								{/* Audio Equalizer Panel */}
+								{showEQ && (
+									<div className="flex flex-col gap-3 p-4 bg-(--tertiary) rounded-lg mx-2 mt-2 mb-2">
+										<h3 className="text-sm font-semibold text-(--text-primary)">Equalizer</h3>
+										<div className="flex flex-col gap-4">
+											{/* Bass Control */}
+											<div className="flex flex-col gap-1.5">
+												<div className="flex justify-between items-center">
+													<label className="text-xs text-(--text-secondary)">Bass</label>
+													<span className="text-xs font-mono text-(--text-secondary)">{eqBass > 0 ? '+' : ''}{eqBass.toFixed(1)} dB</span>
+												</div>
+												<div className="relative flex items-center">
+													<div className="absolute inset-0 flex justify-between items-center pointer-events-none px-0.5 z-0">
+														{Array.from({ length: 13 }).map((_, i) => (
+															<div key={i} className={`w-0.5 h-2 rounded-full ${i === 12 ? 'bg-(--accent)' : 'bg-(--text-tertiary) opacity-30'}`}></div>
+														))}
+													</div>
+													<input
+														type="range"
+														min="-12"
+														max="12"
+														step="0.5"
+														value={eqBass}
+														onChange={(e) => setEqBass(parseFloat(e.target.value))}
+														className="eq-slider w-full relative z-10"
+														style={{
+															background: `linear-gradient(to right, 
+																var(--accent) 0%, 
+																var(--accent) ${((eqBass + 12) / 24) * 100}%, 
+																var(--secondary) ${((eqBass + 12) / 24) * 100}%, 
+																var(--secondary) 100%)`
+														}}
+													/>
+												</div>
+											</div>
+
+											{/* Mid Control */}
+											<div className="flex flex-col gap-1.5">
+												<div className="flex justify-between items-center">
+													<label className="text-xs text-(--text-secondary)">Mid</label>
+													<span className="text-xs font-mono text-(--text-secondary)">{eqMid > 0 ? '+' : ''}{eqMid.toFixed(1)} dB</span>
+												</div>
+												<div className="relative flex items-center">
+													<div className="absolute inset-0 flex justify-between items-center pointer-events-none px-0.5 z-0">
+														{Array.from({ length: 13 }).map((_, i) => (
+															<div key={i} className={`w-0.5 h-2 rounded-full ${i === 12 ? 'bg-(--accent)' : 'bg-(--text-tertiary) opacity-30'}`}></div>
+														))}
+													</div>
+													<input
+														type="range"
+														min="-12"
+														max="12"
+														step="0.5"
+														value={eqMid}
+														onChange={(e) => setEqMid(parseFloat(e.target.value))}
+														className="eq-slider w-full relative z-10"
+														style={{
+															background: `linear-gradient(to right, 
+																var(--accent) 0%, 
+																var(--accent) ${((eqMid + 12) / 24) * 100}%, 
+																var(--secondary) ${((eqMid + 12) / 24) * 100}%, 
+																var(--secondary) 100%)`
+														}}
+													/>
+												</div>
+											</div>
+
+											{/* Treble Control */}
+											<div className="flex flex-col gap-1.5">
+												<div className="flex justify-between items-center">
+													<label className="text-xs text-(--text-secondary)">Treble</label>
+													<span className="text-xs font-mono text-(--text-secondary)">{eqTreble > 0 ? '+' : ''}{eqTreble.toFixed(1)} dB</span>
+												</div>
+												<div className="relative flex items-center">
+													<div className="absolute inset-0 flex justify-between items-center pointer-events-none px-0.5 z-0">
+														{Array.from({ length: 13 }).map((_, i) => (
+															<div key={i} className={`w-0.5 h-2 rounded-full ${i === 12 ? 'bg-(--accent)' : 'bg-(--text-tertiary) opacity-30'}`}></div>
+														))}
+													</div>
+													<input
+														type="range"
+														min="-12"
+														max="12"
+														step="0.5"
+														value={eqTreble}
+														onChange={(e) => setEqTreble(parseFloat(e.target.value))}
+														className="eq-slider w-full relative z-10"
+														style={{
+															background: `linear-gradient(to right, 
+																var(--accent) 0%, 
+																var(--accent) ${((eqTreble + 12) / 24) * 100}%, 
+																var(--secondary) ${((eqTreble + 12) / 24) * 100}%, 
+																var(--secondary) 100%)`
+														}}
+													/>
+												</div>
+											</div>
+
+											{/* Reset Button */}
+											<button
+												onClick={() => {
+													setEqBass(0);
+													setEqMid(0);
+													setEqTreble(0);
+												}}
+												className="text-xs text-(--text-secondary) hover:text-(--text-primary) bg-(--secondary) hover:bg-[#ffffff10] px-3 py-1.5 rounded-md duration-150"
+											>
+												Reset EQ
+											</button>
+										</div>
+									</div>
+								)}
 								<div className={`flex min-max-1 w-full p-1.5 items-start justify-between gap-0.5 ${brightness === "dark" ? "bg-[#ffffff10]" : "bg-[#00000025]"}`}>
 									<div className={`flex gap-0.5 duration-150 ${currentTrack ? "" : "opacity-0 translate-y-2 pointer-events-none"}`}>
 										<div className="flex gap-0.5">
@@ -620,35 +810,18 @@ export const QuickPlayer = ({ panelsOpen, className, onMouseDown }: QuickPlayerP
 										<button title="Drag left/right to change volume" className="flex items-center justify-center p-2 hover:bg-[#ffffff10] text-(--text-secondary) hover:text-(--text-primary) rounded-md cursor-ew-resize duration-150" onMouseDown={handleVolumeMouseDown} onClick={toggleMute}>
 											{muted || volume === 0 ? <SpeakerXMarkIcon className="size-5 text-current pointer-events-none" /> : <SpeakerWaveIcon className="size-5 text-current pointer-events-none" />}
 										</button>
+										<button title="Audio Equalizer" className={`flex items-center justify-center p-2 hover:bg-[#ffffff10] text-(--text-secondary) hover:text-(--text-primary) rounded-md cursor-pointer duration-150 ${showEQ ? "text-(--text-primary)" : ""}`} onClick={() => setShowEQ(!showEQ)}>
+											<AdjustmentsHorizontalIcon className="size-5 text-current pointer-events-none" />
+										</button>
 									</div>
 									<div className="flex gap-0.5">
-										<div
-											title={platform.includes("Mac") ? "Library ⌃ + T" : "New Tab: Alt + T"}
-											className="flex items-center justify-center p-2 hover:bg-[#ffffff10] text-(--text-secondary) hover:text-(--text-primary) rounded-md cursor-pointer duration-200"
-											onClick={() => {
-												newTab({
-													id: createId(),
-													title: "Music Library",
-													url: "about:music",
-													current: true,
-													displayUrl: "about:music",
-													icon: <MusicalNoteIcon className="size-5" />,
-												});
-											}}
-										>
-											<MusicalNoteIcon className="size-5 duration-150" />
-										</div>
-										<div
-											title={platform.includes("Mac") ? "Toggle Big Player" : "Toggle Big Player"}
-											className="flex items-center justify-center p-2 hover:bg-[#ffffff10] text-(--text-secondary) hover:text-(--text-primary) rounded-md cursor-pointer duration-150"
-											onClick={() => {
-												if (playerView === "tracks") {
-													changeView("bigplayer");
-												} else {
-													changeView("tracks");
-												}
-											}}
-										>
+										<div title={platform.includes("Mac") ? "Toggle Big Player" : "Toggle Big Player"} className="flex items-center justify-center p-2 hover:bg-[#ffffff10] text-(--text-secondary) hover:text-(--text-primary) rounded-md cursor-pointer duration-150" onClick={() => {
+											if (playerView === "tracks") {
+												changeView("bigplayer");
+											} else {
+												changeView("tracks");
+											}
+										}}>
 											<RectangleGroupIcon className="size-5 text-current pointer-events-none" />
 										</div>
 									</div>

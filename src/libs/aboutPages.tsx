@@ -1,5 +1,5 @@
 import { type ReactNode } from "react";
-import { Cog6ToothIcon, HomeIcon, MusicalNoteIcon, FolderIcon, UserCircleIcon, RectangleGroupIcon, PuzzlePieceIcon } from "@heroicons/react/24/solid";
+import { Cog6ToothIcon, HomeIcon, MusicalNoteIcon, FolderIcon, UserCircleIcon, PlayIcon } from "@heroicons/react/24/solid";
 
 import Home from "../views/Home";
 import Settings from "../views/Settings";
@@ -67,7 +67,7 @@ export const aboutPages: Record<string, AboutPage> = {
 	games: {
 		name: "games",
 		component: Games,
-		icon: <PuzzlePieceIcon className="size-5" />,
+		icon: <PlayIcon className="size-5" />,
 		title: "Games",
 		hasQuery: true,
 	},
@@ -86,5 +86,9 @@ export const getPageFromUrl = (url: string): string | null => {
 };
 
 export const getQueryFromUrl = (url: string): string | undefined => {
-	return url.includes("?") ? url.split("?")[1] : undefined;
+	if (!url.includes("?")) return undefined;
+	const queryString = url.split("?")[1];
+	// Parse id= parameter
+	const match = queryString.match(/id=([^&]+)/);
+	return match ? match[1] : undefined;
 };
