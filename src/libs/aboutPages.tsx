@@ -97,7 +97,7 @@ export const getQueryFromUrl = (url: string): string | undefined => {
 /**
  * Updates a tab's title and URL based on the current page state.
  * This should be called by pages when their content changes (e.g., selecting a specific item).
- * 
+ *
  * @param tabId - The ID of the tab to update
  * @param pageName - The name of the about page (e.g., "games", "music")
  * @param options - Optional parameters for custom title/URL
@@ -108,7 +108,7 @@ export const updatePageTab = (
 	options?: {
 		title?: string;
 		query?: string;
-	}
+	},
 ) => {
 	const pageConfig = aboutPages[pageName];
 	if (!pageConfig) return;

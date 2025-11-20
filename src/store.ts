@@ -134,17 +134,17 @@ export const useTabsStore = create<{
 			const tabs = [...state.tabs];
 			const from = tabs.findIndex(t => t.id === draggedId);
 			if (from === -1) return state;
-			
+
 			let to = tabs.findIndex(t => t.id === targetId);
 			if (to === -1) return state;
-			
+
 			if (from === to) return state;
-			
+
 			const item = tabs.splice(from, 1)[0];
-			
+
 			to = tabs.findIndex(t => t.id === targetId);
 			if (!placeBefore) to = to + 1;
-			
+
 			tabs.splice(to, 0, item);
 			return { tabs };
 		}),

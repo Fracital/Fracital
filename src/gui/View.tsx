@@ -28,7 +28,7 @@ export const View = ({ children, id }: ViewProps) => {
 		if (!pageName || !aboutPages[pageName]) return;
 
 		const pageConfig = aboutPages[pageName];
-		
+
 		// Update tab with page config if it doesn't match
 		if (tab.title !== pageConfig.title || !tab.icon) {
 			updateTab(id, {

@@ -415,10 +415,13 @@ export const QuickPlayer = ({ panelsOpen, className, onMouseDown }: QuickPlayerP
 						<>
 							<div className={"relative flex w-full flex-1 min-h-0 overflow-auto gap-2 p-2 px-3 flex-col duration-200"}>
 								<div className="flex flex-col items-start">
-									{currentTrack ? <h1 className={`ml-1.5 mt-1.5 text-2xl font-bold`}>Currently playing</h1> :
+									{currentTrack ? (
+										<h1 className={`ml-1.5 mt-1.5 text-2xl font-bold`}>Currently playing</h1>
+									) : (
 										<>
 											<h1 className={`ml-1.5 mt-1.5 text-2xl font-bold`}>Nothing playing</h1>
-											<button className="flex items-center justify-center gap-2 px-4 py-2 bg-(--tertiary) text-(--text-primary) rounded-md hover:bg-(--accent) duration-150"
+											<button
+												className="flex items-center justify-center gap-2 px-4 py-2 bg-(--tertiary) text-(--text-primary) rounded-md hover:bg-(--accent) duration-150"
 												onClick={() => {
 													newTab({
 														id: createId(),
@@ -433,7 +436,7 @@ export const QuickPlayer = ({ panelsOpen, className, onMouseDown }: QuickPlayerP
 												<MusicalNoteIcon className="size-3" />
 											</button>
 										</>
-									}
+									)}
 									{currentTrack && (
 										<div className="flex items-center justify-between gap-2.5 p-1.5 w-full rounded-lg hover:bg-[#ffffff28] duration-150">
 											<div className="flex items-center gap-2.5">

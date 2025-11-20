@@ -195,9 +195,9 @@ const Games = ({ query, className }: GamesProps) => {
 		if (games.length === 0) return;
 
 		if (query) {
-			const params = new URLSearchParams(query.includes('=') ? query : `id=${query}`);
+			const params = new URLSearchParams(query.includes("=") ? query : `id=${query}`);
 
-			const gameId = params.get('id');
+			const gameId = params.get("id");
 			if (gameId) {
 				const game = games.find(g => g.id === gameId);
 				if (game && selectedGame?.id !== game.id) {
@@ -206,13 +206,13 @@ const Games = ({ query, className }: GamesProps) => {
 				}
 			}
 
-			const tagFilter = params.get('tag');
+			const tagFilter = params.get("tag");
 			if (tagFilter) {
 				setSelectedTag(tagFilter);
 			}
 
-			const typeFilter = params.get('type');
-			if (typeFilter && (typeFilter === 'flash' || typeFilter === 'html5')) {
+			const typeFilter = params.get("type");
+			if (typeFilter && (typeFilter === "flash" || typeFilter === "html5")) {
 			}
 		} else {
 			if (selectedGame !== null) {
@@ -464,11 +464,11 @@ const Games = ({ query, className }: GamesProps) => {
 
 	const allTags = Array.from(new Set(games.flatMap(game => game.tags || [])));
 
-	const getTypeFilter = (): 'flash' | 'html5' | null => {
+	const getTypeFilter = (): "flash" | "html5" | null => {
 		if (!query) return null;
-		const params = new URLSearchParams(query.includes('=') ? query : `id=${query}`);
-		const typeFilter = params.get('type');
-		if (typeFilter === 'flash' || typeFilter === 'html5') {
+		const params = new URLSearchParams(query.includes("=") ? query : `id=${query}`);
+		const typeFilter = params.get("type");
+		if (typeFilter === "flash" || typeFilter === "html5") {
 			return typeFilter;
 		}
 		return null;
@@ -529,26 +529,22 @@ const Games = ({ query, className }: GamesProps) => {
 							</button>
 						</div>
 					</div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 auto-rows-min gap-3 md:gap-4">
+					<div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 auto-rows-min gap-3 md:gap-4">
 						{loading ? (
 							<div className="col-span-full flex flex-col items-center justify-center py-20 gap-4">
 								<div className={`size-12 border-4 border-(--accent) border-t-transparent rounded-full animate-spin`}></div>
 								<span className="text-lg font-semibold text-(--text-secondary)">Loading games...</span>
 							</div>
 						) : displayedGames.length > 0 ? (
-							displayedGames.map((game) => (
-								<div key={game.id} className={`group flex flex-col gap-3 p-3 md:p-4 rounded-xl md:rounded-2xl cursor-pointer duration-150 ${
-                                    settings.brightness === "dark"
-                                        ? "bg-[#ffffff10] hover:bg-[#ffffff18]"
-                                        : "bg-[#00000010] hover:bg-[#00000018]"
-                                }`} onClick={() => setSelectedGame(game)}>
+							displayedGames.map(game => (
+								<div key={game.id} className={`group flex flex-col gap-3 p-3 md:p-4 rounded-xl md:rounded-2xl cursor-pointer duration-150 ${settings.brightness === "dark" ? "bg-[#ffffff10] hover:bg-[#ffffff18]" : "bg-[#00000010] hover:bg-[#00000018]"}`} onClick={() => setSelectedGame(game)}>
 									<div className="relative aspect-video bg-(--primary) rounded-lg overflow-hidden shrink-0">
-                                        <span className="absolute top-2 right-2 text-xs md:text-sm text-(--text-tertiary) p-1 px-2 md:p-1.5 md:px-2 leading-none rounded-md z-10 bg-(--tertiary) capitalize">{game.type === "html5" ? "HTML" : game.type}</span>
+										<span className="absolute top-2 right-2 text-xs md:text-sm text-(--text-tertiary) p-1 px-2 md:p-1.5 md:px-2 leading-none rounded-md z-10 bg-(--tertiary) capitalize">{game.type === "html5" ? "HTML" : game.type}</span>
 										{game.thumbnail ? (
-                                            <div className="relative w-full h-full bg-(--primary) flex items-center justify-center">
-                                                <PlayIcon className="absolute size-10 md:size-12 text-(--text-tertiary) group-hover:text-(--text-primary) duration-150" />
-                                                <img src={game.thumbnail} alt={game.title} className="w-full h-full object-cover" />
-                                            </div>
+											<div className="relative w-full h-full bg-(--primary) flex items-center justify-center">
+												<PlayIcon className="absolute size-10 md:size-12 text-(--text-tertiary) group-hover:text-(--text-primary) duration-150" />
+												<img src={game.thumbnail} alt={game.title} className="w-full h-full object-cover" />
+											</div>
 										) : (
 											<div className="flex items-center justify-center w-full h-full">
 												<PlayIcon className="size-10 md:size-12 text-(--text-tertiary) group-hover:text-(--text-primary) duration-150" />
@@ -556,71 +552,65 @@ const Games = ({ query, className }: GamesProps) => {
 										)}
 									</div>
 									<div className="flex flex-col gap-1.5 md:gap-1 flex-1 min-h-0">
-                                        <div className="flex items-start gap-2">
-                                            <h3 className="text-base md:text-lg font-bold line-clamp-2 flex-1 min-w-0">{game.title}</h3>
-                                            <span className="shrink-0 p-1 px-1.5 md:p-1.5 md:px-2 leading-none text-xs md:text-sm font-semibold text-(--text-tertiary) bg-(--tertiary) rounded-md">v{game.version || "1.0"}</span>
-                                        </div>
-                                        <span className="text-xs md:text-sm text-(--text-tertiary) truncate">{game.author || "Unknown"}</span>
-                                        <div className="flex flex-wrap gap-1 min-h-6">
-                                            {game.tags && game.tags.length > 0 ? (
-                                                <>
-                                                    {game.tags.slice(0, 3).map((tag, index) => (
-                                                        <span key={index} className="p-1.5 md:p-2 text-xs font-semibold leading-none text-(--text-tertiary) bg-(--tertiary) rounded-md">
-                                                            {tag}
-                                                        </span>
-                                                    ))}
-                                                    {game.tags.length > 3 && (
-                                                        <span className="p-1.5 md:p-2 text-xs font-semibold leading-none text-(--text-tertiary) bg-(--tertiary) rounded-md">
-                                                            +{game.tags.length - 3}
-                                                        </span>
-                                                    )}
-                                                </>
-                                            ) : null}
-                                        </div>
+										<div className="flex items-start gap-2">
+											<h3 className="text-base md:text-lg font-bold line-clamp-2 flex-1 min-w-0">{game.title}</h3>
+											<span className="shrink-0 p-1 px-1.5 md:p-1.5 md:px-2 leading-none text-xs md:text-sm font-semibold text-(--text-tertiary) bg-(--tertiary) rounded-md">v{game.version || "1.0"}</span>
+										</div>
+										<span className="text-xs md:text-sm text-(--text-tertiary) truncate">{game.author || "Unknown"}</span>
+										<div className="flex flex-wrap gap-1 min-h-6">
+											{game.tags && game.tags.length > 0 ? (
+												<>
+													{game.tags.slice(0, 3).map((tag, index) => (
+														<span key={index} className="p-1.5 md:p-2 text-xs font-semibold leading-none text-(--text-tertiary) bg-(--tertiary) rounded-md">
+															{tag}
+														</span>
+													))}
+													{game.tags.length > 3 && <span className="p-1.5 md:p-2 text-xs font-semibold leading-none text-(--text-tertiary) bg-(--tertiary) rounded-md">+{game.tags.length - 3}</span>}
+												</>
+											) : null}
+										</div>
 									</div>
-                                    <div className="flex items-center justify-between gap-1.5 md:gap-2 pt-1 mt-auto">
-                                        <div className="flex items-center gap-1.5">
-                                            <button className={`p-2 md:px-3 md:py-1.5 text-sm rounded-md font-semibold duration-150 ${
-                                                settings.brightness === "dark"
-                                                    ? "bg-[#ffffff10] hover:bg-[#ffffff18] text-(--text-primary)"
-                                                    : "bg-[#00000010] hover:bg-[#00000018] text-(--text-primary)"
-                                            }`} onClick={(e) => {
-                                                e.stopPropagation();
-                                                toggleFavorite(game);
-                                            }} title={game.isFavorite ? "Remove from favorites" : "Add to favorites"}>
-                                                {game.isFavorite ? (
-                                                    <StarIcon className="size-3.5 md:size-4 text-yellow-400" />
-                                                ) : (
-                                                    <StarOutlineIcon className="size-3.5 md:size-4 stroke-2 stroke-current" />
-                                                )}
-                                            </button>
-                                            <button className={`p-2 md:px-3 md:py-1.5 text-sm rounded-md font-semibold duration-150 ${
-                                                settings.brightness === "dark" ? "bg-[#ffffff10] hover:bg-[#ffffff18] text-(--text-primary)" : "bg-[#00000010] hover:bg-[#00000018] text-(--text-primary)"
-                                            }`} onClick={(e) => {
-                                                e.stopPropagation();
-                                                setEditModal({
-                                                    game,
-                                                    title: game.title,
-                                                    thumbnail: game.thumbnail,
-                                                    author: game.author || "",
-                                                    version: game.version || "1.0",
-                                                    description: game.description || "",
-                                                    tags: game.tags?.join(", ") || "",
-                                                });
-                                            }}>
-                                                <PencilIcon className="size-3.5 md:size-4" />
-                                            </button>
-                                        </div>
-										<button className={`p-2 md:px-3 md:py-1.5 text-sm rounded-md font-semibold duration-150 ${
-                                            settings.brightness === "dark" ? "bg-[#ffffff10] hover:bg-[#ffffff18] text-(--text-primary)" : "bg-[#00000010] hover:bg-[#00000018] text-(--text-primary)"
-										}`} onClick={(e) => {
-                                            e.stopPropagation();
-											if (deleting) return;
-											deleteGame(game);
-                                        }}>
-                                            <TrashIcon className="size-3.5 md:size-4" />
-                                        </button>
-                                    </div>
+									<div className="flex items-center justify-between gap-1.5 md:gap-2 pt-1 mt-auto">
+										<div className="flex items-center gap-1.5">
+											<button
+												className={`p-2 md:px-3 md:py-1.5 text-sm rounded-md font-semibold duration-150 ${settings.brightness === "dark" ? "bg-[#ffffff10] hover:bg-[#ffffff18] text-(--text-primary)" : "bg-[#00000010] hover:bg-[#00000018] text-(--text-primary)"}`}
+												onClick={e => {
+													e.stopPropagation();
+													toggleFavorite(game);
+												}}
+												title={game.isFavorite ? "Remove from favorites" : "Add to favorites"}
+											>
+												{game.isFavorite ? <StarIcon className="size-3.5 md:size-4 text-yellow-400" /> : <StarOutlineIcon className="size-3.5 md:size-4 stroke-2 stroke-current" />}
+											</button>
+											<button
+												className={`p-2 md:px-3 md:py-1.5 text-sm rounded-md font-semibold duration-150 ${settings.brightness === "dark" ? "bg-[#ffffff10] hover:bg-[#ffffff18] text-(--text-primary)" : "bg-[#00000010] hover:bg-[#00000018] text-(--text-primary)"}`}
+												onClick={e => {
+													e.stopPropagation();
+													setEditModal({
+														game,
+														title: game.title,
+														thumbnail: game.thumbnail,
+														author: game.author || "",
+														version: game.version || "1.0",
+														description: game.description || "",
+														tags: game.tags?.join(", ") || "",
+													});
+												}}
+											>
+												<PencilIcon className="size-3.5 md:size-4" />
+											</button>
+										</div>
+										<button
+											className={`p-2 md:px-3 md:py-1.5 text-sm rounded-md font-semibold duration-150 ${settings.brightness === "dark" ? "bg-[#ffffff10] hover:bg-[#ffffff18] text-(--text-primary)" : "bg-[#00000010] hover:bg-[#00000018] text-(--text-primary)"}`}
+											onClick={e => {
+												e.stopPropagation();
+												if (deleting) return;
+												deleteGame(game);
+											}}
+										>
+											<TrashIcon className="size-3.5 md:size-4" />
+										</button>
+									</div>
 								</div>
 							))
 						) : (
@@ -682,15 +672,12 @@ const Games = ({ query, className }: GamesProps) => {
 											rufflePlayerRef.current = player;
 										}}
 									/>
-                                ) : (
-                                    <HTMLPlayer
-                                        folderPath={selectedGame.folderPath}
-                                        gameFile="index.html"
-                                        className="w-full h-full"
-                                    />
-                                )}
-                                <button onClick={async () => {
-                                    if (!playerContainerRef.current) return;
+								) : (
+									<HTMLPlayer folderPath={selectedGame.folderPath} gameFile="index.html" className="w-full h-full" />
+								)}
+								<button
+									onClick={async () => {
+										if (!playerContainerRef.current) return;
 
 										if (!document.fullscreenElement) {
 											await playerContainerRef.current.requestFullscreen();
@@ -706,72 +693,63 @@ const Games = ({ query, className }: GamesProps) => {
 									{isFullscreen ? <ArrowsPointingInIcon className="size-5" /> : <ArrowsPointingOutIcon className="size-5" />}
 								</button>
 
-                                {selectedGame.type === "flash" && (
-                                    <button onClick={() => {
-                                        const newMutedState = !isMuted;
-                                        setIsMuted(newMutedState);
-                                        if (rufflePlayerRef.current && rufflePlayerRef.current.volume !== undefined) {
-                                            rufflePlayerRef.current.volume = newMutedState ? 0 : 1;
-                                        }
-                                    }} className={`absolute bottom-4 right-20 p-3 rounded-lg font-semibold duration-150 ${
-                                        settings.brightness === "dark"
-                                            ? "bg-black/70 hover:bg-black/90 text-white"
-                                            : "bg-white/70 hover:bg-white/90 text-black"
-                                    }`} title={isMuted ? "Unmute" : "Mute"}>
-                                        {isMuted ? (
-                                            <SpeakerXMarkIcon className="size-5" />
-                                        ) : (
-                                            <SpeakerWaveIcon className="size-5" />
-                                        )}
-                                    </button>
-                                )}
-                            </div>
-                            <div className={`flex items-center justify-between gap-4 p-4 rounded-xl ${
-                                settings.brightness === "dark"
-                                    ? "bg-[#ffffff10]"
-                                    : "bg-[#00000010]"
-                            }`}>
-                                <div className="flex items-center gap-3">
-                                    <button onClick={() => {
-                                        const fav = selectedGame.isFavorite;
-                                        toggleFavorite(selectedGame);
-                                        setSelectedGame({...selectedGame, isFavorite: !fav});
-                                    }} className={`flex items-center gap-2 px-4 py-2 rounded-lg font-semibold duration-150 ${
-                                        settings.brightness === "dark"
-                                            ? "bg-[#ffffff10] hover:bg-[#ffffff18] text-(--text-primary)"
-                                            : "bg-[#00000010] hover:bg-[#00000018] text-(--text-primary)"
-                                    }`} title={selectedGame.isFavorite ? "Remove from favorites" : "Add to favorites"}>
-                                        {selectedGame.isFavorite ? (
-                                            <>
-                                                <StarIcon className="size-5 text-yellow-400" />
-                                                <span className="hidden sm:inline">Favorited</span>
-                                            </>
-                                        ) : (
-                                            <>
-                                                <StarOutlineIcon className="size-5" />
-                                                <span className="hidden sm:inline">Favorite</span>
-                                            </>
-                                        )}
-                                    </button>
-                                    <button onClick={() => {
-                                        setEditModal({
-                                            game: selectedGame,
-                                            title: selectedGame.title,
-                                            thumbnail: selectedGame.thumbnail,
-                                            author: selectedGame.author || "",
-                                            version: selectedGame.version || "1.0",
-                                            description: selectedGame.description || "",
-                                            tags: selectedGame.tags?.join(", ") || "",
-                                        });
-                                    }} className={`flex items-center gap-2 px-4 py-2 rounded-lg font-semibold duration-150 ${
-                                        settings.brightness === "dark"
-                                            ? "bg-[#ffffff10] hover:bg-[#ffffff18] text-(--text-primary)"
-                                            : "bg-[#00000010] hover:bg-[#00000018] text-(--text-primary)"
-                                    }`}>
-                                        <PencilIcon className="size-5" />
-                                        <span className="hidden sm:inline">Edit</span>
-                                    </button>
-                                </div>
+								{selectedGame.type === "flash" && (
+									<button
+										onClick={() => {
+											const newMutedState = !isMuted;
+											setIsMuted(newMutedState);
+											if (rufflePlayerRef.current && rufflePlayerRef.current.volume !== undefined) {
+												rufflePlayerRef.current.volume = newMutedState ? 0 : 1;
+											}
+										}}
+										className={`absolute bottom-4 right-20 p-3 rounded-lg font-semibold duration-150 ${settings.brightness === "dark" ? "bg-black/70 hover:bg-black/90 text-white" : "bg-white/70 hover:bg-white/90 text-black"}`}
+										title={isMuted ? "Unmute" : "Mute"}
+									>
+										{isMuted ? <SpeakerXMarkIcon className="size-5" /> : <SpeakerWaveIcon className="size-5" />}
+									</button>
+								)}
+							</div>
+							<div className={`flex items-center justify-between gap-4 p-4 rounded-xl ${settings.brightness === "dark" ? "bg-[#ffffff10]" : "bg-[#00000010]"}`}>
+								<div className="flex items-center gap-3">
+									<button
+										onClick={() => {
+											const fav = selectedGame.isFavorite;
+											toggleFavorite(selectedGame);
+											setSelectedGame({ ...selectedGame, isFavorite: !fav });
+										}}
+										className={`flex items-center gap-2 px-4 py-2 rounded-lg font-semibold duration-150 ${settings.brightness === "dark" ? "bg-[#ffffff10] hover:bg-[#ffffff18] text-(--text-primary)" : "bg-[#00000010] hover:bg-[#00000018] text-(--text-primary)"}`}
+										title={selectedGame.isFavorite ? "Remove from favorites" : "Add to favorites"}
+									>
+										{selectedGame.isFavorite ? (
+											<>
+												<StarIcon className="size-5 text-yellow-400" />
+												<span className="hidden sm:inline">Favorited</span>
+											</>
+										) : (
+											<>
+												<StarOutlineIcon className="size-5" />
+												<span className="hidden sm:inline">Favorite</span>
+											</>
+										)}
+									</button>
+									<button
+										onClick={() => {
+											setEditModal({
+												game: selectedGame,
+												title: selectedGame.title,
+												thumbnail: selectedGame.thumbnail,
+												author: selectedGame.author || "",
+												version: selectedGame.version || "1.0",
+												description: selectedGame.description || "",
+												tags: selectedGame.tags?.join(", ") || "",
+											});
+										}}
+										className={`flex items-center gap-2 px-4 py-2 rounded-lg font-semibold duration-150 ${settings.brightness === "dark" ? "bg-[#ffffff10] hover:bg-[#ffffff18] text-(--text-primary)" : "bg-[#00000010] hover:bg-[#00000018] text-(--text-primary)"}`}
+									>
+										<PencilIcon className="size-5" />
+										<span className="hidden sm:inline">Edit</span>
+									</button>
+								</div>
 
 								<button
 									onClick={() => {
@@ -793,57 +771,41 @@ const Games = ({ query, className }: GamesProps) => {
 						>
 							{!detailsCollapsed && (
 								<>
-							{selectedGame.thumbnail && (
-								<div className="aspect-video rounded-lg overflow-hidden">
-									<img src={selectedGame.thumbnail} alt={selectedGame.title} className="w-full h-full object-cover" />
-								</div>
-							)}
+									{selectedGame.thumbnail && (
+										<div className="aspect-video rounded-lg overflow-hidden">
+											<img src={selectedGame.thumbnail} alt={selectedGame.title} className="w-full h-full object-cover" />
+										</div>
+									)}
 
-							<div>
-								<h2 className="text-3xl font-bold mb-2">{selectedGame.title}</h2>
-								{selectedGame.author && (
-									<p className="text-lg text-(--text-secondary)">by {selectedGame.author}</p>
-								)}
-							</div>
-
-							<div className="flex gap-2">
-								{selectedGame.version && (
-									<span className={`px-3 py-1 rounded-lg text-sm font-semibold ${
-										settings.brightness === "dark"
-											? "bg-[#ffffff10] text-(--text-secondary)"
-											: "bg-[#00000010] text-(--text-secondary)"
-									}`}>v{selectedGame.version}</span>
-								)}
-								<span className={`px-3 py-1 rounded-lg text-sm font-semibold capitalize ${
-									settings.brightness === "dark"
-										? "bg-[#ffffff10] text-(--text-secondary)"
-										: "bg-[#00000010] text-(--text-secondary)"
-								}`}>
-									{selectedGame.type === "html5" ? "HTML" : selectedGame.type}
-								</span>
-							</div>
-
-							{selectedGame.description && (
-								<div>
-									<h3 className="text-lg font-semibold mb-2 text-(--text-secondary)">Description</h3>
-									<p className="text-(--text-primary) leading-relaxed whitespace-pre-wrap">{selectedGame.description}</p>
-								</div>
-							)}
-
-							{selectedGame.tags && selectedGame.tags.length > 0 && (
-								<>
-									<h3 className="text-lg font-semibold mb-2 text-(--text-secondary)">Tags</h3>
-									<div className="flex flex-wrap gap-2">
-										{selectedGame.tags.map((tag, index) => (
-											<span key={index} className={`px-3 py-1 rounded-full text-sm font-medium ${
-                                                settings.brightness === "dark"
-                                                    ? "bg-[#ffffff15] text-(--text-primary)"
-                                                    : "bg-[#00000015] text-(--text-primary)"
-                                            }`}>{tag}</span>
-										))}
+									<div>
+										<h2 className="text-3xl font-bold mb-2">{selectedGame.title}</h2>
+										{selectedGame.author && <p className="text-lg text-(--text-secondary)">by {selectedGame.author}</p>}
 									</div>
-								</>
-							)}
+
+									<div className="flex gap-2">
+										{selectedGame.version && <span className={`px-3 py-1 rounded-lg text-sm font-semibold ${settings.brightness === "dark" ? "bg-[#ffffff10] text-(--text-secondary)" : "bg-[#00000010] text-(--text-secondary)"}`}>v{selectedGame.version}</span>}
+										<span className={`px-3 py-1 rounded-lg text-sm font-semibold capitalize ${settings.brightness === "dark" ? "bg-[#ffffff10] text-(--text-secondary)" : "bg-[#00000010] text-(--text-secondary)"}`}>{selectedGame.type === "html5" ? "HTML" : selectedGame.type}</span>
+									</div>
+
+									{selectedGame.description && (
+										<div>
+											<h3 className="text-lg font-semibold mb-2 text-(--text-secondary)">Description</h3>
+											<p className="text-(--text-primary) leading-relaxed whitespace-pre-wrap">{selectedGame.description}</p>
+										</div>
+									)}
+
+									{selectedGame.tags && selectedGame.tags.length > 0 && (
+										<>
+											<h3 className="text-lg font-semibold mb-2 text-(--text-secondary)">Tags</h3>
+											<div className="flex flex-wrap gap-2">
+												{selectedGame.tags.map((tag, index) => (
+													<span key={index} className={`px-3 py-1 rounded-full text-sm font-medium ${settings.brightness === "dark" ? "bg-[#ffffff15] text-(--text-primary)" : "bg-[#00000015] text-(--text-primary)"}`}>
+														{tag}
+													</span>
+												))}
+											</div>
+										</>
+									)}
 
 									{/* Game Info */}
 									<div className={`mt-auto pt-4 border-t ${settings.brightness === "dark" ? "border-[#ffffff10]" : "border-[#00000010]"}`}>
