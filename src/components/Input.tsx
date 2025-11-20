@@ -3,9 +3,12 @@ import { useEffect, useRef, useState } from "react";
 interface InputProps {
 	title: string;
 	type: React.HTMLInputTypeAttribute;
+	value?: string;
+	onChange?: (e: React.ChangeEvent<HTMLInputElement>) => void;
+	onKeyDown?: (e: React.KeyboardEvent<HTMLInputElement>) => void;
 }
 
-export const Input = ({ title, type }: InputProps) => {
+export const Input = ({ title, type, value, onChange, onKeyDown }: InputProps) => {
 	const titleRef = useRef<HTMLInputElement>(null);
 	const inputRef = useRef<HTMLInputElement>(null);
 	const [hasText, setHasText] = useState<boolean>(false);
@@ -36,6 +39,7 @@ export const Input = ({ title, type }: InputProps) => {
 			<input
 				ref={inputRef}
 				type={type ? type : "text"}
+				value={value}
 				className={
 					"flex p-2 pl-3 w-full bg-[#00000038] text-xl inset-shadow-[0_0_1px_2px_#ffffff28] outline-none rounded-lg duration-150" +
 					" " +
@@ -53,7 +57,9 @@ export const Input = ({ title, type }: InputProps) => {
 					console.log(e.target.value);
 					if (e.target.value !== "") setHasText(true);
 					else setHasText(false);
+					onChange?.(e);
 				}}
+				onKeyDown={onKeyDown}
 			/>
 		</div>
 	);

@@ -15,13 +15,11 @@ import {
 	ArrowRightIcon,
 	FolderIcon,
 	StarIcon as StarIconSolid,
-	EllipsisVerticalIcon,
 	FireIcon,
 	WrenchScrewdriverIcon,
 	CheckBadgeIcon,
 	MusicalNoteIcon,
 	PlayIcon,
-	PuzzlePieceIcon,
 	Bars3Icon,
 } from "@heroicons/react/24/solid";
 import { StarIcon as StarIconOutline } from "@heroicons/react/24/outline";

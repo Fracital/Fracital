@@ -42,22 +42,23 @@ export const Tab = ({ title, url, id, icon }: TabProps) => {
 			onDragOver={e => {
 				e.preventDefault();
 			}}
-			onDrop={e => {
-				e.preventDefault();
-				const draggedId = e.dataTransfer.getData("text/tab-id");
-				if (!draggedId || draggedId === id) return;
-				const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-				const y = e.clientY - rect.top;
-				const placeBefore = y < rect.height / 2;
-				const targetTab = useTabsStore.getState().tabs.find(t => t.id === id);
-				const targetGroupId = targetTab?.groupId;
-				if (targetGroupId !== undefined) {
-					useTabsStore.getState().updateTab(draggedId, { groupId: targetGroupId });
-				} else {
-					useTabsStore.getState().updateTab(draggedId, { groupId: undefined });
-				}
-				useTabsStore.getState().moveTabRelative(draggedId, id, placeBefore);
-			}}
+		onDrop={e => {
+			e.preventDefault();
+			e.stopPropagation();
+			const draggedId = e.dataTransfer.getData("text/tab-id");
+			if (!draggedId || draggedId === id) return;
+			const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+			const y = e.clientY - rect.top;
+			const placeBefore = y < rect.height / 2;
+			const targetTab = useTabsStore.getState().tabs.find(t => t.id === id);
+			const targetGroupId = targetTab?.groupId;
+			if (targetGroupId !== undefined) {
+				useTabsStore.getState().updateTab(draggedId, { groupId: targetGroupId });
+			} else {
+				useTabsStore.getState().updateTab(draggedId, { groupId: undefined });
+			}
+			useTabsStore.getState().moveTabRelative(draggedId, id, placeBefore);
+		}}
 			data-url={url}
 			id={id}
 			className={

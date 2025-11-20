@@ -1,5 +1,5 @@
 import { type ReactNode } from "react";
-import { Cog6ToothIcon, HomeIcon, MusicalNoteIcon, FolderIcon, UserCircleIcon, PlayIcon } from "@heroicons/react/24/solid";
+import { Cog6ToothIcon, MusicalNoteIcon, FolderIcon, UserCircleIcon, PlayIcon, GlobeAltIcon } from "@heroicons/react/24/solid";
 
 import Home from "../views/Home";
 import Settings from "../views/Settings";
@@ -41,7 +41,7 @@ export const aboutPages: Record<string, AboutPage> = {
 	newtab: {
 		name: "newtab",
 		component: Home,
-		icon: <HomeIcon className="size-5" />,
+		icon: <GlobeAltIcon className="size-5" />,
 		title: "New Tab",
 	},
 	settings: {
@@ -53,7 +53,7 @@ export const aboutPages: Record<string, AboutPage> = {
 	music: {
 		name: "music",
 		component: MusicLibrary,
-		icon: <MusicalNoteIcon className="size-5" />,
+		icon: <FolderIcon className="size-5" />,
 		title: "Music Library",
 		hasQuery: true,
 	},
@@ -88,7 +88,44 @@ export const getPageFromUrl = (url: string): string | null => {
 export const getQueryFromUrl = (url: string): string | undefined => {
 	if (!url.includes("?")) return undefined;
 	const queryString = url.split("?")[1];
-	// Parse id= parameter
-	const match = queryString.match(/id=([^&]+)/);
-	return match ? match[1] : undefined;
+	if (!queryString.includes("=")) {
+		return queryString;
+	}
+	return queryString;
+};
+
+/**
+ * Updates a tab's title and URL based on the current page state.
+ * This should be called by pages when their content changes (e.g., selecting a specific item).
+ * 
+ * @param tabId - The ID of the tab to update
+ * @param pageName - The name of the about page (e.g., "games", "music")
+ * @param options - Optional parameters for custom title/URL
+ */
+export const updatePageTab = (
+	tabId: string,
+	pageName: string,
+	options?: {
+		title?: string;
+		query?: string;
+	}
+) => {
+	const pageConfig = aboutPages[pageName];
+	if (!pageConfig) return;
+
+	const baseUrl = `about:${pageName}`;
+	const url = options?.query ? `${baseUrl}?${options.query}` : baseUrl;
+	const title = options?.title || pageConfig.title || pageName;
+
+	// Dispatch navigation event
+	const event = new CustomEvent("proxy-navigate", {
+		detail: {
+			url,
+			title,
+			icon: pageConfig.icon,
+			displayUrl: url,
+			id: tabId,
+		},
+	});
+	window.dispatchEvent(event);
 };

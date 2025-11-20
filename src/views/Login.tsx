@@ -1,7 +1,8 @@
-import { UserCircleIcon, UserIcon, XMarkIcon } from "@heroicons/react/24/solid";
-import { useEffect, useState } from "react";
+import { UserCircleIcon, XMarkIcon } from "@heroicons/react/24/solid";
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import { Input } from "../components/Input";
+import { signIn, signUp, useSession } from "../libs/auth";
 
 interface LoginProps {
 	query: string;
@@ -10,6 +11,61 @@ interface LoginProps {
 export const Login = ({ query }: LoginProps) => {
 	const [page, setPage] = useState(query === "login" ? "login" : query === "register" ? "register" : "login");
 	const [step, setStep] = useState<number>(0);
+	const [username, setUsername] = useState("");
+	const [email, setEmail] = useState("");
+	const [password, setPassword] = useState("");
+	const [loading, setLoading] = useState(false);
+	const [error, setError] = useState("");
+	const { data: session } = useSession();
+
+	const handleLogin = async () => {
+		if (!username || !password) {
+			setError("Please fill in all fields");
+			return;
+		}
+		setLoading(true);
+		setError("");
+		try {
+			await signIn.email({
+				email: username,
+				password: password,
+			});
+		} catch (err: any) {
+			setError(err.message || "Login failed");
+		} finally {
+			setLoading(false);
+		}
+	};
+
+	const handleRegister = async () => {
+		if (!username || !email || !password) {
+			setError("Please fill in all fields");
+			return;
+		}
+		setLoading(true);
+		setError("");
+		try {
+			await signUp.email({
+				name: username,
+				email: email,
+				password: password,
+			});
+		} catch (err: any) {
+			setError(err.message || "Registration failed");
+		} finally {
+			setLoading(false);
+		}
+	};
+
+	if (session?.user) {
+		return (
+			<div className="flex flex-col items-center justify-center size-full gap-4">
+				<UserCircleIcon className="size-20 text-(--accent)" />
+				<h2 className="text-2xl font-bold">Welcome, {session.user.name}!</h2>
+				<p className="text-sm opacity-70">{session.user.email}</p>
+			</div>
+		);
+	}
 
 	return (
 		<div className="flex flex-col items-center justify-center size-full">
@@ -19,10 +75,28 @@ export const Login = ({ query }: LoginProps) => {
 				<img src="https://terbiumon.top/tb.svg" alt="TB" className="size-15" />
 			</div>
 			<div className="flex flex-col items-center w-2/5">
+				{error && (
+					<div className="w-full p-2 mb-2 bg-red-500/20 border border-red-500/50 rounded-md text-sm text-red-300">
+						{error}
+					</div>
+				)}
 				{page === "login" ? (
 					<div className="flex flex-col items-center justify-between w-full p-2 gap-3">
-						<Input title="Username" type="text" />
-						{step === 1 && <Input title="Password" type="password" />}
+						<Input 
+							title="Email" 
+							type="email" 
+							value={username}
+							onChange={(e) => setUsername(e.target.value)}
+						/>
+						{step === 1 && (
+							<Input 
+								title="Password" 
+								type="password"
+								value={password}
+								onChange={(e) => setPassword(e.target.value)}
+								onKeyDown={(e) => e.key === "Enter" && handleLogin()}
+							/>
+						)}
 						<div className="relative flex items-center gap-2 w-full">
 							<button
 								className={
@@ -46,19 +120,44 @@ export const Login = ({ query }: LoginProps) => {
 								onClick={() => {
 									if (step === 0) {
 										setStep(1);
+									} else {
+										handleLogin();
 									}
 								}}
+								disabled={loading}
 							>
-								{step === 0 ? "Next" : "Login"}
+								{loading ? "Loading..." : step === 0 ? "Next" : "Login"}
 							</button>
 						</div>
 					</div>
 				) : (
 					<div className="flex flex-col items-center justify-between w-full p-2 gap-3">
-						<Input title="Username" type="text" />
-						<Input title="Email" type="email" />
-						<Input title="Password" type="password" />
-						<button className="flex items-center justify-center w-full p-2 bg-(--accent) rounded-md opacity-70 hover:opacity-100 cursor-pointer duration-150">Register</button>
+						<Input 
+							title="Username" 
+							type="text"
+							value={username}
+							onChange={(e) => setUsername(e.target.value)}
+						/>
+						<Input
+							title="Email"
+							type="email"
+							value={email}
+							onChange={(e) => setEmail(e.target.value)}
+						/>
+						<Input
+							title="Password"
+							type="password"
+							value={password}
+							onChange={(e) => setPassword(e.target.value)}
+							onKeyDown={(e) => e.key === "Enter" && handleRegister()}
+						/>
+						<button
+							className="flex items-center justify-center w-full p-2 bg-(--accent) rounded-md opacity-70 hover:opacity-100 cursor-pointer duration-150"
+							onClick={handleRegister}
+							disabled={loading}
+						>
+							{loading ? "Loading..." : "Register"}
+						</button>
 					</div>
 				)}
 			</div>
