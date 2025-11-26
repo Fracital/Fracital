@@ -54,7 +54,6 @@ export const Input = ({ title, type, value, onChange, onKeyDown }: InputProps) =
 					setActive(false);
 				}}
 				onChange={e => {
-					console.log(e.target.value);
 					if (e.target.value !== "") setHasText(true);
 					else setHasText(false);
 					onChange?.(e);

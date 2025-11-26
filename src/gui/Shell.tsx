@@ -34,7 +34,7 @@ import type { linkProps } from "../views/Home";
 import { useModal } from "../components/Modal/ModalContext";
 import FavoriteModal from "../components/Modal/Favorite";
 import { Modal } from "../components/Modal/Modal";
-import { changeProxy, getProxy } from "../types";
+import { changeProxy, clearLogin, getLogin, getProxy } from "../types";
 import { ContextMenu, type MenuItem } from "../components/ContextMenu";
 
 declare global {
@@ -61,16 +61,7 @@ export const UserCard = ({ id, display, handle, avatar }: UserProps) => {
 
 	const accountRef = useRef<HTMLDivElement>(null);
 	const menuRef = useRef<HTMLDivElement>(null);
-
-	useEffect(() => {
-		const handleElseClick = (e: MouseEvent) => {
-			if (e.target !== menuRef.current && e.target !== accountRef.current) {
-				setContextOpen(false);
-			}
-		};
-
-		window.addEventListener("mousedown", handleElseClick);
-	}, []);
+	const newTab = useTabsStore(state => state.newTab);
 
 	return (
 		<>
@@ -119,6 +110,16 @@ export const UserCard = ({ id, display, handle, avatar }: UserProps) => {
                             ${settings.brightness === "light" ? "hover:bg-[#00000018]" : "hover:bg-[#ffffff10]"}
                         `
 							}
+							onClick={() => {
+								newTab({
+									id: createId(),
+									url: "https://accounts.terbiumon.top/manage",
+									displayUrl: "https://accounts.terbiumon.top/manage",
+									title: "Manage Account",
+									icon: null,
+									current: true,
+								});
+							}}
 						>
 							<span className="text-md font-semibold leading-none w-max">Manage Account</span>
 							<UserIcon className="size-5.5 group-active:scale-125 group-hover:scale-110 pointer-events-none duration-150" />
@@ -131,6 +132,16 @@ export const UserCard = ({ id, display, handle, avatar }: UserProps) => {
                             ${settings.brightness === "light" ? "hover:bg-[#00000018]" : "hover:bg-[#ffffff10]"}
                         `
 							}
+							onClick={() => {
+								newTab({
+									id: createId(),
+									url: "https://corporate.terbiumon.top/privacy",
+									displayUrl: "https://corporate.terbiumon.top/privacy",
+									title: "Privacy Policy",
+									icon: null,
+									current: true,
+								});
+							}}
 						>
 							<span className="text-md font-semibold leading-none w-max">Privacy Policy</span>
 							<InformationCircleIcon className="size-5.5 group-active:scale-125 group-hover:scale-110 pointer-events-none duration-150" />
@@ -143,6 +154,16 @@ export const UserCard = ({ id, display, handle, avatar }: UserProps) => {
                             ${settings.brightness === "light" ? "hover:bg-[#00000018]" : "hover:bg-[#ffffff10]"}
                         `
 							}
+							onClick={() => {
+								newTab({
+									id: createId(),
+									url: "https://corporate.terbiumon.top/cloud/help",
+									displayUrl: "https://corporate.terbiumon.top/cloud/help",
+									title: "Account Help",
+									icon: null,
+									current: true,
+								});
+							}}
 						>
 							<span className="text-md font-semibold leading-none w-max">Help</span>
 							<LifebuoyIcon className="size-5.5 group-active:scale-125 group-hover:scale-110 pointer-events-none duration-150" />
@@ -155,6 +176,10 @@ export const UserCard = ({ id, display, handle, avatar }: UserProps) => {
                             ${settings.brightness === "light" ? "hover:bg-[#00000018] hover:text-[#ff5656] hover:text-shadow-[0_0_6px_#00000040]" : "hover:bg-[#ffffff10] hover:text-[#d03b3b]"}
                         `
 							}
+							onClick={async () => {
+								await clearLogin();
+								window.dispatchEvent(new Event("account-upd"));
+							}}
 						>
 							<span className="text-md font-semibold leading-none w-max">Logout</span>
 							<ArrowLeftStartOnRectangleIcon className="size-5.5 stroke-0.5 stroke-current group-active:scale-125 group-hover:scale-110 pointer-events-none duration-150" />
@@ -248,6 +273,19 @@ const Shell = () => {
 	const { openModal } = useModal();
 	const [isFavorited, setIsFavorited] = useState<boolean>(false);
 	const [contextMenu, setContextMenu] = useState<null | { x: number; y: number; visible: boolean; items: MenuItem[] }>(null);
+	const [accountinfo, setAccountinfo] = useState<{ id: string; display: string; handle: string; avatar: string | React.ReactNode } | null>(null);
+
+	useEffect(() => {
+		const fetchAccountInfo = async () => {
+			const accountInfo = await getLogin();
+			setAccountinfo(accountInfo);
+		};
+		window.addEventListener("account-upd", fetchAccountInfo);
+		fetchAccountInfo();
+		return () => {
+			window.removeEventListener("account-upd", fetchAccountInfo);
+		};
+	}, []);
 
 	useEffect(() => {
 		const handleFullscreenChange = () => {
@@ -607,13 +645,53 @@ const Shell = () => {
 				>
 					<Bars3Icon className="size-6 stroke-1 stroke-current" />
 				</ShellButton>
-				{/* <UserCard avatar={
-                    <UserCircleIcon className={"size-8" + " " + `
-                        ${
-                            settings.brightness === "light" ? "text-(--text-secondary)" : "text-(--text-primary)"
-                        }
-                    `} />
-                } id="anon" display="Guest" handle="anon" /> */}
+				{accountinfo ? (
+					<UserCard
+						avatar={
+							accountinfo.avatar ? (
+								typeof accountinfo.avatar === "string" ? (
+									<img src={accountinfo.avatar} alt={`${accountinfo.display}'s avatar`} className="size-7 rounded-full pointer-events-none select-none" />
+								) : (
+									accountinfo.avatar
+								)
+							) : (
+								<UserCircleIcon
+									className={
+										"size-7" +
+										" " +
+										`
+								${settings.brightness === "light" ? "text-(--text-secondary)" : "text-(--text-primary)"}
+							`
+									}
+								/>
+							)
+						}
+						id={accountinfo.id}
+						display={accountinfo.display}
+						handle={accountinfo.handle}
+					/>
+				) : (
+					<UserCircleIcon
+						className={
+							"size-8" +
+							" " +
+							"cursor-pointer" +
+							`
+                        ${settings.brightness === "light" ? "text-(--text-secondary)" : "text-(--text-primary)"}
+                    `
+						}
+						onClick={() => {
+							newTab({
+								id: createId(),
+								url: "about:account",
+								displayUrl: "about:account",
+								title: "Terbium Cloud Sign-In",
+								icon: null,
+								current: true,
+							});
+						}}
+					/>
+				)}
 			</div>
 			{contextMenu?.visible && <ContextMenu items={contextMenu.items} position={{ x: contextMenu.x, y: contextMenu.y }} onClose={() => setContextMenu(null)} />}
 		</div>

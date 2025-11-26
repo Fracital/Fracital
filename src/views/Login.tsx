@@ -1,8 +1,12 @@
 import { UserCircleIcon, XMarkIcon } from "@heroicons/react/24/solid";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Input } from "../components/Input";
 import { signIn, signUp, useSession } from "../libs/auth";
+import { handleImg } from "../libs/imgHandler";
+import { useTabsStore } from "../store";
+import { saveLogin } from "../types";
+import { createId } from "@paralleldrive/cuid2";
 
 interface LoginProps {
 	query: string;
@@ -17,24 +21,48 @@ export const Login = ({ query }: LoginProps) => {
 	const [loading, setLoading] = useState(false);
 	const [error, setError] = useState("");
 	const { data: session } = useSession();
+	const [tb_icon, setTBIcon] = useState("");
+	const tabs = useTabsStore(state => state.tabs);
+	const newTab = useTabsStore(state => state.newTab);
+	const closeTab = useTabsStore(state => state.closeTab);
+	const currentTab = tabs.find(tab => tab.current === true);
+
+	useEffect(() => {
+		handleImg("https://terbiumon.top/tb.svg", result => {
+			if (result) {
+				setTBIcon(result);
+			}
+		});
+	}, []);
 
 	const handleLogin = async () => {
 		if (!username || !password) {
 			setError("Please fill in all fields");
 			return;
 		}
-		setLoading(true);
-		setError("");
-		try {
-			await signIn.email({
-				email: username,
-				password: password,
-			});
-		} catch (err: any) {
-			setError(err.message || "Login failed");
-		} finally {
-			setLoading(false);
-		}
+		await signIn.email({
+			email: username,
+			password: password,
+			fetchOptions: {
+				onSuccess: async userData => {
+					closeTab(currentTab!.id);
+					await saveLogin({ id: userData.data.user.id, display: userData.data.user.name, handle: userData.data.user.email, avatar: userData.data.user.image || null });
+					newTab({
+						id: createId(),
+						url: "about:newtab",
+						displayUrl: "about:newtab",
+						title: "New Tab",
+						icon: null,
+						current: true,
+					});
+					window.dispatchEvent(new Event("account-upd"));
+				},
+				onError: error => {
+					setError(error.error.message || "Login failed");
+				},
+			},
+		});
+		setLoading(false);
 	};
 
 	const handleRegister = async () => {
@@ -72,7 +100,7 @@ export const Login = ({ query }: LoginProps) => {
 			<div className="flex items-center justify-center gap-2">
 				<UserCircleIcon className="size-15 text-(--accent)" />
 				<XMarkIcon className="size-6 stroke-current stroke-2" />
-				<img src="https://terbiumon.top/tb.svg" alt="TB" className="size-15" />
+				<img src={tb_icon} alt="TB" className="size-15" />
 			</div>
 			<div className="flex flex-col items-center w-2/5">
 				{error && <div className="w-full p-2 mb-2 bg-red-500/20 border border-red-500/50 rounded-md text-sm text-red-300">{error}</div>}

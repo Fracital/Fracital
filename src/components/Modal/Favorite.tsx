@@ -1,8 +1,9 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useModal } from "./ModalContext";
 import { useSettingsStore } from "../../store";
-import { ArrowLeftCircleIcon, BriefcaseIcon, CheckCircleIcon, GifIcon, GiftIcon, GlobeAltIcon, MusicalNoteIcon, NewspaperIcon, PlusCircleIcon, PuzzlePieceIcon, ShoppingBagIcon } from "@heroicons/react/24/solid";
+import { ArrowLeftCircleIcon, BriefcaseIcon, CheckCircleIcon, GiftIcon, GlobeAltIcon, MusicalNoteIcon, NewspaperIcon, PlusCircleIcon, PuzzlePieceIcon, ShoppingBagIcon } from "@heroicons/react/24/solid";
 import type { linkProps } from "../../views/Home";
+import { handleImg } from "../../libs/imgHandler";
 
 interface FavoriteProps {
 	data: {
@@ -32,6 +33,14 @@ const FavoriteModal = () => {
 	const [icon, setIcon] = useState<string>(typeof data.icon === "string" ? data.icon : "");
 	const [name, setName] = useState<string>(data.name ?? "");
 	const [url, setUrl] = useState<string>(data.url ?? "");
+
+	useEffect(() => {
+		if (typeof icon === "string") {
+			handleImg(icon, result => {
+				setIcon(result as string);
+			});
+		}
+	}, [icon]);
 
 	return (
 		<div className="flex flex-col w-full gap-4">

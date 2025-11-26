@@ -1,3 +1,5 @@
+import type { libcurl } from "libcurl.js/bundled";
+
 declare global {
 	interface Window {
 		Filer: FilerType;
@@ -11,6 +13,25 @@ export const SettingsPath = "/settings.json";
 export const MusicPath = "/music/";
 export const GamesPath = "/games/";
 export const isWebOS = false;
+export const wispURL =
+	(typeof window !== "undefined" && window.location && window.location.origin)
+	? `${window.location.origin.replace(/^https?:\/\//, "ws://")}/wisp/`
+	: "";
+export const saveLogin = async ({ id, display, handle, avatar }: { id: string; display: string; handle: string; avatar: string | any }) => {
+	await window.fr.fs.promises.writeFile("/account.json", JSON.stringify({ id, display, handle, avatar }), "utf8");
+};
+export const getLogin = async (): Promise<{ id: string; display: string; handle: string; avatar: string | any } | null> => {
+	if (!(await fileExists("/account.json"))) {
+		return null;
+	} else {
+		return JSON.parse(await window.fr.fs.promises.readFile("/account.json", "utf8"));
+	}
+};
+export const clearLogin = async (): Promise<void> => {
+	if (await fileExists("/account.json")) {
+		await window.fr.fs.promises.unlink("/account.json");
+	}
+}
 
 export const getProxy = async (): Promise<"sj" | "uv"> => {
 	const data = JSON.parse(await window.fr.fs.promises.readFile(SettingsPath, "utf8"));
@@ -73,6 +94,7 @@ export interface COM {
 	fs: FilerFS;
 	buffer: any;
 	sh: any;
+	net: typeof libcurl;
 }
 
 export interface SongProps {

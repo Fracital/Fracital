@@ -21,7 +21,7 @@ import { initTheme } from "./libs/theme";
 import { View } from "./gui/View";
 import TabGroup from "./components/TabGroup";
 import { ModalProvider } from "./components/Modal/ModalContext";
-import { getProxy, isWebOS, SettingsPath } from "./types";
+import { getProxy, isWebOS, SettingsPath, wispURL } from "./types";
 import { aboutPages, getPageFromUrl, getQueryFromUrl } from "./libs/aboutPages";
 
 const regSw = async () => {
@@ -33,7 +33,7 @@ const regSw = async () => {
 		});
 	});
 	const connection = new BareMuxConnection("/baremux/worker.js");
-	await connection.setTransport("/epoxy/index.mjs", [{ wisp: `${window.location.origin.replace(/^https?:\/\//, "ws://")}/wisp/` }]);
+	await connection.setTransport("/epoxy/index.mjs", [{ wisp: wispURL }]);
 	const { ScramjetController } = window.$scramjetLoadController();
 	const scramjet = new ScramjetController({
 		prefix: "/service/",
