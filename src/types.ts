@@ -13,10 +13,7 @@ export const SettingsPath = "/settings.json";
 export const MusicPath = "/music/";
 export const GamesPath = "/games/";
 export const isWebOS = false;
-export const wispURL =
-	(typeof window !== "undefined" && window.location && window.location.origin)
-	? `${window.location.origin.replace(/^https?:\/\//, "ws://")}/wisp/`
-	: "";
+export const wispURL = typeof window !== "undefined" && window.location && window.location.origin ? `${window.location.origin.replace(/^https?:\/\//, "ws://")}/wisp/` : "";
 export const saveLogin = async ({ id, display, handle, avatar }: { id: string; display: string; handle: string; avatar: string | any }) => {
 	await window.fr.fs.promises.writeFile("/account.json", JSON.stringify({ id, display, handle, avatar }), "utf8");
 };
@@ -31,7 +28,7 @@ export const clearLogin = async (): Promise<void> => {
 	if (await fileExists("/account.json")) {
 		await window.fr.fs.promises.unlink("/account.json");
 	}
-}
+};
 
 export const getProxy = async (): Promise<"sj" | "uv"> => {
 	const data = JSON.parse(await window.fr.fs.promises.readFile(SettingsPath, "utf8"));
