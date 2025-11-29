@@ -14,7 +14,7 @@ export const Api = async () => {
 	const setSettings = useSettingsStore(state => state.setSettings);
 	if (!window.loadLock) {
 		window.loadLock = true;
-		await libcurl.load_wasm("https://cdn.jsdelivr.net/npm/libcurl.js@latest/libcurl.wasm")
+		await libcurl.load_wasm("https://cdn.jsdelivr.net/npm/libcurl.js@latest/libcurl.wasm");
 		libcurl.set_websocket(wispURL as `ws://${string}` | `wss://${string}`);
 	}
 	window.fr = {
