@@ -132,16 +132,6 @@ export const QuickPlayer = ({ tabsOpen, className }: QuickPlayerProps) => {
 								</div>
 							)}
 						</div>
-						{/* {
-                            tabs.length > 0 ? tabs.map((item, index) => (
-                                <Tab title={item.title} url={item.url} id={item.id} icon={item.icon} displayUrl={item.url} key={index} />
-                            )) :
-                            <span className={"absolute left-1/2 top-1/2 -translate-1/2 w-max font-semibold text-lg duration-150" + " " + `
-                                ${
-                                    tabs.length < 0 ? "opacity-0" : ""
-                                }
-                            `}>No tabs open</span>
-                        } */}
 					</div>
 					<div>
 						<div className="relative flex justify-center items-center h-9">

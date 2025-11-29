@@ -1,4 +1,4 @@
-declare module "libcurl.js/bundled" {
+declare module "libcurl.js" {
 	export type websocketUrl = `wss://${string}` | `ws://${string}`;
 	export const libcurl: {
 		set_websocket: (url: websocketUrl) => void;

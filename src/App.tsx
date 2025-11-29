@@ -530,6 +530,13 @@ const App = () => {
 									{(() => {
 										const ungrouped = tabs.filter(t => !t.groupId);
 										if (tabs.length === 0) {
+											newTab({
+												id: createId(),
+												title: "New Tab",
+												url: "about:newtab",
+												current: true,
+												displayUrl: "about:newtab",
+											});
 											return (
 												<span
 													className={

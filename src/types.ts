@@ -1,8 +1,9 @@
-import type { libcurl } from "libcurl.js/bundled";
+import type { libcurl } from "libcurl.js";
 
 declare global {
 	interface Window {
 		Filer: FilerType;
+		loadLock: boolean;
 	}
 }
 

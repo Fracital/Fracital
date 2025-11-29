@@ -1,6 +1,6 @@
 import { useSettingsStore } from "./store";
 import { ThemePath, wispURL, type COM } from "./types";
-import { libcurl } from "libcurl.js/bundled";
+import { libcurl } from "libcurl.js";
 
 declare const fr: COM;
 declare global {
@@ -12,15 +12,11 @@ declare global {
 export const Api = async () => {
 	const getSettings = useSettingsStore(state => state.getSettings);
 	const setSettings = useSettingsStore(state => state.setSettings);
-	// @ts-expect-error
-	libcurl.set_websocket(wispURL);
-	/* Under ongoing investigation, DO NOT ENABLE NOW
-	libcurl.load_wasm("https://cdn.jsdelivr.net/npm/libcurl.js@latest/libcurl.wasm")
-	libcurl.onload(() => {
-		console.log("libcurl.js loaded");
-		
-	});*/
-
+	if (!window.loadLock) {
+		window.loadLock = true;
+		await libcurl.load_wasm("https://cdn.jsdelivr.net/npm/libcurl.js@latest/libcurl.wasm")
+		libcurl.set_websocket(wispURL as `ws://${string}` | `wss://${string}`);
+	}
 	window.fr = {
 		theme: {
 			getTheme: () => {
