@@ -14,7 +14,7 @@ export const SettingsPath = "/settings.json";
 export const MusicPath = "/music/";
 export const GamesPath = "/games/";
 export const isWebOS = false;
-export const wispURL = typeof window !== "undefined" && window.location && window.location.origin ? `${window.location.origin.replace(/^https?:\/\//, "ws://")}/wisp/` : "";
+export const wispURL = typeof window !== "undefined" && window.location && window.location.origin ? `${window.location.origin.replace(/^https?:\/\//, window.location.protocol === "https:" ? "wss://" : "ws://")}/wisp/` : "";
 export const saveLogin = async ({ id, display, handle, avatar }: { id: string; display: string; handle: string; avatar: string | any }) => {
 	await window.fr.fs.promises.writeFile("/account.json", JSON.stringify({ id, display, handle, avatar }), "utf8");
 };
