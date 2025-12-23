@@ -76,6 +76,7 @@ export const QuickPlayer = ({ panelsOpen, className, onMouseDown }: QuickPlayerP
 	const bassFilterRef = useRef<BiquadFilterNode | null>(null);
 	const midFilterRef = useRef<BiquadFilterNode | null>(null);
 	const trebleFilterRef = useRef<BiquadFilterNode | null>(null);
+	const analyserRef = useRef<AnalyserNode | null>(null);
 
 	useEffect(() => {
 		if (settings.brightness) {
@@ -158,7 +159,6 @@ export const QuickPlayer = ({ panelsOpen, className, onMouseDown }: QuickPlayerP
 
 		try {
 			const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
-			console.log(audioRef.current);
 			const source = audioContext.createMediaElementSource(audioRef.current);
 
 			// Create EQ filters
@@ -178,17 +178,24 @@ export const QuickPlayer = ({ panelsOpen, className, onMouseDown }: QuickPlayerP
 			trebleFilter.frequency.value = 3000;
 			trebleFilter.gain.value = eqTreble;
 
+			// Create analyser for visualizer
+			const analyser = audioContext.createAnalyser();
+			analyser.fftSize = 2048;
+			analyser.smoothingTimeConstant = 0.8;
+
 			// Connect the audio graph
 			source.connect(bassFilter);
 			bassFilter.connect(midFilter);
 			midFilter.connect(trebleFilter);
-			trebleFilter.connect(audioContext.destination);
+			trebleFilter.connect(analyser);
+			analyser.connect(audioContext.destination);
 
 			audioContextRef.current = audioContext;
 			sourceNodeRef.current = source;
 			bassFilterRef.current = bassFilter;
 			midFilterRef.current = midFilter;
 			trebleFilterRef.current = trebleFilter;
+			analyserRef.current = analyser;
 		} catch (error) {
 			console.error("Failed to initialize audio context:", error);
 		}
@@ -645,7 +652,7 @@ export const QuickPlayer = ({ panelsOpen, className, onMouseDown }: QuickPlayerP
 							<div>
 								{currentTrack && showVisualizer && settings["tracks-visualizer"] === true && settings["disable-visualizers"] !== true && (
 									<div className="flex justify-center items-center h-12 px-4 overflow-hidden">
-										<AudvisVisualizer audioRef={audioRef} isPlaying={isPlaying} width={250} height={20} color={brightness === "dark" ? "#FFFFFF" : "#000000"} opacity={0.6} scale={1} />
+										<AudvisVisualizer analyser={analyserRef.current} isPlaying={isPlaying} width={250} height={20} color={brightness === "dark" ? "#FFFFFF" : "#000000"} opacity={0.6} scale={1} />
 									</div>
 								)}
 								<div className="relative flex justify-center items-center h-9">
@@ -889,7 +896,7 @@ export const QuickPlayer = ({ panelsOpen, className, onMouseDown }: QuickPlayerP
 									)}
 									{settings["big-player-visualizer"] === true && settings["disable-visualizers"] !== true && showVisualizer && (
 										<div className={`absolute rounded-xl overflow-hidden duration-300 drop-shadow-xl ${isHoveringCover === false ? "opacity-100 scale-100" : "opacity-0 scale-95"}`}>
-											<AudvisVisualizer audioRef={audioRef} isPlaying={isPlaying} width={140} height={30} color={brightness === "dark" ? "#FFFFFF" : "#000000"} opacity={visualizerOpacity} scale={visualizerScale} />
+											<AudvisVisualizer analyser={analyserRef.current} isPlaying={isPlaying} width={140} height={30} color={brightness === "dark" ? "#FFFFFF" : "#000000"} opacity={visualizerOpacity} scale={visualizerScale} />
 										</div>
 									)}
 									<div className="absolute group flex gap-3 opacity-0 group-hover:opacity-100 duration-150 z-10">
