@@ -1,6 +1,6 @@
 import { fetcher } from "./libs/auth";
 import { useSettingsStore } from "./store";
-import { ThemePath, wispURL, type COM } from "./types";
+import { SettingsPath, ThemePath, wispURL, type COM } from "./types";
 import { libcurl } from "libcurl.js";
 
 declare const fr: COM;
@@ -70,7 +70,7 @@ export const Api = async () => {
 					window.fr.sync.syncing = false;
 					return false;
 				}
-				await window.fr.fs.promises.writeFile("/settings.json", settings.value);
+				await window.fr.fs.promises.writeFile(SettingsPath, settings.value);
 				window.fr.sync.syncing = false;
 				return true;
 			},
@@ -83,7 +83,7 @@ export const Api = async () => {
 						"Content-Type": "application/json",
 					},
 					body: JSON.stringify({
-						value: JSON.stringify(await window.fr.fs.promises.readFile("/settings.json", "utf8")),
+						value: JSON.stringify(await window.fr.fs.promises.readFile(SettingsPath, "utf8")),
 					}),
 				});
 				window.fr.sync.syncing = false;
