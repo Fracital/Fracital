@@ -93,6 +93,11 @@ export interface COM {
 	buffer: any;
 	sh: any;
 	net: typeof libcurl;
+	sync: {
+		get: () => Promise<any>;
+		set: () => Promise<void>;
+		syncing: boolean;
+	};
 }
 
 export interface SongProps {

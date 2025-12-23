@@ -158,6 +158,7 @@ export const QuickPlayer = ({ panelsOpen, className, onMouseDown }: QuickPlayerP
 
 		try {
 			const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+			console.log(audioRef.current);
 			const source = audioContext.createMediaElementSource(audioRef.current);
 
 			// Create EQ filters

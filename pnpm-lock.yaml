@@ -70,7 +70,7 @@ importers:
         version: 3.10.1
       libcurl.js:
         specifier: ^0.7.3
-        version: 0.7.3
+        version: 0.7.4
       music-metadata:
         specifier: ^11.9.0
         version: 11.9.0
@@ -1522,8 +1522,8 @@ packages:
     resolution: {integrity: sha512-+bT2uH4E5LGE7h/n3evcS/sQlJXCpIp6ym8OWJ5eV6+67Dsql/LaaT7qJBAt2rzfoa/5QBGBhxDix1dMt2kQKQ==}
     engines: {node: '>= 0.8.0'}
 
-  libcurl.js@0.7.3:
-    resolution: {integrity: sha512-svlEs42mmKocPKVsl+EViVPb/DuNRUecO+Fs7I3LOmu6YHfoBAfhTSmyCRg57H7QEFHgafZOf/TkA24s/i2AKg==}
+  libcurl.js@0.7.4:
+    resolution: {integrity: sha512-UpvVirvATP7fD0t4rnsxVRuUpPVIo2QvWj4+5JrMsd1KSEvYkON36+COOPAl88hPlGJddk+DfZRvyF7KG7YcSA==}
 
   lie@3.3.0:
     resolution: {integrity: sha512-UaiMJzeWRlEujzAuw5LokY1L5ecNQYZKfmyZ9L7wDHb/p5etKaxXhohBcrw0EYby+G/NA52vRSN4N39dxHAIwQ==}
@@ -3334,7 +3334,7 @@ snapshots:
       prelude-ls: 1.2.1
       type-check: 0.4.0
 
-  libcurl.js@0.7.3: {}
+  libcurl.js@0.7.4: {}
 
   lie@3.3.0:
     dependencies:

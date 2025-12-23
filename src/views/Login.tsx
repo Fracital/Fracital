@@ -2,7 +2,7 @@ import { UserCircleIcon, XMarkIcon } from "@heroicons/react/24/solid";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Input } from "../components/Input";
-import { signIn, signUp, useSession } from "../libs/auth";
+import { signIn, signUp } from "../libs/auth";
 import { handleImg } from "../libs/imgHandler";
 import { useTabsStore } from "../store";
 import { saveLogin } from "../types";
@@ -20,7 +20,6 @@ export const Login = ({ query }: LoginProps) => {
 	const [password, setPassword] = useState("");
 	const [loading, setLoading] = useState(false);
 	const [error, setError] = useState("");
-	const { data: session } = useSession();
 	const [tb_icon, setTBIcon] = useState("");
 	const tabs = useTabsStore(state => state.tabs);
 	const newTab = useTabsStore(state => state.newTab);
@@ -55,6 +54,11 @@ export const Login = ({ query }: LoginProps) => {
 						icon: null,
 						current: true,
 					});
+					const res = await window.fr.sync.get();
+					if (!res) {
+						console.log("No Settings found, creating settings");
+						await window.fr.sync.set();
+					}
 					window.dispatchEvent(new Event("account-upd"));
 				},
 				onError: error => {
@@ -84,16 +88,6 @@ export const Login = ({ query }: LoginProps) => {
 			setLoading(false);
 		}
 	};
-
-	if (session?.user) {
-		return (
-			<div className="flex flex-col items-center justify-center size-full gap-4">
-				<UserCircleIcon className="size-20 text-(--accent)" />
-				<h2 className="text-2xl font-bold">Welcome, {session.user.name}!</h2>
-				<p className="text-sm opacity-70">{session.user.email}</p>
-			</div>
-		);
-	}
 
 	return (
 		<div className="flex flex-col items-center justify-center size-full">
