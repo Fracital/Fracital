@@ -1,5 +1,7 @@
+import { fetcher } from "./libs/auth";
 import { useSettingsStore } from "./store";
-import { ThemePath, type COM } from "./types";
+import { SettingsPath, ThemePath, wispURL, type COM } from "./types";
+import { libcurl } from "libcurl.js";
 
 declare const fr: COM;
 declare global {
@@ -9,10 +11,19 @@ declare global {
 }
 
 export const Api = async () => {
-	const settings = useSettingsStore(state => state.settings);
 	const getSettings = useSettingsStore(state => state.getSettings);
 	const setSettings = useSettingsStore(state => state.setSettings);
-
+	if (!window.loadLock) {
+		window.loadLock = true;
+		await libcurl.load_wasm("https://cdn.jsdelivr.net/npm/libcurl.js@latest/libcurl.wasm");
+		libcurl.set_websocket(wispURL as `ws://${string}` | `wss://${string}`);
+		await window.fr.sync.get();
+		window.fr.fs.watch("/settings.json", async (e: string, _f: string) => {
+			if (e === "change" && window.fr.sync.syncing === false) {
+				window.fr.sync.set();
+			}
+		});
+	}
 	window.fr = {
 		theme: {
 			getTheme: () => {
@@ -54,5 +65,39 @@ export const Api = async () => {
 		fs: window.parent.tb.fs,
 		buffer: window.parent.tb.buffer,
 		sh: window.parent.tb.sh,
+		net: libcurl,
+		sync: {
+			get: async () => {
+				window.fr.sync.syncing = true;
+				const rp = await fetcher("https://auth.terbiumon.top/kv/retrieve/frac_settings", {
+					credentials: "include",
+				});
+				if (!rp.ok) return false;
+				const settings = await rp.json();
+				if (!settings.value) {
+					window.fr.sync.syncing = false;
+					return false;
+				}
+				await window.fr.fs.promises.writeFile(SettingsPath, settings.value);
+				window.fr.sync.syncing = false;
+				return true;
+			},
+			set: async () => {
+				window.fr.sync.syncing = true;
+				const rp = await fetcher("https://auth.terbiumon.top/kv/set/frac_settings", {
+					credentials: "include",
+					method: "POST",
+					headers: {
+						"Content-Type": "application/json",
+					},
+					body: JSON.stringify({
+						value: JSON.stringify(await window.fr.fs.promises.readFile(SettingsPath, "utf8")),
+					}),
+				});
+				window.fr.sync.syncing = false;
+				return rp.json();
+			},
+			syncing: false,
+		},
 	};
 };

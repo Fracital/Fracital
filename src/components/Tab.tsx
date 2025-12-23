@@ -1,6 +1,7 @@
 import { XMarkIcon, GlobeAltIcon } from "@heroicons/react/24/solid";
 import { useSettingsStore, useTabsStore } from "../store";
-import { useRef } from "react";
+import { useEffect, useRef, useState } from "react";
+import { handleImg } from "../libs/imgHandler";
 
 export interface TabProps {
 	title: string;
@@ -27,8 +28,16 @@ export const Tab = ({ title, url, id, icon }: TabProps) => {
 	const thisTab = tabs.find(tab => tab.id === id);
 	const currTitle = thisTab?.title ?? title;
 	const currIcon = thisTab?.icon ?? icon;
-
+	const [iconSrc, setIconSrc] = useState<string | undefined>(undefined);
 	const closeRef = useRef<SVGSVGElement>(null);
+
+	useEffect(() => {
+		if (typeof currIcon === "string") {
+			handleImg(currIcon, result => {
+				setIconSrc(result);
+			});
+		}
+	}, [currIcon]);
 
 	return (
 		<div
@@ -44,6 +53,7 @@ export const Tab = ({ title, url, id, icon }: TabProps) => {
 			}}
 			onDrop={e => {
 				e.preventDefault();
+				e.stopPropagation();
 				const draggedId = e.dataTransfer.getData("text/tab-id");
 				if (!draggedId || draggedId === id) return;
 				const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
@@ -83,7 +93,7 @@ export const Tab = ({ title, url, id, icon }: TabProps) => {
 		>
 			<div className="flex w-full justify-between items-center duration-150">
 				<div className="flex items-center gap-1.5 *:pointer-events-none">
-					{typeof currIcon === "string" ? <img src={currIcon} alt={currTitle} className="size-5" /> : currIcon ? currIcon : <GlobeAltIcon className="size-5" />}
+					{typeof currIcon === "string" ? <img src={iconSrc} alt={currTitle} className="size-5" /> : currIcon ? currIcon : <GlobeAltIcon className="size-5" />}
 					<span
 						className={
 							"font-medium select-none" +

@@ -185,7 +185,6 @@ export const MusicLibrary = ({ query }: MusicLibraryProps) => {
 			// @ts-expect-error types
 			watcher.close();
 			intervalId = window.setTimeout(() => {
-				// re-establish watcher after a short delay to avoid multiple triggers
 				readLibrary();
 				// @ts-expect-error types
 				watcher = window.fr.fs.watch(MusicPath, { recursive: true }, () => {
@@ -212,12 +211,12 @@ export const MusicLibrary = ({ query }: MusicLibraryProps) => {
 				<h1 className="text-3xl font-bold">Library</h1>
 				<div className="flex flex-wrap gap-2">
 					{library.length === 0 ? (
-						<span className="text-lg text-[#ffffff80]">No songs found.</span>
+						<span className="text-lg text-text-tertiary">No songs found.</span>
 					) : (
 						library.map((song, index) => (
 							<div
 								key={index}
-								className="flex items-center gap-2 p-2.5 w-max rounded-xl bg-[#ffffff10] hover:bg-[#ffffff18] duration-150"
+								className={`group flex items-center gap-2 p-2.5 w-max rounded-xl ${settings.brightness === "dark" ? "bg-[#ffffff20] hover:bg-[#ffffff28]" : "bg-[#00000028] hover:bg-[#00000038]"} duration-150`}
 								onClick={(e: React.MouseEvent<HTMLElement>) => {
 									if ((e.target as HTMLElement).id === "options") return;
 									if (currentTrack === song) return;
@@ -225,23 +224,24 @@ export const MusicLibrary = ({ query }: MusicLibraryProps) => {
 								}}
 							>
 								{song.cover ? (
-									<img src={song.cover} className="size-12 rounded-md object-cover" />
+									<div className="relative flex items-center justify-center size-12 rounded-md overflow-hidden">
+										<PlayIcon className="absolute size-6 scale-80 opacity-0 group-hover:opacity-100 group-hover:scale-100 duration-150" style={{ filter: "drop-shadow: 0 0 5px #000000" }} />
+										<img src={song.cover} className="size-full object-cover" />
+									</div>
 								) : (
-									<div className="size-12 rounded-md bg-(--primary) flex items-center justify-center text-(--text-tertiary) font-bold">
+									<div className="relative size-12 rounded-md bg-(--primary) flex items-center justify-center text-(--text-tertiary) font-bold">
+										<PlayIcon className="absolute size-6 text-(--text-primary) scale-80 opacity-0 group-hover:opacity-100 group-hover:scale-100 duration-150" style={{ filter: "drop-shadow: 0 0 5px #000000" }} />
 										<MusicalNoteIcon className="size-6 text-current" />
 									</div>
 								)}
-								<div className="flex flex-col gap-1 justify-center pr-2">
+								<div className="flex flex-col gap-1 justify-center pr-2 pointer-events-none">
 									<span className="text-xl font-medium">{song.title}</span>
-									<span className="text-md text-[#ffffff88]">{Array.isArray(song.artists) ? song.artists.join(", ") : song.artists}</span>
-								</div>
-								<div id="play" title="Play track" className="flex items-center justify-center p-2 bg-[#ffffff10] hover:bg-[#ffffff18] rounded-full cursor-pointer duration-150">
-									<PlayIcon id="play" className="size-5 pointer-events-none" />
+									<span className="text-md">{Array.isArray(song.artists) ? song.artists.join(", ") : song.artists}</span>
 								</div>
 								<div
 									id="options"
 									title="Track options"
-									className="flex items-center justify-center p-2 bg-[#ffffff10] hover:bg-[#ffffff18] rounded-full cursor-pointer duration-150"
+									className={`flex items-center justify-center p-2 ${settings.brightness === "dark" ? "bg-[#ffffff10] hover:bg-[#ffffff18]" : "bg-[#00000010] hover:bg-[#0000 0018]"} rounded-full cursor-pointer duration-150`}
 									onClick={e => {
 										const rect = (e.target as HTMLElement).getBoundingClientRect();
 										const x = rect.left;
@@ -257,9 +257,84 @@ export const MusicLibrary = ({ query }: MusicLibraryProps) => {
 												icon: null,
 											},
 											{
+												title: "Play next",
+												onClick: () => {
+													try {
+														const store: any = useMusicStore;
+														const state = store.getState();
+														const existingQueue = Array.isArray(state.queue) ? state.queue : [];
+														const filteredQueue = existingQueue.filter((t: any) => t.id !== song.id);
+														const newQueue = [song, ...filteredQueue];
+														store.setState({ queue: newQueue });
+														setContextMenu(null);
+													} catch (err) {
+														console.error("Failed to add track to top of queue, falling back to append:", err);
+														addTrack(song);
+														setContextMenu(null);
+													}
+												},
+												icon: null,
+											},
+											{
 												title: "Add to Queue",
 												onClick: () => {
 													addTrack(song);
+												},
+												icon: null,
+											},
+											{
+												title: "Add Album Art",
+												onClick: () => {
+													(async () => {
+														try {
+															if (!song.folderName) {
+																window.fr.dialog.alert({ title: "Error", message: "Cannot add album art: folder information missing." });
+																return;
+															}
+
+															const input = document.createElement("input");
+															input.type = "file";
+															input.accept = "image/*";
+															input.onchange = async e => {
+																const file = (e.target as HTMLInputElement).files?.[0];
+																if (!file) return;
+
+																const reader = new FileReader();
+																reader.onload = async ev => {
+																	const dataUrl = ev.target?.result as string;
+																	const folderPath = `${MusicPath}/${song.folderName}`;
+
+																	let tags: any = {};
+																	try {
+																		const existing = await window.fr.fs.promises.readFile(`${folderPath}/tags.json`, "utf8");
+																		tags = JSON.parse(existing);
+																	} catch {
+																		tags = {};
+																	}
+
+																	tags.cover = dataUrl;
+
+																	try {
+																		await window.fr.fs.promises.writeFile(`${folderPath}/tags.json`, JSON.stringify(tags, null, 2));
+																	} catch (err) {
+																		console.error("Failed to write tags.json:", err);
+																		window.fr.dialog.alert({ title: "Error", message: "Failed to save album art to disk." });
+																		return;
+																	}
+
+																	setLibrary(prev => prev.map(s => (s.id === song.id ? { ...s, cover: dataUrl } : s)));
+
+																	window.fr.dialog.alert({ title: "Album Art Added", message: `Album art added for "${song.title}".` });
+																	setContextMenu(null);
+																};
+																reader.readAsDataURL(file);
+															};
+															input.click();
+														} catch (err) {
+															console.error("Add album art failed:", err);
+															window.fr.dialog.alert({ title: "Error", message: "An error occurred while adding album art." });
+														}
+													})();
 												},
 												icon: null,
 											},
@@ -366,7 +441,7 @@ export const MusicLibrary = ({ query }: MusicLibraryProps) => {
 							>
 								<div
 									className={
-										"flex flex-col gap-1.5 justify-center items-center group-hover:text-[#ffffffac] text-[#ffffff68] duration-150 pointer-events-none" +
+										"flex flex-col gap-1.5 justify-center items-center group-hover:opacity-80 duration-150 pointer-events-none" +
 										" " +
 										`
                                     ${albumCover !== false ? "absolute opacity-0" : ""}
@@ -383,7 +458,7 @@ export const MusicLibrary = ({ query }: MusicLibraryProps) => {
                                 `}
 								/>
 							</div>
-							<label className="relative flex  h-max cursor-pointer bg-(--primary) rounded-lg inset-shadow-(--inset-shadow-primary) p-4 hover:bg-(--primary-hover) text-[#ffffff88] transition-colors">
+							<label className="relative flex  h-max cursor-pointer bg-(--primary) rounded-lg inset-shadow-(--inset-shadow-primary) p-4 hover:bg-(--primary-hover) transition-colors">
 								<div className="relative flex gap-2 justify-center items-center">
 									<span className="text-sm font-semibold">{filename ? filename : "Upload Audio file"}</span>
 									<PlusIcon
@@ -450,7 +525,7 @@ export const MusicLibrary = ({ query }: MusicLibraryProps) => {
 						<div className="flex flex-col gap-1.5">
 							<span className="text-lg font-semibold">Artist(s)</span>
 							<input ref={artistRef} type="text" className="pl-3 p-2 bg-(--primary) rounded-lg inset-shadow-(--inset-shadow-primary) focus-within:inset-shadow-(--inset-shadow-accent) focus-visible:outline-0 duration-150" />
-							<span className="text-md text-[#ffffff88] mb-2">seperate each artist by ","</span>
+							<span className="text-md mb-2">seperate each artist by ","</span>
 						</div>
 						<div className="flex flex-col gap-1.5">
 							<span className="text-lg font-semibold">Album</span>

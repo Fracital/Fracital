@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef } from "react";
 import { useSettingsStore } from "../store";
+import { handleImg } from "../libs/imgHandler";
 
 export interface MenuItem {
 	// allow rich titles (React nodes) so menu entries can include headers or formatted text

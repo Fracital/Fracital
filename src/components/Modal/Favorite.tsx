@@ -1,8 +1,9 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useModal } from "./ModalContext";
 import { useSettingsStore } from "../../store";
-import { ArrowLeftCircleIcon, BriefcaseIcon, CheckCircleIcon, GifIcon, GiftIcon, GlobeAltIcon, MusicalNoteIcon, NewspaperIcon, PlusCircleIcon, PuzzlePieceIcon, ShoppingBagIcon } from "@heroicons/react/24/solid";
+import { ArrowLeftCircleIcon, BriefcaseIcon, CheckCircleIcon, GiftIcon, GlobeAltIcon, MusicalNoteIcon, NewspaperIcon, PlusCircleIcon, PuzzlePieceIcon, ShoppingBagIcon } from "@heroicons/react/24/solid";
 import type { linkProps } from "../../views/Home";
+import { handleImg } from "../../libs/imgHandler";
 
 interface FavoriteProps {
 	data: {
@@ -29,9 +30,17 @@ const FavoriteModal = () => {
 	const randomColor = Math.floor(Math.random() * colorsCards.length);
 	const [selecting, setSelecting] = useState<"color" | "icon" | "preview">("preview");
 	const [color, setColor] = useState<string>(colorsCards[randomColor]);
-	const [icon, setIcon] = useState<string>(data.icon ?? "");
+	const [icon, setIcon] = useState<string>(typeof data.icon === "string" ? data.icon : "");
 	const [name, setName] = useState<string>(data.name ?? "");
 	const [url, setUrl] = useState<string>(data.url ?? "");
+
+	useEffect(() => {
+		if (typeof icon === "string") {
+			handleImg(icon, result => {
+				setIcon(result as string);
+			});
+		}
+	}, [icon]);
 
 	return (
 		<div className="flex flex-col w-full gap-4">
@@ -74,7 +83,7 @@ const FavoriteModal = () => {
 										<BriefcaseIcon className="size-10 z-10" />
 									) : icon === "newspapericon" ? (
 										<NewspaperIcon className="size-10 z-10" />
-									) : icon.includes("https://") ? (
+									) : typeof icon === "string" && icon.includes("https://") ? (
 										<img src={icon} alt={data.name} className="size-10 z-10" />
 									) : (
 										<GlobeAltIcon className="size-10 z-10" />

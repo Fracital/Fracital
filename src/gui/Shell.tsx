@@ -13,12 +13,16 @@ import {
 	ArrowPathIcon,
 	ArrowLeftIcon,
 	ArrowRightIcon,
-	FolderArrowDownIcon,
 	FolderIcon,
 	StarIcon as StarIconSolid,
+	FireIcon,
+	WrenchScrewdriverIcon,
+	CheckBadgeIcon,
+	MusicalNoteIcon,
+	PlayIcon,
+	Bars3Icon,
 } from "@heroicons/react/24/solid";
 import { StarIcon as StarIconOutline } from "@heroicons/react/24/outline";
-import { FireIcon, WrenchScrewdriverIcon, CheckBadgeIcon } from "@heroicons/react/24/solid";
 import { Suspense, useEffect, useState, useRef } from "react";
 import { ShellButton } from "../components/ShellButton";
 import { useTabsStore, useSettingsStore } from "../store";
@@ -30,7 +34,8 @@ import type { linkProps } from "../views/Home";
 import { useModal } from "../components/Modal/ModalContext";
 import FavoriteModal from "../components/Modal/Favorite";
 import { Modal } from "../components/Modal/Modal";
-import { changeProxy, getProxy } from "../types";
+import { changeProxy, clearLogin, getLogin, getProxy } from "../types";
+import { ContextMenu, type MenuItem } from "../components/ContextMenu";
 
 declare global {
 	interface Window {
@@ -56,16 +61,7 @@ export const UserCard = ({ id, display, handle, avatar }: UserProps) => {
 
 	const accountRef = useRef<HTMLDivElement>(null);
 	const menuRef = useRef<HTMLDivElement>(null);
-
-	useEffect(() => {
-		const handleElseClick = (e: MouseEvent) => {
-			if (e.target !== menuRef.current && e.target !== accountRef.current) {
-				setContextOpen(false);
-			}
-		};
-
-		window.addEventListener("mousedown", handleElseClick);
-	}, []);
+	const newTab = useTabsStore(state => state.newTab);
 
 	return (
 		<>
@@ -114,6 +110,16 @@ export const UserCard = ({ id, display, handle, avatar }: UserProps) => {
                             ${settings.brightness === "light" ? "hover:bg-[#00000018]" : "hover:bg-[#ffffff10]"}
                         `
 							}
+							onClick={() => {
+								newTab({
+									id: createId(),
+									url: "https://accounts.terbiumon.top/manage",
+									displayUrl: "https://accounts.terbiumon.top/manage",
+									title: "Manage Account",
+									icon: null,
+									current: true,
+								});
+							}}
 						>
 							<span className="text-md font-semibold leading-none w-max">Manage Account</span>
 							<UserIcon className="size-5.5 group-active:scale-125 group-hover:scale-110 pointer-events-none duration-150" />
@@ -126,6 +132,16 @@ export const UserCard = ({ id, display, handle, avatar }: UserProps) => {
                             ${settings.brightness === "light" ? "hover:bg-[#00000018]" : "hover:bg-[#ffffff10]"}
                         `
 							}
+							onClick={() => {
+								newTab({
+									id: createId(),
+									url: "https://corporate.terbiumon.top/privacy",
+									displayUrl: "https://corporate.terbiumon.top/privacy",
+									title: "Privacy Policy",
+									icon: null,
+									current: true,
+								});
+							}}
 						>
 							<span className="text-md font-semibold leading-none w-max">Privacy Policy</span>
 							<InformationCircleIcon className="size-5.5 group-active:scale-125 group-hover:scale-110 pointer-events-none duration-150" />
@@ -138,6 +154,16 @@ export const UserCard = ({ id, display, handle, avatar }: UserProps) => {
                             ${settings.brightness === "light" ? "hover:bg-[#00000018]" : "hover:bg-[#ffffff10]"}
                         `
 							}
+							onClick={() => {
+								newTab({
+									id: createId(),
+									url: "https://corporate.terbiumon.top/cloud/help",
+									displayUrl: "https://corporate.terbiumon.top/cloud/help",
+									title: "Account Help",
+									icon: null,
+									current: true,
+								});
+							}}
 						>
 							<span className="text-md font-semibold leading-none w-max">Help</span>
 							<LifebuoyIcon className="size-5.5 group-active:scale-125 group-hover:scale-110 pointer-events-none duration-150" />
@@ -150,6 +176,10 @@ export const UserCard = ({ id, display, handle, avatar }: UserProps) => {
                             ${settings.brightness === "light" ? "hover:bg-[#00000018] hover:text-[#ff5656] hover:text-shadow-[0_0_6px_#00000040]" : "hover:bg-[#ffffff10] hover:text-[#d03b3b]"}
                         `
 							}
+							onClick={async () => {
+								await clearLogin();
+								window.dispatchEvent(new Event("account-upd"));
+							}}
 						>
 							<span className="text-md font-semibold leading-none w-max">Logout</span>
 							<ArrowLeftStartOnRectangleIcon className="size-5.5 stroke-0.5 stroke-current group-active:scale-125 group-hover:scale-110 pointer-events-none duration-150" />
@@ -235,15 +265,33 @@ const Shell = () => {
 	const uvRef = useRef<HTMLDivElement>(null);
 	const sjRef = useRef<HTMLDivElement>(null);
 
-	const [fullscreen] = useState<boolean>(false);
+	const [isFullscreen, setIsFullscreen] = useState<boolean>(Boolean(document.fullscreenElement));
 
 	const [uvVersion] = useState("v3.2.10");
 	const [sjVersion] = useState(window.parent.$scramjetVersion.version);
 
 	const { openModal } = useModal();
 	const [isFavorited, setIsFavorited] = useState<boolean>(false);
+	const [contextMenu, setContextMenu] = useState<null | { x: number; y: number; visible: boolean; items: MenuItem[] }>(null);
+	const [accountinfo, setAccountinfo] = useState<{ id: string; display: string; handle: string; avatar: string | React.ReactNode } | null>(null);
 
 	useEffect(() => {
+		const fetchAccountInfo = async () => {
+			const accountInfo = await getLogin();
+			setAccountinfo(accountInfo);
+		};
+		window.addEventListener("account-upd", fetchAccountInfo);
+		fetchAccountInfo();
+		return () => {
+			window.removeEventListener("account-upd", fetchAccountInfo);
+		};
+	}, []);
+
+	useEffect(() => {
+		const handleFullscreenChange = () => {
+			setIsFullscreen(Boolean(document.fullscreenElement));
+		};
+		window.addEventListener("fullscreenchange", handleFullscreenChange);
 		const checkFavorited = () => {
 			const currLinks = JSON.parse(window.localStorage.getItem("quicklinks") || "[]");
 			const hrefs = currLinks.map((link: linkProps) => link.href);
@@ -263,6 +311,7 @@ const Shell = () => {
 		return () => {
 			window.removeEventListener("links-upd", handleLinksUpdate);
 			window.removeEventListener("storage", checkFavorited);
+			window.removeEventListener("fullscreenchange", handleFullscreenChange);
 		};
 	}, [currentTab?.url]);
 
@@ -511,22 +560,7 @@ const Shell = () => {
 					<ChevronUpDownIcon className="size-5 text-(--text-tertiary) group-hover:text-(--text-secondary) stroke-current stroke-1 cursor-pointer duration-150" />
 				</div>
 				<ShellButton
-					title={["Enter Fullscreen", "Exit Fullscreen"]}
-					type="toggle"
-					icon={
-						fullscreen
-							? [<ArrowsPointingInIcon className="size-6 text-current stroke-current stroke-0.5" />, <ArrowsPointingOutIcon className="size-6 text-current stroke-current stroke-0.5" />]
-							: [<ArrowsPointingOutIcon className="size-6 text-current stroke-current stroke-0.5" />, <ArrowsPointingInIcon className="size-6 text-current stroke-current stroke-0.5" />]
-					}
-					registerListeners={toggleState => {
-						const handleFullscreenChange = () => {
-							toggleState(document.fullscreenElement ? 1 : 0);
-						};
-						window.addEventListener("fullscreenchange", handleFullscreenChange);
-						return () => {
-							window.removeEventListener("fullscreenchange", handleFullscreenChange);
-						};
-					}}
+					title={isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen"}
 					onClick={() => {
 						if (document.fullscreenElement) {
 							document.exitFullscreen();
@@ -538,25 +572,11 @@ const Shell = () => {
 							}
 						}
 					}}
-				></ShellButton>
-				<ShellButton
-					title="File Manager"
-					type="icon"
-					icon={<FolderIcon className="size-6" />}
-					onClick={() =>
-						newTab({
-							id: createId(),
-							title: "File Manager",
-							url: "about:files",
-							icon: <FolderIcon className="size-5" />,
-							displayUrl: "about:files",
-						})
-					}
-				></ShellButton>
+				>
+					{isFullscreen ? <ArrowsPointingInIcon className="size-6 text-current stroke-current stroke-0.5" /> : <ArrowsPointingOutIcon className="size-6 text-current stroke-current stroke-0.5" />}
+				</ShellButton>
 				<ShellButton
 					title="Settings"
-					type="icon"
-					icon={<Cog6ToothIcon className="size-6" />}
 					onClick={() =>
 						newTab({
 							id: createId(),
@@ -566,15 +586,114 @@ const Shell = () => {
 							displayUrl: "about:settings",
 						})
 					}
-				></ShellButton>
-				{/* <UserCard avatar={
-                    <UserCircleIcon className={"size-8" + " " + `
-                        ${
-                            settings.brightness === "light" ? "text-(--text-secondary)" : "text-(--text-primary)"
-                        }
-                    `} />
-                } id="anon" display="Guest" handle="anon" /> */}
+				>
+					<Cog6ToothIcon className="size-6" />
+				</ShellButton>
+				<ShellButton
+					title="Page selector"
+					onClick={(e: React.MouseEvent) => {
+						const items: MenuItem[] = [
+							{
+								title: "File Manager",
+								onClick: () => {
+									newTab({
+										id: createId(),
+										title: "File Manager",
+										url: "about:files",
+										icon: <FolderIcon className="size-5" />,
+										displayUrl: "about:files",
+									});
+								},
+								icon: <FolderIcon className="size-5" />,
+							},
+							{
+								title: "Games",
+								onClick: () => {
+									newTab({
+										id: createId(),
+										title: "Games",
+										url: "about:games",
+										icon: <PlayIcon className="size-5" />,
+										displayUrl: "about:games",
+									});
+								},
+								icon: <PlayIcon className="size-5" />,
+							},
+							{
+								title: "Music",
+								onClick: () => {
+									newTab({
+										id: createId(),
+										title: "Music Library",
+										url: "about:music",
+										current: true,
+										displayUrl: "about:music",
+										icon: <MusicalNoteIcon className="size-5" />,
+									});
+								},
+								icon: <MusicalNoteIcon className="size-5" />,
+							},
+						];
+
+						setContextMenu({
+							x: e.clientX,
+							y: e.clientY,
+							visible: true,
+							items: items,
+						});
+					}}
+				>
+					<Bars3Icon className="size-6 stroke-1 stroke-current" />
+				</ShellButton>
+				{accountinfo ? (
+					<UserCard
+						avatar={
+							accountinfo.avatar ? (
+								typeof accountinfo.avatar === "string" ? (
+									<img src={accountinfo.avatar} alt={`${accountinfo.display}'s avatar`} className="size-7 rounded-full pointer-events-none select-none" />
+								) : (
+									accountinfo.avatar
+								)
+							) : (
+								<UserCircleIcon
+									className={
+										"size-7" +
+										" " +
+										`
+								${settings.brightness === "light" ? "text-(--text-secondary)" : "text-(--text-primary)"}
+							`
+									}
+								/>
+							)
+						}
+						id={accountinfo.id}
+						display={accountinfo.display}
+						handle={accountinfo.handle}
+					/>
+				) : (
+					<UserCircleIcon
+						className={
+							"size-8" +
+							" " +
+							"cursor-pointer" +
+							`
+                        ${settings.brightness === "light" ? "text-(--text-secondary)" : "text-(--text-primary)"}
+                    `
+						}
+						onClick={() => {
+							newTab({
+								id: createId(),
+								url: "about:account",
+								displayUrl: "about:account",
+								title: "Terbium Cloud Sign-In",
+								icon: null,
+								current: true,
+							});
+						}}
+					/>
+				)}
 			</div>
+			{contextMenu?.visible && <ContextMenu items={contextMenu.items} position={{ x: contextMenu.x, y: contextMenu.y }} onClose={() => setContextMenu(null)} />}
 		</div>
 	);
 };

@@ -133,14 +133,18 @@ export const useTabsStore = create<{
 		set(state => {
 			const tabs = [...state.tabs];
 			const from = tabs.findIndex(t => t.id === draggedId);
-			if (from === -1) return { tabs };
-			const item = tabs.splice(from, 1)[0];
+			if (from === -1) return state;
+
 			let to = tabs.findIndex(t => t.id === targetId);
-			if (to === -1) {
-				tabs.push(item);
-				return { tabs };
-			}
+			if (to === -1) return state;
+
+			if (from === to) return state;
+
+			const item = tabs.splice(from, 1)[0];
+
+			to = tabs.findIndex(t => t.id === targetId);
 			if (!placeBefore) to = to + 1;
+
 			tabs.splice(to, 0, item);
 			return { tabs };
 		}),
@@ -219,6 +223,7 @@ export const useMusicStore = create<{
 	playPrev: () => boolean;
 
 	changeView: (view: "tracks" | "bigplayer") => void;
+	reorderQueue: (draggedId: string, targetId: string, placeBefore: boolean) => void;
 }>((set, get) => ({
 	src: "",
 	currentTrack: null,
@@ -253,12 +258,29 @@ export const useMusicStore = create<{
 		set({ currentTrack: track, src: track.src, playedHistory: nextHistory });
 	},
 	playNext: () => {
-		const { queue, currentTrack } = get();
-		if (!currentTrack || queue.length === 0) return;
+		const { queue, currentTrack, playedHistory } = get();
+		if (queue.length === 0) return;
 
-		const index = queue.findIndex(t => t.id === currentTrack.id);
-		const next = queue[index + 1];
-		if (next) set({ currentTrack: next });
+		if (currentTrack) {
+			const index = queue.findIndex(t => t.id === currentTrack.id);
+			if (index !== -1 && index < queue.length - 1) {
+				const next = queue[index + 1];
+				const updatedQueue = queue.filter((_, i) => i !== index);
+				const nextHistory = [...playedHistory, currentTrack];
+				set({ currentTrack: next, queue: updatedQueue, playedHistory: nextHistory });
+			} else if (index !== -1) {
+				const updatedQueue = queue.filter((_, i) => i !== index);
+				const nextHistory = [...playedHistory, currentTrack];
+				set({ currentTrack: null, queue: updatedQueue, playedHistory: nextHistory });
+			} else if (queue.length > 0) {
+				const next = queue[0];
+				const nextHistory = [...playedHistory, currentTrack];
+				set({ currentTrack: next, queue: queue.slice(1), playedHistory: nextHistory });
+			}
+		} else if (queue.length > 0) {
+			const next = queue[0];
+			set({ currentTrack: next, queue: queue.slice(1) });
+		}
 	},
 	playPrev: () => {
 		const { playedHistory } = get();
@@ -270,6 +292,22 @@ export const useMusicStore = create<{
 		return false;
 	},
 	changeView: (view: "tracks" | "bigplayer") => set({ playerView: view }),
+	reorderQueue: (draggedId: string, targetId: string, placeBefore: boolean) => {
+		const { queue } = get();
+		const draggedIndex = queue.findIndex(t => t.id === draggedId);
+		const targetIndex = queue.findIndex(t => t.id === targetId);
+
+		if (draggedIndex === -1 || targetIndex === -1) return;
+
+		const newQueue = [...queue];
+		const [draggedTrack] = newQueue.splice(draggedIndex, 1);
+
+		const adjustedTargetIndex = draggedIndex < targetIndex ? targetIndex - 1 : targetIndex;
+		const insertIndex = placeBefore ? adjustedTargetIndex : adjustedTargetIndex + 1;
+
+		newQueue.splice(insertIndex, 0, draggedTrack);
+		set({ queue: newQueue });
+	},
 }));
 
 interface FileEntry {

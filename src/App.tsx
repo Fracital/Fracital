@@ -1,6 +1,6 @@
 import { createId } from "@paralleldrive/cuid2";
 import { useEffect, useRef, useState } from "react";
-import { RectangleStackIcon, PlusIcon, Cog6ToothIcon, ChevronLeftIcon, ChevronRightIcon } from "@heroicons/react/24/solid";
+import { RectangleStackIcon, PlusIcon, Cog6ToothIcon, ChevronLeftIcon, ChevronRightIcon, RadioIcon } from "@heroicons/react/24/solid";
 import type { detailProps } from "./libs/eventBus";
 import XOR from "./libs/XOR";
 import { useLocation } from "react-router-dom";
@@ -12,20 +12,17 @@ import { QuickPlayer } from "./gui/QuickPlayer";
 import { Tab } from "./components/Tab";
 
 import Home from "./views/Home";
-import Settings from "./views/Settings";
 import ExternalSite from "./views/ExternalSite";
-import Files from "./views/Files/Files";
 
 import { BareMuxConnection } from "@mercuryworkshop/bare-mux";
 import { usePanelsStore, useSettingsStore, useTabsStore } from "./store";
-import { quickLinks } from "./libs/init";
+import { init, quickLinks } from "./libs/init";
 import { initTheme } from "./libs/theme";
-import { MusicLibrary } from "./views/Music/MusicLibrary";
 import { View } from "./gui/View";
 import TabGroup from "./components/TabGroup";
-import { Login } from "./views/Login";
 import { ModalProvider } from "./components/Modal/ModalContext";
-import { getProxy, isWebOS, SettingsPath } from "./types";
+import { getProxy, isWebOS, SettingsPath, wispURL } from "./types";
+import { aboutPages, getPageFromUrl, getQueryFromUrl } from "./libs/aboutPages";
 
 const regSw = async () => {
 	await navigator.serviceWorker.getRegistrations().then(registrations => {
@@ -36,7 +33,7 @@ const regSw = async () => {
 		});
 	});
 	const connection = new BareMuxConnection("/baremux/worker.js");
-	await connection.setTransport("/epoxy/index.mjs", [{ wisp: `${window.location.origin.replace(/^https?:\/\//, "ws://")}/wisp/` }]);
+	await connection.setTransport("/epoxy/index.mjs", [{ wisp: wispURL }]);
 	const { ScramjetController } = window.$scramjetLoadController();
 	const scramjet = new ScramjetController({
 		prefix: "/service/",
@@ -78,6 +75,7 @@ const regSw = async () => {
 if (!isWebOS) regSw();
 
 const App = () => {
+	init();
 	Api();
 	const settings = useSettingsStore(state => state.settings);
 	const setSettings = useSettingsStore(state => state.setSettings);
@@ -147,9 +145,6 @@ const App = () => {
 				displayUrl: detail.url,
 			});
 
-			// Push to history for native pages (about: URLs)
-			// Proxied pages handle their own history in ExternalSite.tsx
-			// Use pushHistory which properly handles truncating forward history
 			if (detail.url.includes("about:") && !(detail as any).isHistoryNavigation) {
 				const iconStr = typeof detail.icon === "string" ? detail.icon : undefined;
 				useTabsStore.getState().pushHistory(detail.id, {
@@ -170,7 +165,6 @@ const App = () => {
 			const tabId = detail?.tab;
 			if (tabId) {
 				const tab = tabs.find(t => t.id === tabId);
-				// Only refresh React pages (about: URLs), iframes handle their own refresh
 				if (tab && tab.url.includes("about:")) {
 					useTabsStore.getState().refreshTab(tabId);
 				}
@@ -309,21 +303,22 @@ const App = () => {
 				<Shell />
 				<div className="flex flex-col flex-1 min-h-0">
 					<div id="main" className="relative flex flex-1 min-h-0 gap-2.5">
-						<div
-							className={
-								"relative flex-1 min-h-0 bg-(--secondary) inset-shadow-(--inset-shadow-primary) rounded-xl overflow-hidden" +
-								" " +
-								`
-                            ${settings}
-                        `
-							}
-						>
+						{/* ad and promotion bar */}
+						{/* <div className={"relative flex flex-col min-h-0 bg-(--secondary) inset-shadow-(--inset-shadow-primary) p-3 gap-2.5 rounded-xl overflow-hidden"}>
+							<div className="flex items-center justify-center w-full px-2 gap-2">
+								<span className="text-lg font-medium">Ad</span>
+								<RadioIcon className="size-5" />
+							</div>
+							<div className="w-60 h-80 bg-[#ffffff18] rounded-xl"></div>
+						</div> */}
+						<div className={"relative flex-1 min-h-0 bg-(--secondary) inset-shadow-(--inset-shadow-primary) rounded-xl overflow-hidden"}>
 							{tabs.length > 0 ? (
 								tabs.map(item => {
 									if (item.url.includes("about:")) {
-										const page = item.url.replace("about:", "").split("?")[0];
+										const pageName = getPageFromUrl(item.url);
 										const viewKey = `${item.id}-${item.refreshKey ?? 0}`;
-										if (page === "newtab") {
+
+										if (!pageName || !aboutPages[pageName]) {
 											return (
 												<div key={item.id}>
 													{currentTab && (
@@ -342,50 +337,52 @@ const App = () => {
 													)}
 												</div>
 											);
-										} else if (page === "settings") {
-											return (
-												<div key={item.id}>
-													{currentTab && (
-														<View key={viewKey} id={item.id}>
-															<Settings key={viewKey} />
-														</View>
-													)}
-												</div>
-											);
-										} else if (page === "music") {
-											const query = item.url.includes("?") ? item.url.split("?")[1] : undefined;
+										}
 
+										const pageConfig = aboutPages[pageName];
+										const PageComponent = pageConfig.component;
+
+										const query = pageConfig.hasQuery ? getQueryFromUrl(item.url) : undefined;
+
+										if (pageName === "newtab") {
 											return (
 												<div key={item.id}>
 													{currentTab && (
 														<View key={viewKey} id={item.id}>
-															<MusicLibrary key={viewKey} query={query} />
-														</View>
-													)}
-												</div>
-											);
-										} else if (page === "files") {
-											const query = item.url.includes("?") ? item.url.split("?")[1] : undefined;
-											return (
-												<div key={item.id}>
-													{currentTab && (
-														<View key={viewKey} id={item.id}>
-															<Files key={viewKey} query={query} />
-														</View>
-													)}
-												</div>
-											);
-										} else if (page === "account") {
-											return (
-												<div key={item.id}>
-													{currentTab && (
-														<View key={viewKey} id={item.id}>
-															<Login key={viewKey} query={pathname} />
+															<PageComponent
+																key={viewKey}
+																className={
+																	"absolute inset-0 duration-150" +
+																	" " +
+																	`
+															${currentTab ? (currentTab.id !== item.id ? "opacity-0 translate-y-2 pointer-events-none" : "") : ""}
+														`
+																}
+																query={query}
+															/>
 														</View>
 													)}
 												</div>
 											);
 										}
+
+										return (
+											<div key={item.id}>
+												<View key={viewKey} id={item.id}>
+													<PageComponent
+														key={viewKey}
+														query={query}
+														className={
+															"absolute inset-0 duration-150" +
+															" " +
+															`
+														${currentTab ? (currentTab.id !== item.id ? "opacity-0 translate-y-2 pointer-events-none" : "") : ""}
+													`
+														}
+													/>
+												</View>
+											</div>
+										);
 									} else {
 										return (
 											<ExternalSite
@@ -397,8 +394,8 @@ const App = () => {
 													"absolute inset-0" +
 													" " +
 													`
-                                                    ${currentTab ? (currentTab.id !== item.id ? "opacity-0 pointer-events-none" : "") : ""}
-                                                `
+												${currentTab ? (currentTab.id !== item.id ? "opacity-0 pointer-events-none" : "") : ""}
+                                            `
 												}
 											/>
 										);
@@ -412,12 +409,12 @@ const App = () => {
 							className={
 								(settings["floating-tabs"] && "absolute py-2 h-full") +
 								" " +
-								"flex flex-col flex-shrink-0 duration-150" +
+								"flex flex-col shrink-0 duration-150" +
 								" " +
 								`
-                            ${settings["floating-tabs"] === true ? (panelsOpen ? "w-60 right-2" : "w-10 -right-1") : panelsOpen ? "w-78" : "w-10"}
+                            ${settings["floating-tabs"] === true ? (panelsOpen ? "w-74 right-2" : "w-10 -right-1") : panelsOpen ? "w-78" : "w-10"}
                             ${settings["floating-tabs"] ? "gap-2" : "gap-2.5"}
-                        `
+						`
 							}
 						>
 							<div
@@ -457,7 +454,7 @@ const App = () => {
 									"flex flex-col bg-(--secondary) inset-shadow-(--inset-shadow-primary) overflow-hidden duration-150 min-h-0" +
 									" " +
 									`
-                                ${currentPanel === "tabs" ? "flex-[2]" : "flex-1"}
+                                ${currentPanel === "tabs" ? "flex-2" : "flex-1"}
                                 ${panelsOpen ? "w-full" : "w-50"}
                                 ${settings["floating-tabs"] && panelsOpen ? "rounded-lg" : "rounded-xl"}
                                 ${settings["floating-tabs"] && "shadow-[0_0_16px_3px_#00000035]"}
@@ -477,7 +474,6 @@ const App = () => {
 										if (tabEl && tabEl.id) {
 											const rect = tabEl.getBoundingClientRect();
 											const y = e.clientY - rect.top;
-											const placeBefore = y < rect.height / 2;
 											return;
 										}
 										const groupHeader = el?.closest("[data-group-id]") as HTMLElement | null;
@@ -534,14 +530,21 @@ const App = () => {
 									{(() => {
 										const ungrouped = tabs.filter(t => !t.groupId);
 										if (tabs.length === 0) {
+											newTab({
+												id: createId(),
+												title: "New Tab",
+												url: "about:newtab",
+												current: true,
+												displayUrl: "about:newtab",
+											});
 											return (
 												<span
 													className={
 														"absolute left-1/2 top-1/2 -translate-1/2 w-max font-semibold text-lg duration-150" +
 														" " +
 														`
-                                                        ${tabs.length < 0 ? "opacity-0" : ""}
-                                                    `
+													${tabs.length < 0 ? "opacity-0" : ""}
+												`
 													}
 												>
 													No tabs open
