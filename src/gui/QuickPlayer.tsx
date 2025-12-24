@@ -77,6 +77,7 @@ export const QuickPlayer = ({ panelsOpen, className, onMouseDown }: QuickPlayerP
 	const midFilterRef = useRef<BiquadFilterNode | null>(null);
 	const trebleFilterRef = useRef<BiquadFilterNode | null>(null);
 	const analyserRef = useRef<AnalyserNode | null>(null);
+	const audioInitializedRef = useRef<boolean>(false);
 
 	useEffect(() => {
 		if (settings.brightness) {
@@ -87,18 +88,42 @@ export const QuickPlayer = ({ panelsOpen, className, onMouseDown }: QuickPlayerP
 	useEffect(() => {
 		if (currentTrack?.src && audioRef.current) {
 			audioRef.current.src = currentTrack.src;
-			const playPromise = audioRef.current.play();
-			if (playPromise && typeof (playPromise as Promise<void>).then === "function") {
-				(playPromise as Promise<void>)
-					.then(() => {})
-					.catch(() => {
-						setIsPlaying(false);
-					});
+			if (audioContextRef.current?.state === "suspended") {
+				audioContextRef.current.resume().then(() => {
+					const playPromise = audioRef.current?.play();
+					if (playPromise && typeof (playPromise as Promise<void>).then === "function") {
+						(playPromise as Promise<void>)
+							.then(() => {})
+							.catch(() => {
+								setIsPlaying(false);
+							});
+					} else {
+						setIsPlaying(!audioRef.current || audioRef.current.paused);
+					}
+				});
 			} else {
-				setIsPlaying(!audioRef.current.paused);
+				const playPromise = audioRef.current.play();
+				if (playPromise && typeof (playPromise as Promise<void>).then === "function") {
+					(playPromise as Promise<void>)
+						.then(() => {})
+						.catch(() => {
+							setIsPlaying(false);
+						});
+				} else {
+					setIsPlaying(!audioRef.current.paused);
+				}
 			}
 		}
 	}, [currentTrack]);
+
+	const resumeAndPlay = async () => {
+		if (!audioRef.current) return;
+		if (audioContextRef.current?.state === "suspended") {
+			await audioContextRef.current.resume();
+		}
+		await audioRef.current.play();
+		setIsPlaying(true);
+	};
 
 	useEffect(() => {
 		let detectedPlatform = "";
@@ -155,7 +180,7 @@ export const QuickPlayer = ({ panelsOpen, className, onMouseDown }: QuickPlayerP
 
 	// Initialize Web Audio API for EQ
 	useEffect(() => {
-		if (!audioRef.current || audioContextRef.current) return;
+		if (!audioRef.current || audioInitializedRef.current) return;
 
 		try {
 			const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
@@ -196,17 +221,11 @@ export const QuickPlayer = ({ panelsOpen, className, onMouseDown }: QuickPlayerP
 			midFilterRef.current = midFilter;
 			trebleFilterRef.current = trebleFilter;
 			analyserRef.current = analyser;
+			audioInitializedRef.current = true;
 		} catch (error) {
 			console.error("Failed to initialize audio context:", error);
 		}
-
-		return () => {
-			if (audioContextRef.current) {
-				audioContextRef.current.close();
-				audioContextRef.current = null;
-			}
-		};
-	}, []);
+	}, [currentTrack]);
 
 	// Update EQ filters when values change
 	useEffect(() => {
@@ -792,10 +811,9 @@ export const QuickPlayer = ({ panelsOpen, className, onMouseDown }: QuickPlayerP
 												ref={playRef}
 												title={platform.includes("Mac") ? "Play ⌃ + P" : "Play: Alt + S"}
 												className="flex items-center justify-center p-2 hover:bg-[#ffffff10] text-(--text-secondary) hover:text-(--text-primary) rounded-md cursor-pointer duration-150"
-												onClick={() => {
+												onClick={async () => {
 													if (audioRef.current?.paused) {
-														audioRef.current?.play();
-														setIsPlaying(true);
+														await resumeAndPlay();
 													} else {
 														audioRef.current?.pause();
 														setIsPlaying(false);
@@ -877,10 +895,9 @@ export const QuickPlayer = ({ panelsOpen, className, onMouseDown }: QuickPlayerP
 									className="group relative flex items-center justify-center w-4/5 cursor-pointer"
 									onMouseEnter={() => setIsHoveringCover(true)}
 									onMouseLeave={() => setIsHoveringCover(false)}
-									onClick={() => {
+									onClick={async () => {
 										if (audioRef.current?.paused) {
-											audioRef.current?.play();
-											setIsPlaying(true);
+											await resumeAndPlay();
 										} else {
 											audioRef.current?.pause();
 											setIsPlaying(false);

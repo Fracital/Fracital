@@ -4,6 +4,7 @@ declare global {
 	interface Window {
 		Filer: FilerType;
 		loadLock: boolean;
+		tb: any;
 	}
 }
 
@@ -31,20 +32,14 @@ export const MusicPath = `/home/${sessionStorage.getItem("currAcc")}/music/`;
 export const GamesPath = `/home/${sessionStorage.getItem("currAcc")}/games/`;
 export const isWebOS = true;
 export const wispURL = typeof window !== "undefined" && window.location && window.location.origin ? `${window.location.origin.replace(/^https?:\/\//, window.location.protocol === "https:" ? "wss://" : "ws://")}/wisp/` : "";
-export const saveLogin = async ({ id, display, handle, avatar }: { id: string; display: string; handle: string; avatar: string | any }) => {
-	await window.fr.fs.promises.writeFile("/account.json", JSON.stringify({ id, display, handle, avatar }), "utf8");
+export const saveLogin = async (_opts: { id: string; display: string; handle: string; avatar: string | any }) => {
+	return await window.tb.tauth.signIn();
 };
 export const getLogin = async (): Promise<{ id: string; display: string; handle: string; avatar: string | any } | null> => {
-	if (!(await fileExists("/account.json"))) {
-		return null;
-	} else {
-		return JSON.parse(await window.fr.fs.promises.readFile("/account.json", "utf8"));
-	}
+	return await window.tb.tauth.getInfo();
 };
 export const clearLogin = async (): Promise<void> => {
-	if (await fileExists("/account.json")) {
-		await window.fr.fs.promises.unlink("/account.json");
-	}
+	return await window.tb.tauth.signOut();
 };
 
 export const getProxy = async (): Promise<"sj" | "uv"> => {
