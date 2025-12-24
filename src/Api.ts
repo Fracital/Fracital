@@ -1,6 +1,6 @@
 import { fetcher } from "./libs/auth";
 import { useSettingsStore } from "./store";
-import { SettingsPath, ThemePath, wispURL, type COM } from "./types";
+import { getLogin, SettingsPath, ThemePath, wispURL, type COM } from "./types";
 import { libcurl } from "libcurl.js";
 
 declare const fr: COM;
@@ -17,12 +17,14 @@ export const Api = async () => {
 		window.loadLock = true;
 		await libcurl.load_wasm("https://cdn.jsdelivr.net/npm/libcurl.js@latest/libcurl.wasm");
 		libcurl.set_websocket(wispURL as `ws://${string}` | `wss://${string}`);
-		await window.fr.sync.get();
-		window.fr.fs.watch("/settings.json", async (e: string, _f: string) => {
-			if (e === "change" && window.fr.sync.syncing === false) {
-				window.fr.sync.set();
-			}
-		});
+		if ((await getLogin()) !== null) {
+			await window.fr.sync.get();
+			window.fr.fs.watch(SettingsPath, async (e: string, _f: string) => {
+				if (e === "change" && window.fr.sync.syncing === false) {
+					window.fr.sync.set();
+				}
+			});
+		}
 	}
 	window.fr = {
 		theme: {
