@@ -13,18 +13,11 @@ declare global {
 export const Api = async () => {
 	const getSettings = useSettingsStore(state => state.getSettings);
 	const setSettings = useSettingsStore(state => state.setSettings);
+	let init = false;
 	if (!window.loadLock) {
 		window.loadLock = true;
 		await libcurl.load_wasm("https://cdn.jsdelivr.net/npm/libcurl.js@latest/libcurl.wasm");
 		libcurl.set_websocket(wispURL as `ws://${string}` | `wss://${string}`);
-		if ((await getLogin()) !== null) {
-			await window.fr.sync.get();
-			window.fr.fs.watch(SettingsPath, async (e: string, _f: string) => {
-				if (e === "change" && window.fr.sync.syncing === false) {
-					window.fr.sync.set();
-				}
-			});
-		}
 	}
 	window.fr = {
 		theme: {
@@ -43,22 +36,30 @@ export const Api = async () => {
 		},
 		dialog: {
 			prompt: ({ title, message, defaultValue, onOk }: { title: string; message: string; defaultValue?: string; onOk: (value: string) => void }) => {
-				console.log(title, message);
-				const value = window.prompt(message, defaultValue || "");
-				if (value !== null) {
-					onOk(value);
-				}
+				window.parent.tb.dialog.Message({
+					title,
+					message,
+					defaultValue,
+					onOk: (value: string) => {
+						onOk(value);
+					},
+				});
 				return null;
 			},
 			alert: ({ title, message, onOk }: { title: string; message: string; onOk?: () => void }) => {
-				console.log(title, message);
-				window.alert(message);
-				onOk?.();
+				window.parent.tb.dialog.Alert({
+					title,
+					message,
+					onOk: () => {
+						if (onOk) onOk();
+					},
+				});
+				return null;
 			},
 		},
-		fs: Filer.fs,
-		buffer: Filer.Buffer,
-		sh: new Filer.fs.Shell(),
+		fs: window.parent.tb.fs,
+		buffer: window.parent.tb.buffer,
+		sh: window.parent.tb.sh,
 		net: libcurl,
 		sync: {
 			get: async () => {
@@ -94,4 +95,15 @@ export const Api = async () => {
 			syncing: false,
 		},
 	};
+	if (!init) {
+		if ((await getLogin()) !== null) {
+			await window.fr.sync.get();
+			window.fr.fs.watch(SettingsPath, async (e: string, _f: string) => {
+				if (e === "change" && window.fr.sync.syncing === false) {
+					window.fr.sync.set();
+				}
+			});
+		}
+		init = true;
+	}
 };
