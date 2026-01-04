@@ -27,6 +27,6 @@ If your using Fracital in Production, use `npm run start`
 
 Made with ❤️ by the Fracital Team
 
-&copy; Copyright 2025 Fracital Development
+&copy; Copyright 2026 Fracital Development
 
 Licensed Under the [AGPL License](./LICENSE)

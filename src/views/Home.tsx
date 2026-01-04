@@ -65,7 +65,7 @@ const Home = ({ className }: HomeProps) => {
                 `
 					}
 				>
-					© Fracital 2025
+					© Fracital 2026
 				</Link>
 				<div className="flex gap-1.5 p-1.5">
 					<Link target="_blank" to="https://discord.gg/unblock" className="flex items-center gap-1.5 text-(--text-quaternary) hover:text-(--text-tertiary) font-bold text-lg">
