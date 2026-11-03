@@ -99,10 +99,13 @@ export interface SimilarArtist {
 }
 
 export interface TrackPlays {
+	/** Total YouTube streams across the song's official uploads. */
 	plays: number;
-	listeners?: number;
-	/** "lastfm" = scrobbles, "youtube" = view count of the best-matching upload. */
-	source: "lastfm" | "youtube";
+	source: "youtube";
+	/** How many uploads were summed. */
+	uploads: number;
+	/** False when only fan uploads exist (then it's the single most-played one). */
+	official: boolean;
 }
 
 export interface SearchResults {
@@ -192,15 +195,15 @@ export function peekTrackPlays(title: string, artist: string): TrackPlays | null
 	return playsResolved.get(playsKey(title, artist));
 }
 
-/** A song's play count (Last.fm scrobbles, or YouTube views as a fallback); null when unknown. */
+/** A song's total YouTube streams across its official uploads; null when unknown. */
 export function getTrackPlays(title: string, artist: string): Promise<TrackPlays | null> {
 	const key = playsKey(title, artist);
 	let pending = playsCache.get(key);
 	if (!pending) {
-		// v=2 skips stale browser-cached misses from before Last.fm support.
-		pending = apiFetch<{ plays: number | null; listeners: number | null; source: TrackPlays["source"] | null }>(`/plays?title=${encodeURIComponent(title)}&artist=${encodeURIComponent(artist)}&v=2`)
+		// v=3 skips browser-cached responses from when plays were Last.fm scrobbles.
+		pending = apiFetch<{ plays: number | null; uploads: number | null; official: boolean | null; source: TrackPlays["source"] | null }>(`/plays?title=${encodeURIComponent(title)}&artist=${encodeURIComponent(artist)}&v=3`)
 			.then(r => {
-				const value = r.plays && r.source ? { plays: r.plays, listeners: r.listeners ?? undefined, source: r.source } : null;
+				const value = r.plays && r.source ? { plays: r.plays, source: r.source, uploads: r.uploads ?? 1, official: r.official ?? true } : null;
 				playsResolved.set(key, value);
 				return value;
 			})

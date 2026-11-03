@@ -14,10 +14,12 @@ interface PlayCountProps {
 }
 
 const tooltip = (p: TrackPlays) =>
-	p.source === "lastfm" ? `${p.plays.toLocaleString()} Last.fm scrobbles${p.listeners ? ` from ${p.listeners.toLocaleString()} listeners` : ""}` : `${p.plays.toLocaleString()} YouTube views`;
+	p.official
+		? `${p.plays.toLocaleString()} streams on YouTube across ${p.uploads} official upload${p.uploads === 1 ? "" : "s"}`
+		: `${p.plays.toLocaleString()} streams on YouTube (most-played upload)`;
 
 /**
- * A song's total plays (Last.fm scrobbles, falling back to YouTube views), e.g. "20M plays".
+ * A song's total streams on YouTube (summed across its official uploads), e.g. "510M plays".
  * Loads only once scrolled into view, so long lists don't fire every lookup at once,
  * and renders nothing when the count is unknown.
  */

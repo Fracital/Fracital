@@ -787,8 +787,8 @@ export const DigitalLibrary = ({ query }: DigitalLibraryProps) => {
 								{artist.bio && <p className={`text-sm font-semibold text-white/75 leading-snug ${bioExpanded ? "max-h-28 overflow-y-auto pr-1" : "line-clamp-2"}`}>{artist.bio}</p>}
 								<div className="flex items-center justify-between gap-2">
 									{artist.listeners ? (
-										<span className="text-xs font-medium text-white/60" title={artist.scrobbles ? `${artist.scrobbles.toLocaleString()} Last.fm scrobbles` : undefined}>
-											{formatCount(artist.listeners)} listeners{artist.scrobbles ? ` · ${formatCount(artist.scrobbles)} plays` : ""}
+										<span className="text-xs font-medium text-white/60" title="Last.fm listeners">
+											{formatCount(artist.listeners)} listeners
 											{!!myArtistPlays && ` · you: ${formatCount(myArtistPlays)}`}
 										</span>
 									) : (

@@ -152,7 +152,7 @@ export function fsrv() {
 		return c.json(await artistExtras(name));
 	});
 
-	// Play count for one song (YouTube views of its best-matching upload).
+	// A song's total YouTube streams across its official uploads.
 	app.get("/api/music/plays", async c => {
 		const title = c.req.query("title")?.trim();
 		const artist = c.req.query("artist")?.trim();
@@ -160,7 +160,7 @@ export function fsrv() {
 		const stats = await trackPlays(title, artist);
 		// Only cache hits, so a miss (e.g. before a Last.fm key is added) can be retried.
 		c.header("Cache-Control", stats ? "public, max-age=3600" : "no-store");
-		return c.json({ plays: stats?.plays ?? null, listeners: stats?.listeners ?? null, source: stats?.source ?? null });
+		return c.json({ plays: stats?.plays ?? null, uploads: stats?.uploads ?? null, official: stats?.official ?? null, source: stats?.source ?? null });
 	});
 
 	app.get("/api/music/health", c => c.json({ status: "ok", lastfm: !!lastfmKey(), caches: { videos: trackToVideoCache.size, streams: streamUrlCache.size } }));

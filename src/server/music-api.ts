@@ -390,7 +390,7 @@ function registerMusicApi(server: { middlewares: ViteDevServer["middlewares"] },
 		sendJson(res, 200, await artistExtras(name));
 	});
 
-	// Play count for one song (YouTube views of its best-matching upload).
+	// A song's total YouTube streams across its official uploads.
 	server.middlewares.use(`${apiBase}/plays`, async (req, res) => {
 		if (req.method !== "GET") return sendJson(res, 405, { error: "Method not allowed" });
 		const reqUrl = parseUrl(req.url);
@@ -400,7 +400,7 @@ function registerMusicApi(server: { middlewares: ViteDevServer["middlewares"] },
 		const stats = await trackPlays(title, artist);
 		// Only cache hits, so a miss (e.g. before a Last.fm key is added) can be retried.
 		res.setHeader("Cache-Control", stats ? "public, max-age=3600" : "no-store");
-		sendJson(res, 200, { plays: stats?.plays ?? null, listeners: stats?.listeners ?? null, source: stats?.source ?? null });
+		sendJson(res, 200, { plays: stats?.plays ?? null, uploads: stats?.uploads ?? null, official: stats?.official ?? null, source: stats?.source ?? null });
 	});
 
 	server.middlewares.use(`${apiBase}/health`, (_req, res) => {
