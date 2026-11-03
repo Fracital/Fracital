@@ -2,9 +2,11 @@ import { createId } from "@paralleldrive/cuid2";
 import { useEffect, useRef, useState } from "react";
 import { QueueListIcon, MusicalNoteIcon, PlusIcon, MinusIcon, ArrowUturnLeftIcon, BackwardIcon, ForwardIcon, RectangleGroupIcon, ArrowPathRoundedSquareIcon, SpeakerWaveIcon, SpeakerXMarkIcon, BarsArrowUpIcon, BackspaceIcon, AdjustmentsHorizontalIcon } from "@heroicons/react/24/solid";
 import { PlayIcon, PauseIcon, EllipsisHorizontalIcon } from "@heroicons/react/24/solid";
-import { useMusicStore, useSettingsStore, useTabsStore } from "../store";
+import { ArrowsPointingOutIcon, ChatBubbleBottomCenterTextIcon } from "@heroicons/react/24/solid";
+import { useMusicStore, usePlaybackStore, useSettingsStore, useTabsStore } from "../store";
 import { ContextMenu, type MenuItem } from "../components/ContextMenu";
 import { AudvisVisualizer } from "../components/AudvisVisualizer";
+import { openMusicPlayer, registerAudio } from "../libs/playback";
 
 interface QuickPlayerProps {
 	panelsOpen: boolean;
@@ -33,22 +35,30 @@ export const QuickPlayer = ({ panelsOpen, className, onMouseDown }: QuickPlayerP
 	const [dragOverTrack, setDragOverTrack] = useState<string | null>(null);
 	const [dropPosition, setDropPosition] = useState<"before" | "after" | null>(null);
 
-	const [isPlaying, setIsPlaying] = useState<boolean>(false);
-	const [currentTime, setCurrentTime] = useState(0);
-	const [duration, setDuration] = useState(0);
+	const isPlaying = usePlaybackStore(state => state.isPlaying);
+	const setIsPlaying = usePlaybackStore(state => state.setIsPlaying);
+	const currentTime = usePlaybackStore(state => state.currentTime);
+	const setCurrentTime = usePlaybackStore(state => state.setCurrentTime);
+	const duration = usePlaybackStore(state => state.duration);
+	const setDuration = usePlaybackStore(state => state.setDuration);
 	const [isDragging, setIsDragging] = useState(false);
-	const [loop, setLoop] = useState(false);
+	const loop = usePlaybackStore(state => state.loop);
+	const setLoop = usePlaybackStore(state => state.setLoop);
 
 	const musicRef = useRef<HTMLDivElement>(null);
 	const audioRef = useRef<HTMLAudioElement>(null);
 	const seekbarRef = useRef<HTMLSpanElement>(null);
 	const playRef = useRef<HTMLButtonElement>(null);
 
-	const [volume, setVolume] = useState<number>(1);
+	const volume = usePlaybackStore(state => state.volume);
+	const setVolume = usePlaybackStore(state => state.setVolume);
 	const [isVolumeDragging, setIsVolumeDragging] = useState<boolean>(false);
 	const [showVolumeSlider, setShowVolumeSlider] = useState<boolean>(false);
 	const [volumeSlide, setVolumeSlide] = useState<boolean>(false);
-	const [muted, setMuted] = useState<boolean>(false);
+	const muted = usePlaybackStore(state => state.muted);
+	const setMuted = usePlaybackStore(state => state.setMuted);
+	const analyser = usePlaybackStore(state => state.analyser);
+	const setAnalyser = usePlaybackStore(state => state.setAnalyser);
 	const volumeStartRef = useRef<{ x: number; vol: number } | null>(null);
 	const [volumeSliderPos, setVolumeSliderPos] = useState<{ x: number; y: number } | null>(null);
 	const prevVolRef = useRef<number>(1);
@@ -71,12 +81,12 @@ export const QuickPlayer = ({ panelsOpen, className, onMouseDown }: QuickPlayerP
 	const [eqBass, setEqBass] = useState(0);
 	const [eqMid, setEqMid] = useState(0);
 	const [eqTreble, setEqTreble] = useState(0);
+	const controlsRef = useRef<HTMLDivElement>(null);
 	const audioContextRef = useRef<AudioContext | null>(null);
 	const sourceNodeRef = useRef<MediaElementAudioSourceNode | null>(null);
 	const bassFilterRef = useRef<BiquadFilterNode | null>(null);
 	const midFilterRef = useRef<BiquadFilterNode | null>(null);
 	const trebleFilterRef = useRef<BiquadFilterNode | null>(null);
-	const analyserRef = useRef<AnalyserNode | null>(null);
 	const audioInitializedRef = useRef<boolean>(false);
 
 	useEffect(() => {
@@ -84,6 +94,11 @@ export const QuickPlayer = ({ panelsOpen, className, onMouseDown }: QuickPlayerP
 			setBrightness(settings.brightness);
 		}
 	}, [settings.brightness]);
+
+	useEffect(() => {
+		registerAudio(audioRef.current);
+		return () => registerAudio(null, null);
+	}, []);
 
 	useEffect(() => {
 		if (currentTrack?.src && audioRef.current) {
@@ -178,7 +193,6 @@ export const QuickPlayer = ({ panelsOpen, className, onMouseDown }: QuickPlayerP
 		}
 	}, [muted]);
 
-	// Initialize Web Audio API for EQ
 	useEffect(() => {
 		if (!audioRef.current || audioInitializedRef.current) return;
 
@@ -186,7 +200,6 @@ export const QuickPlayer = ({ panelsOpen, className, onMouseDown }: QuickPlayerP
 			const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
 			const source = audioContext.createMediaElementSource(audioRef.current);
 
-			// Create EQ filters
 			const bassFilter = audioContext.createBiquadFilter();
 			bassFilter.type = "lowshelf";
 			bassFilter.frequency.value = 200;
@@ -220,14 +233,14 @@ export const QuickPlayer = ({ panelsOpen, className, onMouseDown }: QuickPlayerP
 			bassFilterRef.current = bassFilter;
 			midFilterRef.current = midFilter;
 			trebleFilterRef.current = trebleFilter;
-			analyserRef.current = analyser;
+			setAnalyser(analyser);
+			registerAudio(audioRef.current, audioContext);
 			audioInitializedRef.current = true;
 		} catch (error) {
 			console.error("Failed to initialize audio context:", error);
 		}
 	}, [currentTrack]);
 
-	// Update EQ filters when values change
 	useEffect(() => {
 		if (bassFilterRef.current) {
 			bassFilterRef.current.gain.value = eqBass;
@@ -434,7 +447,7 @@ export const QuickPlayer = ({ panelsOpen, className, onMouseDown }: QuickPlayerP
 				<div
 					ref={musicRef}
 					className={`flex flex-col w-full h-full min-h-0 bg-(--secondary) inset-shadow-(--inset-shadow-primary) overflow-hidden duration-150 ${panelsOpen ? "w-full" : "w-88"}
-                    ${settings["floating-tabs"] && panelsOpen ? "rounded-lg" : "rounded-xl"}
+                    ${settings["floating-tabs"] && panelsOpen ? "rounded-xl" : "rounded-2xl"}
                     ${settings["floating-tabs"] && "shadow-[0_0_16px_3px_#00000035]"}`}
 					onMouseDown={onMouseDown}
 				>
@@ -442,13 +455,10 @@ export const QuickPlayer = ({ panelsOpen, className, onMouseDown }: QuickPlayerP
 						<>
 							<div className={"relative flex w-full flex-1 min-h-0 overflow-auto gap-2 p-2 px-3 flex-col duration-200"}>
 								<div className="flex flex-col items-start">
-									{currentTrack ? (
-										<h1 className={`ml-1.5 mt-1.5 text-2xl font-bold`}>Currently playing</h1>
-									) : (
+									{currentTrack ? <h1 className={`ml-1.5 mt-1.5 text-2xl font-bold`}>Currently playing</h1> :
 										<>
 											<h1 className={`ml-1.5 mt-1.5 text-2xl font-bold`}>Nothing playing</h1>
-											<button
-												className="flex items-center justify-center gap-2 px-4 py-2 bg-(--tertiary) text-(--text-primary) rounded-md hover:bg-(--accent) duration-150"
+											<button className="flex items-center justify-center gap-2 px-4 py-2 bg-(--tertiary) text-(--text-primary) rounded-md hover:bg-(--accent) duration-150"
 												onClick={() => {
 													newTab({
 														id: createId(),
@@ -463,7 +473,7 @@ export const QuickPlayer = ({ panelsOpen, className, onMouseDown }: QuickPlayerP
 												<MusicalNoteIcon className="size-3" />
 											</button>
 										</>
-									)}
+									}
 									{currentTrack && (
 										<div className="flex items-center justify-between gap-2.5 p-1.5 w-full rounded-lg hover:bg-[#ffffff28] duration-150">
 											<div className="flex items-center gap-2.5">
@@ -549,6 +559,11 @@ export const QuickPlayer = ({ panelsOpen, className, onMouseDown }: QuickPlayerP
 																}
 															},
 															icon: <ArrowUturnLeftIcon className="size-5" />,
+														},
+														{
+															title: "Open full player",
+															onClick: () => openMusicPlayer("cover"),
+															icon: <ArrowsPointingOutIcon className="size-5" />,
 														},
 													];
 
@@ -671,11 +686,11 @@ export const QuickPlayer = ({ panelsOpen, className, onMouseDown }: QuickPlayerP
 							<div>
 								{currentTrack && showVisualizer && settings["tracks-visualizer"] === true && settings["disable-visualizers"] !== true && (
 									<div className="flex justify-center items-center h-12 px-4 overflow-hidden">
-										<AudvisVisualizer analyser={analyserRef.current} isPlaying={isPlaying} width={250} height={20} color={brightness === "dark" ? "#FFFFFF" : "#000000"} opacity={0.6} scale={1} />
+										<AudvisVisualizer analyser={analyser} isPlaying={isPlaying} width={250} height={20} color={brightness === "dark" ? "#FFFFFF" : "#000000"} opacity={0.6} scale={1} />
 									</div>
 								)}
 								<div className="relative flex justify-center items-center h-9">
-									<div className={`absolute flex p-2.5 gap-2 w-full items-center ${currentTrack ? "" : "-bottom-20"}`}>
+									<div ref={controlsRef} className={`absolute flex p-2.5 gap-2 w-full items-center transition-[bottom] duration-200 ${currentTrack ? "" : "-bottom-22"}`}>
 										<span className="font-medium">{formatTime(currentTime)}</span>
 										<span ref={seekbarRef} className="w-full h-2 bg-(--text-tertiary) rounded-full overflow-hidden hover:h-2.5 cursor-pointer duration-150" onMouseDown={handleMouseDown} onClick={e => handleSeek(e.clientX)}>
 											<span style={{ width: `var(--current, 0%)` }} className={`flex h-full ${brightness === "dark" ? "bg-white" : "bg-black"}`}></span>
@@ -804,13 +819,24 @@ export const QuickPlayer = ({ panelsOpen, className, onMouseDown }: QuickPlayerP
 										</div>
 									</div>
 								)}
-								<div className={`flex min-max-1 w-full p-1.5 items-start justify-between gap-0.5 ${brightness === "dark" ? "bg-[#ffffff10]" : "bg-[#00000025]"}`}>
-									<div className={`flex gap-0.5 duration-150 ${currentTrack ? "" : "opacity-0 translate-y-2 pointer-events-none"}`}>
-										<div className="flex gap-0.5">
+								<div
+									className={`flex min-max-1 w-(calc(100%-1rem)) m-2 p-1 rounded-xl overflow-x-auto overflow-y-hidden items-start justify-between gap-0.5 transition-[padding] duration-200 ${brightness === "dark" ? "bg-[#ffffff10]" : "bg-[#00000025]"}`}
+									onScroll={e => {
+										const el = e.currentTarget as HTMLDivElement & { _scrollTimeout?: number };
+										if (el.scrollWidth <= el.clientWidth) return;
+										el.style.paddingBottom = "0.75rem";
+										window.clearTimeout(el._scrollTimeout);
+										el._scrollTimeout = window.setTimeout(() => {
+											el.style.paddingBottom = "";
+										}, 1000);
+									}}
+								>
+									<div className={`flex gap-0.5 duration-150`}>
+										<div className="flex gap-1">
 											<button
 												ref={playRef}
 												title={platform.includes("Mac") ? "Play ⌃ + P" : "Play: Alt + S"}
-												className="flex items-center justify-center p-2 hover:bg-[#ffffff10] text-(--text-secondary) hover:text-(--text-primary) rounded-md cursor-pointer duration-150"
+												className="flex items-center justify-center p-2 hover:bg-[#ffffff10] text-(--text-secondary) hover:text-(--text-primary) rounded-lg cursor-pointer duration-150"
 												onClick={async () => {
 													if (audioRef.current?.paused) {
 														await resumeAndPlay();
@@ -824,7 +850,7 @@ export const QuickPlayer = ({ panelsOpen, className, onMouseDown }: QuickPlayerP
 											</button>
 											<button
 												title={platform.includes("Mac") ? "Previous Track ⌃ + ," : "Previous Track: Alt + ,"}
-												className="flex items-center justify-center p-2 hover:bg-[#ffffff10] text-(--text-secondary) hover:text-(--text-primary) rounded-md cursor-pointer duration-150"
+												className="flex items-center justify-center p-2 hover:bg-[#ffffff10] text-(--text-secondary) hover:text-(--text-primary) rounded-lg cursor-pointer duration-150"
 												onClick={() => {
 													if (!audioRef.current) return;
 													if (audioRef.current.currentTime > 2.5) {
@@ -843,7 +869,7 @@ export const QuickPlayer = ({ panelsOpen, className, onMouseDown }: QuickPlayerP
 											</button>
 											<button
 												title={platform.includes("Mac") ? "Next Track ⌃ + ." : "Next Track: Alt + ."}
-												className="flex items-center justify-center p-2 hover:bg-[#ffffff10] text-(--text-secondary) hover:text-(--text-primary) rounded-md cursor-pointer duration-150"
+												className="flex items-center justify-center p-2 hover:bg-[#ffffff10] text-(--text-secondary) hover:text-(--text-primary) rounded-lg cursor-pointer duration-150"
 												onClick={() => {
 													playNext();
 												}}
@@ -853,7 +879,7 @@ export const QuickPlayer = ({ panelsOpen, className, onMouseDown }: QuickPlayerP
 										</div>
 										<button
 											title={platform.includes("Mac") ? "Loop ⌃ + L" : "Loop: Alt + L"}
-											className={`flex items-center justify-center p-2 hover:bg-[#ffffff10] text-(--text-secondary) hover:text-(--text-primary) rounded-md cursor-pointer duration-150 ${loop ? "text-(--text-primary)" : ""}`}
+											className={`flex items-center justify-center p-2 hover:bg-[#ffffff10] text-(--text-secondary) hover:text-(--text-primary) rounded-lg cursor-pointer duration-150 ${loop ? "text-(--text-primary)" : ""}`}
 											onClick={() => {
 												if (audioRef.current) {
 													audioRef.current.loop = !loop;
@@ -863,17 +889,17 @@ export const QuickPlayer = ({ panelsOpen, className, onMouseDown }: QuickPlayerP
 										>
 											<ArrowPathRoundedSquareIcon className="size-5 stroke-0.5 stroke-current text-current pointer-events-none" />
 										</button>
-										<button title="Drag left/right to change volume" className="flex items-center justify-center p-2 hover:bg-[#ffffff10] text-(--text-secondary) hover:text-(--text-primary) rounded-md cursor-ew-resize duration-150" onMouseDown={handleVolumeMouseDown} onClick={toggleMute}>
+										<button title="Drag left/right to change volume" className="flex items-center justify-center p-2 hover:bg-[#ffffff10] text-(--text-secondary) hover:text-(--text-primary) rounded-lg cursor-ew-resize duration-150" onMouseDown={handleVolumeMouseDown} onClick={toggleMute}>
 											{muted || volume === 0 ? <SpeakerXMarkIcon className="size-5 text-current pointer-events-none" /> : <SpeakerWaveIcon className="size-5 text-current pointer-events-none" />}
 										</button>
-										<button title="Audio Equalizer" className={`flex items-center justify-center p-2 hover:bg-[#ffffff10] text-(--text-secondary) hover:text-(--text-primary) rounded-md cursor-pointer duration-150 ${showEQ ? "text-(--text-primary)" : ""}`} onClick={() => setShowEQ(!showEQ)}>
+										<button title="Audio Equalizer" className={`flex items-center justify-center p-2 hover:bg-[#ffffff10] text-(--text-secondary) hover:text-(--text-primary) rounded-lg cursor-pointer duration-150 ${showEQ ? "text-(--text-primary)" : ""}`} onClick={() => setShowEQ(!showEQ)}>
 											<AdjustmentsHorizontalIcon className="size-5 text-current pointer-events-none" />
 										</button>
 									</div>
 									<div className="flex gap-0.5">
 										<div
 											title={platform.includes("Mac") ? "Toggle Big Player" : "Toggle Big Player"}
-											className="flex items-center justify-center p-2 hover:bg-[#ffffff10] text-(--text-secondary) hover:text-(--text-primary) rounded-md cursor-pointer duration-150"
+											className="flex items-center justify-center p-2 hover:bg-[#ffffff10] text-(--text-secondary) hover:text-(--text-primary) rounded-lg cursor-pointer duration-150"
 											onClick={() => {
 												if (playerView === "tracks") {
 													changeView("bigplayer");
@@ -884,12 +910,26 @@ export const QuickPlayer = ({ panelsOpen, className, onMouseDown }: QuickPlayerP
 										>
 											<RectangleGroupIcon className="size-5 text-current pointer-events-none" />
 										</div>
+										<button
+											title="Lyrics"
+											className={`flex items-center justify-center p-2 hover:bg-[#ffffff10] text-(--text-secondary) hover:text-(--text-primary) rounded-lg cursor-pointer duration-150 ${currentTrack ? "" : "opacity-0 translate-y-2 pointer-events-none"}`}
+											onClick={() => openMusicPlayer("lyrics")}
+										>
+											<ChatBubbleBottomCenterTextIcon className="size-5 text-current pointer-events-none" />
+										</button>
+										<button
+											title="Open Full Player"
+											className={`flex items-center justify-center p-2 hover:bg-[#ffffff10] text-(--text-secondary) hover:text-(--text-primary) rounded-lg cursor-pointer duration-150 ${currentTrack ? "" : "opacity-0 translate-y-2 pointer-events-none"}`}
+											onClick={() => openMusicPlayer("cover")}
+										>
+											<ArrowsPointingOutIcon className="size-5 text-current pointer-events-none stroke-0.5 stroke-(--text-secondary) hover:stroke-(--text-primary)" />
+										</button>
 									</div>
 								</div>
 							</div>
 						</>
 					) : (
-						<div className={"relative flex flex-col w-full items-center flex-1 min-h-0 overflow-auto gap-2 p-2 px-2.5 duration-200"}>
+						<div className={"relative flex flex-col w-full items-center flex-1 min-h-0 overflow-auto gap-2 p-2.5 px-2.5 duration-200"}>
 							<div className="flex flex-col items-center justify-evenly h-full w-full">
 								<div
 									className="group relative flex items-center justify-center w-4/5 cursor-pointer"
@@ -913,7 +953,7 @@ export const QuickPlayer = ({ panelsOpen, className, onMouseDown }: QuickPlayerP
 									)}
 									{settings["big-player-visualizer"] === true && settings["disable-visualizers"] !== true && showVisualizer && (
 										<div className={`absolute rounded-xl overflow-hidden duration-300 drop-shadow-xl ${isHoveringCover === false ? "opacity-100 scale-100" : "opacity-0 scale-95"}`}>
-											<AudvisVisualizer analyser={analyserRef.current} isPlaying={isPlaying} width={140} height={30} color={brightness === "dark" ? "#FFFFFF" : "#000000"} opacity={visualizerOpacity} scale={visualizerScale} />
+											<AudvisVisualizer analyser={analyser} isPlaying={isPlaying} width={140} height={30} color={brightness === "dark" ? "#FFFFFF" : "#000000"} opacity={visualizerOpacity} scale={visualizerScale} />
 										</div>
 									)}
 									<div className="absolute group flex gap-3 opacity-0 group-hover:opacity-100 duration-150 z-10">
@@ -1068,6 +1108,12 @@ export const QuickPlayer = ({ panelsOpen, className, onMouseDown }: QuickPlayerP
 											}}
 										>
 											<QueueListIcon className="size-7 stroke-0.5 stroke-current" />
+										</button>
+										<button title="Lyrics" className="cursor-pointer opacity-50 hover:opacity-100 duration-150" onClick={() => openMusicPlayer("lyrics")}>
+											<ChatBubbleBottomCenterTextIcon className="size-7 stroke-0.5 stroke-current" />
+										</button>
+										<button title="Open Full Player" className="cursor-pointer opacity-50 hover:opacity-100 duration-150" onClick={() => openMusicPlayer("cover")}>
+											<ArrowsPointingOutIcon className="size-7 stroke-0.5 stroke-current" />
 										</button>
 									</div>
 								</div>

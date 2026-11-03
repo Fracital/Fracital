@@ -11,21 +11,8 @@ declare global {
 }
 
 export const Api = async () => {
-	const getSettings = useSettingsStore(state => state.getSettings);
-	const setSettings = useSettingsStore(state => state.setSettings);
-	if (!window.loadLock) {
-		window.loadLock = true;
-		await libcurl.load_wasm("https://cdn.jsdelivr.net/npm/libcurl.js@latest/libcurl.wasm");
-		libcurl.set_websocket(wispURL as `ws://${string}` | `wss://${string}`);
-		if ((await getLogin()) !== null) {
-			await window.fr.sync.get();
-			window.fr.fs.watch(SettingsPath, async (e: string, _f: string) => {
-				if (e === "change" && window.fr.sync.syncing === false) {
-					window.fr.sync.set();
-				}
-			});
-		}
-	}
+	const { getSettings, setSettings } = useSettingsStore.getState();
+	if (!window.loadLock) window.loadLock = false;
 	window.fr = {
 		theme: {
 			getTheme: () => {
@@ -94,4 +81,21 @@ export const Api = async () => {
 			syncing: false,
 		},
 	};
+
+	if (!window.loadLock) {
+		window.loadLock = true;
+		void libcurl
+			.load_wasm("https://cdn.jsdelivr.net/npm/libcurl.js@latest/libcurl.wasm")
+			.then(() => libcurl.set_websocket(wispURL as `ws://${string}` | `wss://${string}`))
+			.catch(error => console.error("Failed to load libcurl WASM:", error));
+
+		void (async () => {
+			if ((await getLogin()) !== null) {
+				await window.fr.sync.get();
+				window.fr.fs.watch(SettingsPath, async (e: string, _f: string) => {
+					if (e === "change" && window.fr.sync.syncing === false) void window.fr.sync.set();
+				});
+			}
+		})();
+	}
 };

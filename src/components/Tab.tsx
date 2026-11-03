@@ -24,20 +24,32 @@ export const Tab = ({ title, url, id, icon }: TabProps) => {
 	const closeTab = useTabsStore(state => state.closeTab);
 	const settings = useSettingsStore(state => state.settings);
 
-	// Read title and icon directly from store instead of local state
 	const thisTab = tabs.find(tab => tab.id === id);
 	const currTitle = thisTab?.title ?? title;
 	const currIcon = thisTab?.icon ?? icon;
-	const [iconSrc, setIconSrc] = useState<string | undefined>(undefined);
+
+	const [loadedIcon, setLoadedIcon] = useState<{ key: string; src?: string; failed: boolean } | null>(null);
 	const closeRef = useRef<SVGSVGElement>(null);
 
+	const hasStringIcon = typeof currIcon === "string" && currIcon.trim() !== "";
+
 	useEffect(() => {
-		if (typeof currIcon === "string") {
-			handleImg(currIcon, result => {
-				setIconSrc(result);
-			});
-		}
+		if (typeof currIcon !== "string" || !currIcon.trim()) return;
+		let cancelled = false;
+		handleImg(currIcon, result => {
+			if (!cancelled) setLoadedIcon({ key: currIcon, src: result, failed: !result });
+		});
+		return () => {
+			cancelled = true;
+		};
 	}, [currIcon]);
+
+	const iconState = loadedIcon && loadedIcon.key === currIcon ? loadedIcon : null;
+	const iconSrc = iconState?.src;
+	const iconFailed = iconState?.failed ?? false;
+	const handleIconError = () => {
+		if (typeof currIcon === "string") setLoadedIcon({ key: currIcon, failed: true });
+	};
 
 	return (
 		<div
@@ -93,7 +105,17 @@ export const Tab = ({ title, url, id, icon }: TabProps) => {
 		>
 			<div className="flex w-full justify-between items-center duration-150">
 				<div className="flex items-center gap-1.5 *:pointer-events-none">
-					{typeof currIcon === "string" ? <img src={iconSrc} alt={currTitle} className="size-5" /> : currIcon ? currIcon : <GlobeAltIcon className="size-5" />}
+					{hasStringIcon ? (
+						iconSrc && !iconFailed ? (
+							<img src={iconSrc} alt={currTitle} className="size-5" onError={handleIconError} />
+						) : (
+							<GlobeAltIcon className="size-5" />
+						)
+					) : currIcon && typeof currIcon !== "string" ? (
+						currIcon
+					) : (
+						<GlobeAltIcon className="size-5" />
+					)}
 					<span
 						className={
 							"font-medium select-none" +

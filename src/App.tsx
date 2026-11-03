@@ -1,8 +1,7 @@
 import { createId } from "@paralleldrive/cuid2";
 import { useEffect, useRef, useState } from "react";
-import { RectangleStackIcon, PlusIcon, Cog6ToothIcon, ChevronLeftIcon, ChevronRightIcon, RadioIcon } from "@heroicons/react/24/solid";
+import { RectangleStackIcon, PlusIcon, Cog6ToothIcon, ChevronLeftIcon, ChevronRightIcon, RadioIcon, XMarkIcon } from "@heroicons/react/24/solid";
 import type { detailProps } from "./libs/eventBus";
-import XOR from "./libs/XOR";
 import { useLocation } from "react-router-dom";
 
 import { Api } from "./Api";
@@ -14,8 +13,10 @@ import { Tab } from "./components/Tab";
 import Home from "./views/Home";
 import ExternalSite from "./views/ExternalSite";
 
-import { BareMuxConnection } from "@mercuryworkshop/bare-mux";
-import { usePanelsStore, useSettingsStore, useTabsStore } from "./store";
+import { Controller } from "@mercuryworkshop/scramjet-controller";
+import LibcurlTransport from "@mercuryworkshop/libcurl-transport";
+
+import { useMusicStore, usePanelsStore, useSettingsStore, useTabsStore } from "./store";
 import { init, quickLinks } from "./libs/init";
 import { initTheme } from "./libs/theme";
 import { View } from "./gui/View";
@@ -23,60 +24,146 @@ import TabGroup from "./components/TabGroup";
 import { ModalProvider } from "./components/Modal/ModalContext";
 import { getProxy, isWebOS, SettingsPath, wispURL } from "./types";
 import { aboutPages, getPageFromUrl, getQueryFromUrl } from "./libs/aboutPages";
+import { isPlayerUrl } from "./libs/playback";
+
+declare global {
+	interface Window {
+		scramjetController?: Controller;
+		scramjetReady?: Promise<void>;
+		appReady?: Promise<void>;
+	}
+}
+
+let serviceWorkerInit: Promise<void> | undefined;
+
+const waitForServiceWorker = async (
+    scope: string,
+    scriptURL: string
+): Promise<ServiceWorker> => {
+    let registration = await navigator.serviceWorker.getRegistration(scope);
+
+    if (!registration) {
+        registration = await navigator.serviceWorker.register(scriptURL, { scope });
+    }
+
+    registration.update().catch(() => undefined);
+
+    // Prefer the already-active worker. An updated worker can't activate while the old one still has fetch
+    // events in flight (e.g. stalled proxy requests), so waiting on it would time out and break the proxy.
+    // The update takes over on its own once the old worker goes idle.
+    let worker =
+        registration.active ??
+        registration.waiting ??
+        registration.installing;
+
+    if (!worker) {
+        throw new Error(`No service worker found: ${scope}`);
+    }
+
+    if (worker.state !== "activated") {
+        await new Promise<void>((resolve, reject) => {
+            const timeout = window.setTimeout(() => {
+                cleanup();
+                reject(new Error(`Service worker activation timed out: ${scope}`));
+            }, 15_000);
+
+            const finish = () => {
+                if (worker!.state === "activated") {
+                    cleanup();
+                    resolve();
+                } else if (worker!.state === "redundant") {
+                    cleanup();
+                    reject(new Error(`Service worker became redundant: ${scope}`));
+                }
+            };
+
+            const cleanup = () => {
+                window.clearTimeout(timeout);
+                worker!.removeEventListener("statechange", finish);
+            };
+
+            worker!.addEventListener("statechange", finish);
+            finish();
+        });
+    }
+
+    const expectedScript = new URL(scriptURL, location.href).href;
+
+    const isExpectedController = () =>
+        navigator.serviceWorker.controller?.scriptURL === expectedScript;
+
+    if (!isExpectedController()) {
+        const reloadKey = "fracital-sw-controller-reload";
+        const previousReload = sessionStorage.getItem(reloadKey);
+
+        if (previousReload !== expectedScript) {
+            sessionStorage.setItem(reloadKey, expectedScript);
+            window.location.reload();
+
+            await new Promise<never>(() => undefined);
+        }
+    }
+
+    await new Promise<void>((resolve, reject) => {
+        if (isExpectedController()) {
+            sessionStorage.removeItem("fracital-sw-controller-reload");
+            resolve();
+            return;
+        }
+
+        const timeout = window.setTimeout(() => {
+            cleanup();
+            reject(new Error(`Service worker did not take control: ${scope}`));
+        }, 15_000);
+
+        const finish = () => {
+            if (!isExpectedController()) return;
+
+            cleanup();
+            sessionStorage.removeItem("fracital-sw-controller-reload");
+            resolve();
+        };
+
+        const cleanup = () => {
+            window.clearTimeout(timeout);
+            navigator.serviceWorker.removeEventListener("controllerchange", finish);
+        };
+
+        navigator.serviceWorker.addEventListener("controllerchange", finish);
+        finish();
+    });
+
+    // Return the worker that actually controls the page.
+    worker = registration.active ?? worker;
+
+    return worker;
+};
 
 const regSw = async () => {
-	await navigator.serviceWorker.getRegistrations().then(registrations => {
-		registrations.forEach(registration => {
-			registration.unregister().catch(error => {
-				console.error("Error unregistering service worker:", error);
-			});
-		});
+	if (!("serviceWorker" in navigator)) throw new Error("Service workers are not supported in this browser");
+	const serviceWorker = await waitForServiceWorker("./", "./sw.js");
+	const scramjet = new Controller({
+		serviceworker: serviceWorker,
+		transport: new LibcurlTransport({
+			wisp: wispURL,
+		})
 	});
-	const connection = new BareMuxConnection("/baremux/worker.js");
-	await connection.setTransport("/epoxy/index.mjs", [{ wisp: wispURL }]);
-	const { ScramjetController } = window.$scramjetLoadController();
-	const scramjet = new ScramjetController({
-		prefix: "/service/",
-		files: {
-			wasm: "/scramjet/scramjet.wasm.wasm",
-			all: "/scramjet/scramjet.all.js",
-			sync: "/scramjet/scramjet.sync.js",
-		},
-		defaultFlags: {
-			rewriterLogs: false,
-		},
-		codec: {
-			encode: function encode(input: string): string {
-				let result = "";
-				let len = input.length;
-				for (let i = 0; i < len; i++) {
-					const char = input[i];
-					result += i % 2 ? String.fromCharCode(char.charCodeAt(0) ^ 2) : char;
-				}
-				return encodeURIComponent(result);
-			},
-			decode: function decode(input: string): string {
-				if (!input) return input;
-				input = decodeURIComponent(input);
-				let result = "";
-				let len = input.length;
-				for (let i = 0; i < len; i++) {
-					const char = input[i];
-					result += i % 2 ? String.fromCharCode(char.charCodeAt(0) ^ 2) : char;
-				}
-				return result;
-			},
-		},
-	});
-	scramjet.init();
-	navigator.serviceWorker.register("/uv/sw.js", { scope: "/uv/service/" });
-	navigator.serviceWorker.register("/scramjet-sw.js", { scope: "/service/" });
+	// The SW only routes a frame's requests after the controller handshake finishes.
+	await scramjet.wait();
+	window.scramjetController = scramjet;
 };
-if (!isWebOS) regSw();
+
+if (!isWebOS) {
+	serviceWorkerInit = regSw().catch(error => {
+		console.error("Proxy service worker initialization failed:", error);
+		throw error;
+	});
+	window.scramjetReady = serviceWorkerInit;
+}
+
+let bootstrapPromise: Promise<void> | undefined;
 
 const App = () => {
-	init();
-	Api();
 	const settings = useSettingsStore(state => state.settings);
 	const setSettings = useSettingsStore(state => state.setSettings);
 
@@ -92,6 +179,9 @@ const App = () => {
 	const currentTab = tabs.find(tab => tab.current === true);
 	const setCurrentTab = useTabsStore(state => state.setCurrentTab);
 	const panelsOpen = usePanelsStore(state => state.panelsOpen);
+	const playerView = useMusicStore(state => state.playerView);
+	// The side player stays mounted (it owns the <audio> element) but is hidden while the full player tab is focused.
+	const playerTabOpen = isPlayerUrl(currentTab?.url);
 
 	const newGroup = useTabsStore(state => state.newGroup);
 	const newTab = useTabsStore(state => state.newTab);
@@ -99,25 +189,56 @@ const App = () => {
 	const updateTab = useTabsStore(state => state.updateTab);
 
 	const [platform, setPlatform] = useState<string>("");
-	const [proxy, setProxy] = useState<"sj" | "uv">("sj");
+	const [, setProxy] = useState<"sj" | "uv">("sj");
+	const [proxyReady, setProxyReady] = useState(false);
+	const proxyUserChangedRef = useRef(false);
 
 	const tabsRef = useRef<HTMLDivElement>(null);
 
 	useEffect(() => {
-		const getProx = async () => {
-			const proxy = await getProxy();
-			setProxy(proxy);
-		};
-		getProx();
+		bootstrapPromise ??= (async () => {
+			await Api();
+			await init();
+			await initTheme();
+		})();
+		window.appReady = bootstrapPromise;
+		void bootstrapPromise;
 	}, []);
 
 	useEffect(() => {
-		initTheme();
+		if (serviceWorkerInit) {
+			void serviceWorkerInit.then(() => setProxyReady(true)).catch(() => setProxyReady(false));
+		} else {
+			setProxyReady(true);
+		}
+
+		const getProx = async () => {
+			if (window.appReady) await window.appReady.catch(() => undefined);
+			const savedProxy = await getProxy();
+			if (!proxyUserChangedRef.current) setProxy(savedProxy);
+		};
+		const handleProxyChange = (event: Event) => {
+			const newProxy = (event as CustomEvent<{ proxy: "sj" | "uv" }>).detail.proxy;
+			if (newProxy === "sj" || newProxy === "uv") {
+				proxyUserChangedRef.current = true;
+				setProxy(newProxy);
+			}
+		};
+		getProx();
+		window.addEventListener("proxy-change", handleProxyChange);
+		return () => window.removeEventListener("proxy-change", handleProxyChange);
+	}, []);
+
+	useEffect(() => {
+		// Use the store value; re-reading settings.json here races with loadTheme's write
+		if (window.fr && typeof settings.theme === "string") void initTheme(settings.theme);
 	}, [settings.theme]);
 
 	useEffect(() => {
 		const getSettings = async () => {
+			if (window.appReady) await window.appReady.catch(() => undefined);
 			try {
+				if (!window.fr?.fs) throw new Error("Filer API is not initialized");
 				const settingsData = await window.fr.fs.promises.readFile(SettingsPath, "utf-8");
 				const parsedSettings = JSON.parse(settingsData);
 				Object.entries(parsedSettings).forEach(([key, value]) => {
@@ -155,8 +276,8 @@ const App = () => {
 				});
 			}
 		};
-		window.addEventListener("proxy-navigate", handler);
-		return () => window.removeEventListener("proxy-navigate", handler);
+		window.addEventListener("navigate", handler);
+		return () => window.removeEventListener("navigate", handler);
 	}, []);
 
 	useEffect(() => {
@@ -304,14 +425,19 @@ const App = () => {
 				<div className="flex flex-col flex-1 min-h-0">
 					<div id="main" className="relative flex flex-1 min-h-0 gap-2.5">
 						{/* ad and promotion bar */}
-						{/* <div className={"relative flex flex-col min-h-0 bg-(--secondary) inset-shadow-(--inset-shadow-primary) p-3 gap-2.5 rounded-xl overflow-hidden"}>
-							<div className="flex items-center justify-center w-full px-2 gap-2">
-								<span className="text-lg font-medium">Ad</span>
-								<RadioIcon className="size-5" />
+						{/* <div className={"relative flex flex-col min-h-0 bg-(--secondary) inset-shadow-(--inset-shadow-primary) p-4 gap-2.5 rounded-xl overflow-hidden"}>
+							<div className="flex items-center justify-between w-full px-2">
+								<div className="flex items-center justify-center w-max gap-2">
+									<RadioIcon className="size-4.5 stroke-0" />
+									<span className="text-lg font-medium leading-none">Ad</span>
+								</div>
+								<div>
+									<XMarkIcon className="size-5 stroke-current cursor-pointer" onClick={() => setSettings("show-ad", false)} />
+								</div>
 							</div>
-							<div className="w-60 h-80 bg-[#ffffff18] rounded-xl"></div>
+							<div className="w-55 h-55 bg-[#ffffff18] rounded-xl"></div>
 						</div> */}
-						<div className={"relative flex-1 min-h-0 bg-(--secondary) inset-shadow-(--inset-shadow-primary) rounded-xl overflow-hidden"}>
+						<div className={"relative flex-1 min-h-0 h-[calc(100%+2px)] bg-(--secondary) inset-shadow-(--inset-shadow-primary) rounded-2xl overflow-hidden"}>
 							{tabs.length > 0 ? (
 								tabs.map(item => {
 									if (item.url.includes("about:")) {
@@ -389,7 +515,7 @@ const App = () => {
 												id={item.id}
 												current={currentTab?.id === item.id}
 												key={item.id}
-												url={proxy === "sj" ? "/service/" + XOR.encode(item.url) : "/uv/service/" + XOR.encode(item.url)}
+												url={proxyReady ? item.url : undefined}
 												className={
 													"absolute inset-0" +
 													" " +
@@ -451,18 +577,16 @@ const App = () => {
 							<div
 								ref={tabsRef}
 								className={
-									"flex flex-col bg-(--secondary) inset-shadow-(--inset-shadow-primary) overflow-hidden duration-150 min-h-0" +
+									"flex flex-col flex-1 min-h-0 bg-(--secondary) inset-shadow-(--inset-shadow-primary) overflow-hidden duration-150" +
 									" " +
 									`
-                                ${currentPanel === "tabs" ? "flex-2" : "flex-1"}
                                 ${panelsOpen ? "w-full" : "w-50"}
-                                ${settings["floating-tabs"] && panelsOpen ? "rounded-lg" : "rounded-xl"}
+                                ${settings["floating-tabs"] && panelsOpen ? "rounded-lg" : "rounded-2xl"}
                                 ${settings["floating-tabs"] && "shadow-[0_0_16px_3px_#00000035]"}
                             `
 								}
 								onMouseDown={() => {
 									setPanelsOpen(true);
-									setCurrentPanel("tabs");
 								}}
 							>
 								<div
@@ -557,17 +681,17 @@ const App = () => {
 								</div>
 								<div
 									className={
-										"flex min-max-1 w-full p-1.5 items-start justify-between gap-0.5" +
+										"flex min-max-1 w-[calc(100%-1rem)] m-2 p-1 rounded-xl items-start justify-between gap-1" +
 										" " +
 										`
                                     ${settings.brightness === "dark" ? "bg-[#ffffff10]" : "bg-[#00000025]"}
                                 `
 									}
 								>
-									<div className="flex gap-0.5">
+									<div className="flex gap-1">
 										<button
 											title={platform.includes("Mac") ? "New Tab ⌃ + T" : "New Tab: Alt + T"}
-											className="flex items-center justify-center p-2 hover:bg-[#ffffff10] text-(--text-secondary) hover:text-(--text-primary) rounded-md cursor-pointer duration-200"
+											className="flex items-center justify-center p-2 hover:bg-[#ffffff10] text-(--text-secondary) hover:text-(--text-primary) rounded-lg cursor-pointer duration-200"
 											onClick={() => {
 												newTab({
 													id: createId(),
@@ -582,7 +706,7 @@ const App = () => {
 										</button>
 										<button
 											title={platform.includes("Mac") ? "New Group ⌃ + T" : "New Group: Alt + T"}
-											className="flex items-center justify-center p-2 hover:bg-[#ffffff10] text-(--text-secondary) hover:text-(--text-primary) rounded-md cursor-pointer duration-200"
+											className="flex items-center justify-center p-2 hover:bg-[#ffffff10] text-(--text-secondary) hover:text-(--text-primary) rounded-lg cursor-pointer duration-200"
 											onClick={() => {
 												const groupId = createId();
 												newGroup(groupId, `Group ${groups.length + 1}`);
@@ -597,12 +721,12 @@ const App = () => {
 							</div>
 							<QuickPlayer
 								className={`
-                                ${currentPanel === "quickplayer" ? "flex-2" : "flex-1"} min-h-0
+                                ${playerView === "bigplayer" ? "flex-[1.3]" : "flex-1"} min-h-0
+                                ${playerTabOpen ? "hidden!" : ""}
                             `}
 								panelsOpen={panelsOpen}
 								onMouseDown={() => {
 									setPanelsOpen(true);
-									setCurrentPanel("quickplayer");
 								}}
 							/>
 						</div>

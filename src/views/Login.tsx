@@ -35,10 +35,11 @@ export const Login = ({ query }: LoginProps) => {
 	}, []);
 
 	const handleLogin = async () => {
-		if (!username || !password) {
+		if (!email || !password) {
 			setError("Please fill in all fields");
 			return;
 		}
+		console.log(username, email, password);
 		await signIn.email({
 			email: username,
 			password: password,
@@ -94,13 +95,13 @@ export const Login = ({ query }: LoginProps) => {
 			<div className="flex items-center justify-center gap-2">
 				<UserCircleIcon className="size-15 text-(--accent)" />
 				<XMarkIcon className="size-6 stroke-current stroke-2" />
-				<img src={tb_icon} alt="TB" className="size-15" />
+				{tb_icon && <img src={tb_icon} alt="TB" className="size-15" />}
 			</div>
 			<div className="flex flex-col items-center w-2/5">
 				{error && <div className="w-full p-2 mb-2 bg-red-500/20 border border-red-500/50 rounded-md text-sm text-red-300">{error}</div>}
 				{page === "login" ? (
 					<div className="flex flex-col items-center justify-between w-full p-2 gap-3">
-						<Input title="Email" type="email" value={username} onChange={e => setUsername(e.target.value)} />
+						<Input title="Email" type="email" value={email} onChange={e => setEmail(e.target.value)} />
 						{step === 1 && <Input title="Password" type="password" value={password} onChange={e => setPassword(e.target.value)} onKeyDown={e => e.key === "Enter" && handleLogin()} />}
 						<div className="relative flex items-center gap-2 w-full">
 							<button

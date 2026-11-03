@@ -1,18 +1,22 @@
 import { type ReactNode } from "react";
-import { Cog6ToothIcon, MusicalNoteIcon, FolderIcon, UserCircleIcon, PlayIcon, GlobeAltIcon } from "@heroicons/react/24/solid";
+import { Cog6ToothIcon, MusicalNoteIcon, FolderIcon, UserCircleIcon, PlayIcon, PlayCircleIcon, GlobeAltIcon, DocumentIcon, SignalIcon } from "@heroicons/react/24/solid";
 
 import Home from "../views/Home";
 import Settings from "../views/Settings";
 import { MusicLibrary } from "../views/Music/MusicLibrary";
+import { MusicPlayer } from "../views/Music/MusicPlayer";
 import Files from "../views/Files/Files";
 import { Login } from "../views/Login";
 import Games from "../views/Games";
+import { TextEditor } from "../views/TextEditor";
+import { DigitalLibrary } from "../views/DigitalLibrary";
 
 export interface AboutPage {
 	name: string;
 	component: React.ComponentType<any>;
 	icon?: ReactNode;
 	title?: string;
+	queryFields?: string[];
 	hasQuery?: boolean;
 }
 
@@ -53,8 +57,15 @@ export const aboutPages: Record<string, AboutPage> = {
 	music: {
 		name: "music",
 		component: MusicLibrary,
-		icon: <FolderIcon className="size-5" />,
+		icon: <MusicalNoteIcon className="size-5" />,
 		title: "Music Library",
+		hasQuery: true,
+	},
+	player: {
+		name: "player",
+		component: MusicPlayer,
+		icon: <PlayCircleIcon className="size-5" />,
+		title: "Music Player",
 		hasQuery: true,
 	},
 	files: {
@@ -78,6 +89,21 @@ export const aboutPages: Record<string, AboutPage> = {
 		title: "Account Management",
 		hasQuery: true,
 	},
+	text: {
+		name: "text",
+		component: TextEditor,
+		icon: <DocumentIcon className="size-5" />,
+		title: "Text Editor",
+		queryFields: ["path"],
+		hasQuery: true,
+	},
+	library: {
+		name: "library",
+		component: DigitalLibrary,
+		icon: <SignalIcon className="size-5" />,
+		title: "Digital Library",
+		hasQuery: true,
+	},
 };
 
 export const getPageFromUrl = (url: string): string | null => {
@@ -87,11 +113,7 @@ export const getPageFromUrl = (url: string): string | null => {
 
 export const getQueryFromUrl = (url: string): string | undefined => {
 	if (!url.includes("?")) return undefined;
-	const queryString = url.split("?")[1];
-	if (!queryString.includes("=")) {
-		return queryString;
-	}
-	return queryString;
+	return url.split("?")[1];
 };
 
 /**
@@ -118,7 +140,7 @@ export const updatePageTab = (
 	const title = options?.title || pageConfig.title || pageName;
 
 	// Dispatch navigation event
-	const event = new CustomEvent("proxy-navigate", {
+	const event = new CustomEvent("navigate", {
 		detail: {
 			url,
 			title,

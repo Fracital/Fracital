@@ -1,4 +1,5 @@
 import { dirExists, fileExists, ThemePath, StaticThemePath, MusicPath, GamesPath, SettingsPath } from "../types";
+import { configureMusicApi } from "./music-service";
 
 export const quickLinks = [
 	{
@@ -37,6 +38,7 @@ export const init = async () => {
 					"disable-visualizers": false,
 					"tracks-visualizer": true,
 					"big-player-visualizer": true,
+					"big-player-default": true,
 				},
 				null,
 				4,
@@ -108,42 +110,67 @@ export const init = async () => {
 		);
 		await window.fr.fs.promises.writeFile(`${ThemePath}/greyscale/index.css`, greyTheme);
 		console.log("%cFracital%c: %cinit%c() -> %cdirectory%c /themes created with default themes", "color: #fb74fe", "color: #ff7b72", "color: #c7a1f2", "color: #79c0ff", "color: #56d364", "color: #e2b340");
-		window.location.reload();
 	}
 	if (!(await dirExists(MusicPath))) {
 		await window.fr.fs.promises.mkdir(MusicPath);
 	}
 	if (!(await dirExists(GamesPath))) {
 		await window.fr.fs.promises.mkdir(GamesPath);
-		// Copy default game from public to Filer FS
-		try {
-			const response = await fetch("/games/bfe.swf");
-			if (response.ok) {
-				const arrayBuffer = await response.arrayBuffer();
-				// Create folder for the game
-				await window.fr.fs.promises.mkdir(`${GamesPath}/bfe`);
-				// Write the SWF file
-				await window.fr.fs.promises.writeFile(`${GamesPath}/bfe/game.swf`, window.fr.buffer.from(arrayBuffer));
-				// Create metadata file
-				const now = new Date().toISOString();
-				await window.fr.fs.promises.writeFile(
-					`${GamesPath}/bfe/index.json`,
-					JSON.stringify(
-						{
-							title: "Banned From Equestria",
-							type: "flash",
-							createdAt: now,
-							modifiedAt: now,
-						},
-						null,
-						2,
-					),
-				);
-				console.log("%cFracital%c: %cinit%c() -> %cdirectory%c /games created with default game", "color: #fb74fe", "color: #ff7b72", "color: #c7a1f2", "color: #79c0ff", "color: #56d364", "color: #e2b340");
+	}
+
+	const flashGames = import.meta.glob("../assets/games/flash/**/*", {
+		eager: true,
+		query: "?url",
+		import: "default",
+	}) as Record<string, string>;
+
+	for (const [sourcePath, assetUrl] of Object.entries(flashGames)) {
+		const marker = "/assets/games/flash/";
+		const markerIndex = sourcePath.indexOf(marker);
+		if (markerIndex === -1) continue;
+
+		const relativePath = sourcePath.slice(markerIndex + marker.length);
+		const destinationPath = `${GamesPath}/${relativePath}`;
+		const pathParts = relativePath.split("/");
+		let currentPath = GamesPath;
+
+		for (const directory of pathParts.slice(0, -1)) {
+			currentPath += `/${directory}`;
+			if (!(await dirExists(currentPath))) {
+				await window.fr.fs.promises.mkdir(currentPath);
 			}
-		} catch (err) {
-			console.error("Failed to copy default game:", err);
 		}
+
+		const textExtensions = ["json", "txt", "html", "htm", "js", "css", "xml", "md", "svg"];
+		const extension = relativePath.split(".").pop()?.toLowerCase() ?? "";
+		const isText = textExtensions.includes(extension);
+		const exists = await fileExists(destinationPath);
+		if (exists && isText) continue;
+
+		const response = await fetch(assetUrl, { cache: "no-store" });
+		const contentType = response.headers.get("content-type") ?? "";
+		if (!response.ok || (!isText && contentType.includes("text/html"))) {
+			console.warn(`Could not copy Flash game asset: ${sourcePath}`);
+			continue;
+		}
+
+		if (isText) {
+			await window.fr.fs.promises.writeFile(destinationPath, await response.text(), "utf8");
+			continue;
+		}
+
+		const bytes = new Uint8Array(await response.arrayBuffer());
+		if (exists) {
+			try {
+				const stats = await window.fr.fs.promises.stat(destinationPath);
+				// Skip only if the previously copied binary is intact
+				if (stats.size === bytes.byteLength) continue;
+			} catch {
+				// fall through and rewrite
+			}
+		}
+		// Filer only treats its own Buffer as binary; anything else is stringified
+		await window.fr.fs.promises.writeFile(destinationPath, window.fr.buffer.from(bytes));
 	}
 	console.log("%cFracital%c: %cinit%c()", "color: #fb74fe", "color: #ff7b72", "color: #c7a1f2", "color: #79c0ff");
 	if (!window.localStorage.getItem("quicklinks")) {
@@ -152,4 +179,9 @@ export const init = async () => {
 	} else {
 		console.log("%cinit%c()%c -> already set: %c[%cquicklinks%c]", "color: #c7a1f2", "color: #79c0ff", "color: #ffffffbf", "color: #56d364", "color: #e2b340", "color: #56d364");
 	}
+
+	// Music streaming API — runs on the same server (Vite dev / production backend)
+	configureMusicApi({
+		baseUrl: "/api/music",
+	});
 };

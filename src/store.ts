@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { normalizePath } from "./views/Files/pathUtils";
 import type { TabProps } from "./components/Tab";
 import type { Track } from "./types";
 import { createId } from "@paralleldrive/cuid2";
@@ -310,6 +311,55 @@ export const useMusicStore = create<{
 	},
 }));
 
+/** Setting that picks which view the quick player starts in; unset means the big player, as before. */
+export const BIG_PLAYER_DEFAULT_SETTING = "big-player-default";
+
+const defaultPlayerView = (settings: Record<string, unknown>) => (settings[BIG_PLAYER_DEFAULT_SETTING] === false ? "tracks" : "bigplayer");
+
+// Apply the setting when it loads from settings.json or is changed, but leave manual toggles alone otherwise.
+useSettingsStore.subscribe((state, prev) => {
+	const view = defaultPlayerView(state.settings);
+	if (view !== defaultPlayerView(prev.settings)) useMusicStore.getState().changeView(view);
+});
+
+type Updater<T> = T | ((prev: T) => T);
+const applyUpdater = <T>(value: Updater<T>, prev: T): T => (typeof value === "function" ? (value as (p: T) => T)(prev) : value);
+
+// Shared state of the single <audio> element (owned by QuickPlayer) so other views can render and drive playback.
+export const usePlaybackStore = create<{
+	isPlaying: boolean;
+	currentTime: number;
+	duration: number;
+	loop: boolean;
+	volume: number;
+	muted: boolean;
+	analyser: AnalyserNode | null;
+
+	setIsPlaying: (value: Updater<boolean>) => void;
+	setCurrentTime: (value: Updater<number>) => void;
+	setDuration: (value: Updater<number>) => void;
+	setLoop: (value: Updater<boolean>) => void;
+	setVolume: (value: Updater<number>) => void;
+	setMuted: (value: Updater<boolean>) => void;
+	setAnalyser: (analyser: AnalyserNode | null) => void;
+}>()(set => ({
+	isPlaying: false,
+	currentTime: 0,
+	duration: 0,
+	loop: false,
+	volume: 1,
+	muted: false,
+	analyser: null,
+
+	setIsPlaying: value => set(state => ({ isPlaying: applyUpdater(value, state.isPlaying) })),
+	setCurrentTime: value => set(state => ({ currentTime: applyUpdater(value, state.currentTime) })),
+	setDuration: value => set(state => ({ duration: applyUpdater(value, state.duration) })),
+	setLoop: value => set(state => ({ loop: applyUpdater(value, state.loop) })),
+	setVolume: value => set(state => ({ volume: applyUpdater(value, state.volume) })),
+	setMuted: value => set(state => ({ muted: applyUpdater(value, state.muted) })),
+	setAnalyser: analyser => set({ analyser }),
+}));
+
 interface FileEntry {
 	name: string;
 	path: string;
@@ -354,8 +404,9 @@ export const useFilesStore = create<{
 	return {
 		currentDirectory: "/",
 		setCurrentDirectory: async path => {
-			set({ currentDirectory: path });
-			debouncedReadDir(path);
+			const normalizedPath = normalizePath(path);
+			set({ currentDirectory: normalizedPath });
+			debouncedReadDir(normalizedPath);
 		},
 		fileTree: null,
 		setFileTree: tree => set({ fileTree: tree }),

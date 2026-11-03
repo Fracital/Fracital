@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef } from "react";
 import { RufflePlayer } from "../components/RufflePlayer";
 import { HTMLPlayer } from "../components/HTMLPlayer";
+import { GameInstaller } from "../components/GameInstaller";
 import { useSettingsStore, useTabsStore } from "../store";
 import { updatePageTab } from "../libs/aboutPages";
-import { PlusIcon, PlayIcon, XMarkIcon, PhotoIcon, TrashIcon, StarIcon, PencilIcon, ArrowsPointingOutIcon, ArrowsPointingInIcon, SpeakerWaveIcon, SpeakerXMarkIcon, FunnelIcon, ArchiveBoxIcon, FolderIcon, ChevronLeftIcon, ChevronRightIcon } from "@heroicons/react/24/solid";
+import { PlusIcon, PlayIcon, XMarkIcon, PhotoIcon, TrashIcon, StarIcon, PencilIcon, ArrowsPointingOutIcon, ArrowsPointingInIcon, SpeakerWaveIcon, SpeakerXMarkIcon, FunnelIcon, ArchiveBoxIcon, FolderIcon, ChevronLeftIcon, ChevronRightIcon, ArrowDownTrayIcon } from "@heroicons/react/24/solid";
 import { ClipboardIcon, StarIcon as StarOutlineIcon } from "@heroicons/react/24/outline";
 import { GamesPath } from "../types";
 import { createId } from "@paralleldrive/cuid2";
@@ -65,11 +66,12 @@ const Games = ({ query, className }: GamesProps) => {
 	const [deleting, setDeleting] = useState(false);
 	const [uploadModal, setUploadModal] = useState<UploadModalData | null>(null);
 	const [editModal, setEditModal] = useState<EditModalData | null>(null);
-	const [activeTab, setActiveTab] = useState<"all" | "favorites">("all");
+	const [activeTab, setActiveTab] = useState<"all" | "favorites" | "download">("all");
 	const [selectedTag, setSelectedTag] = useState<string>("all");
 	const [isFullscreen, setIsFullscreen] = useState(false);
 	const [isMuted, setIsMuted] = useState(false);
 	const [showUploadTypeModal, setShowUploadTypeModal] = useState(false);
+
 	const playerContainerRef = useRef<HTMLDivElement>(null);
 	const rufflePlayerRef = useRef<any>(null);
 	const [detailsCollapsed, setDetailsCollapsed] = useState<boolean>(() => {
@@ -107,6 +109,18 @@ const Games = ({ query, className }: GamesProps) => {
 						}
 					} catch (err) {
 						console.warn(`No metadata for ${folderName}:`, err);
+					}
+
+					if (!metadata.thumbnail) {
+						const thumbnailName = ["index.png", "icon.png", "thumbnail.png"].find(name => entries.includes(name));
+						if (thumbnailName) {
+							try {
+								const imageData = await window.fr.fs.promises.readFile(`${folderPath}/${thumbnailName}`);
+								metadata.thumbnail = `data:image/png;base64,${window.fr.buffer.from(imageData).toString("base64")}`;
+							} catch (err) {
+								console.warn(`Could not read thumbnail for ${folderName}:`, err);
+							}
+						}
 					}
 
 					const gameType = metadata.type || "flash";
@@ -195,9 +209,9 @@ const Games = ({ query, className }: GamesProps) => {
 		if (games.length === 0) return;
 
 		if (query) {
-			const params = new URLSearchParams(query.includes("=") ? query : `id=${query}`);
+			const params = new URLSearchParams(query.includes("=") ? query : `g=${query}`);
 
-			const gameId = params.get("id");
+			const gameId = params.get("g") || params.get("id");
 			if (gameId) {
 				const game = games.find(g => g.id === gameId);
 				if (game && selectedGame?.id !== game.id) {
@@ -227,7 +241,7 @@ const Games = ({ query, className }: GamesProps) => {
 		if (selectedGame) {
 			updatePageTab(currentTab.id, "games", {
 				title: selectedGame.title,
-				query: `id=${selectedGame.id}`,
+				query: `g=${selectedGame.id}`,
 			});
 		} else if (selectedGame === null && currentTab.url.includes("about:games") && currentTab.url !== "about:games" && games.length > 0) {
 			updatePageTab(currentTab.id, "games");
@@ -503,34 +517,48 @@ const Games = ({ query, className }: GamesProps) => {
 									<StarIcon className="size-4" />
 									Favorites
 								</button>
+								<button
+									className={`flex items-center gap-2 px-4 py-2 rounded-lg font-semibold cursor-pointer duration-150 ${
+										activeTab === "download" ? "bg-(--accent) text-white" : settings.brightness === "dark" ? "bg-[#ffffff10] hover:bg-[#ffffff18] text-(--text-primary)" : "bg-[#00000010] hover:bg-[#00000018] text-(--text-primary)"
+									}`}
+									onClick={() => setActiveTab("download")}
+								>
+									<ArrowDownTrayIcon className="size-4" />
+									Download
+								</button>
 							</div>
 						</div>
-						<div className="flex items-center gap-2">
-							<div className="relative">
-								<label className={`flex items-center gap-2 px-4 py-2 rounded-lg font-semibold cursor-pointer duration-150 ${settings.brightness === "dark" ? "bg-[#ffffff10] hover:bg-[#ffffff18] text-(--text-primary)" : "bg-[#00000010] hover:bg-[#00000018] text-(--text-primary)"}`}>
-									<FunnelIcon className="size-5" />
-									<span>Filter: {selectedTag === "all" ? "All" : selectedTag}</span>
-									<select className="absolute inset-0 opacity-0 cursor-pointer" value={selectedTag} onChange={e => setSelectedTag(e.target.value)}>
-										<option value="all">All</option>
-										{allTags.map(tag => (
-											<option key={tag} value={tag}>
-												{tag}
-											</option>
-										))}
-									</select>
-								</label>
+						{activeTab !== "download" && (
+							<div className="flex items-center gap-2">
+								<div className="relative">
+									<label className={`flex items-center gap-2 px-4 py-2 rounded-lg font-semibold cursor-pointer duration-150 ${settings.brightness === "dark" ? "bg-[#ffffff10] hover:bg-[#ffffff18] text-(--text-primary)" : "bg-[#00000010] hover:bg-[#00000018] text-(--text-primary)"}`}>
+										<FunnelIcon className="size-5" />
+										<span>Filter: {selectedTag === "all" ? "All" : selectedTag}</span>
+										<select className="absolute inset-0 opacity-0 cursor-pointer" value={selectedTag} onChange={e => setSelectedTag(e.target.value)}>
+											<option value="all">All</option>
+											{allTags.map(tag => (
+												<option key={tag} value={tag}>
+													{tag}
+												</option>
+											))}
+										</select>
+									</label>
+								</div>
+								<button
+									className={`flex items-center gap-2 px-4 py-2 rounded-lg font-semibold cursor-pointer duration-150 ${settings.brightness === "dark" ? "bg-[#ffffff10] hover:bg-[#ffffff18] text-(--text-primary)" : "bg-[#00000010] hover:bg-[#00000018] text-(--text-primary)"}`}
+									onClick={() => setShowUploadTypeModal(true)}
+								>
+									<PlusIcon className="size-5 stroke-1 stroke-current" />
+									<span>Add Game</span>
+								</button>
 							</div>
-							<button
-								className={`flex items-center gap-2 px-4 py-2 rounded-lg font-semibold cursor-pointer duration-150 ${settings.brightness === "dark" ? "bg-[#ffffff10] hover:bg-[#ffffff18] text-(--text-primary)" : "bg-[#00000010] hover:bg-[#00000018] text-(--text-primary)"}`}
-								onClick={() => setShowUploadTypeModal(true)}
-							>
-								<PlusIcon className="size-5 stroke-1 stroke-current" />
-								<span>Add Game</span>
-							</button>
-						</div>
+						)}
 					</div>
-					<div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 auto-rows-min gap-3 md:gap-4">
-						{loading ? (
+					{activeTab === "download" ? (
+						<GameInstaller onComplete={() => readGames()} />
+					) : (
+						<div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 auto-rows-min gap-3 md:gap-4">
+							{loading ? (
 							<div className="col-span-full flex flex-col items-center justify-center py-20 gap-4">
 								<div className={`size-12 border-4 border-(--accent) border-t-transparent rounded-full animate-spin`}></div>
 								<span className="text-lg font-semibold text-(--text-secondary)">Loading games...</span>
@@ -628,13 +656,14 @@ const Games = ({ query, className }: GamesProps) => {
 										<PlayIcon className="size-16 text-(--text-tertiary)" />
 										<div className="flex flex-col items-center gap-2">
 											<h2 className="text-2xl font-bold text-(--text-secondary)">No games yet</h2>
-											<p className="text-(--text-tertiary)">Add some games to get started</p>
+											<p className="text-(--text-tertiary)">Add some games to get started or go to the Download tab to install base games</p>
 										</div>
 									</>
 								)}
 							</div>
 						)}
 					</div>
+				)}
 				</>
 			) : (
 				<>

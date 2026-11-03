@@ -13,8 +13,8 @@ interface QuickPlayerProps {
 export const QuickPlayer = ({ tabsOpen, className }: QuickPlayerProps) => {
 	const settings = useSettingsStore(state => state.settings);
 	const currentTrack = useMusicStore(state => state.currentTrack);
-	const tracks = useMusicStore(state => state.tracks);
 	const queue = useMusicStore(state => state.queue);
+	const tracks = queue;
 	const addTrack = useMusicStore(state => state.addTrack);
 	const removeTrack = useMusicStore(state => state.removeTrack);
 	const newTab = useTabsStore(state => state.newTab);
@@ -102,19 +102,19 @@ export const QuickPlayer = ({ tabsOpen, className }: QuickPlayerProps) => {
 						className={"relative flex w-full h-full overflow-auto gap-2 p-2 px-3 flex-col duration-200"}
 					>
 						<div className="flex">
-							{Object.keys(tracks).length === 0 ? (
+							{Object.keys(tracks).length === 0 || !currentTrack ? (
 								<h1 className="text-2xl font-bold text-[#ffffff97]">Nothing playing</h1>
 							) : (
 								<div className="flex flex-col gap-2.5">
 									<div className="flex items-center justify-center gap-2.5">
-										<img className="size-11 rounded-lg" src={currentTrack.cover} alt={currentTrack.name} />
+										<img className="size-11 rounded-lg" src={currentTrack.cover} alt={currentTrack.title} />
 										<div>
-											<h1 className="text-xl font-semibold cursor-pointer hover:underline">{currentTrack.name}</h1>
-											{currentTrack.artists.length > 1 ? (
+											<h1 className="text-xl font-semibold cursor-pointer hover:underline">{currentTrack.title}</h1>
+											{Array.isArray(currentTrack.artists) && currentTrack.artists.length > 1 ? (
 												<div className="flex gap-1.5">
 													{currentTrack.explicit && <span className="flex justify-center items-center size-5 text-xs font-bold rounded-sm bg-[#ffffff46]">E</span>}
 													<div className="flex lg:flex-row flex-col gap-0.5">
-														{currentTrack.artists.map((artist, index) => (
+														{currentTrack.artists.map((artist: string, index: number) => (
 															<div className="flex justify-center items-center text-[#ffffff8c] w-max">
 																<span className="text-sm hover:text-[#ffffffc4] cursor-pointer duration-150" key={index}>
 																	{artist}

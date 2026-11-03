@@ -7,6 +7,6 @@ export interface detailProps {
 }
 
 export const navigationEvent = (detail: detailProps) => {
-	const event = new CustomEvent("proxy-navigate", { detail });
+	const event = new CustomEvent("navigate", { detail });
 	window.dispatchEvent(event);
 };

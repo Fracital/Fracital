@@ -1,7 +1,6 @@
 declare global {
 	interface Window {
-		// @ts-expect-error
-		XOR: XOR;
+		XOR: typeof XOR;
 	}
 }
 

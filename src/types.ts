@@ -32,14 +32,24 @@ export const clearLogin = async (): Promise<void> => {
 };
 
 export const getProxy = async (): Promise<"sj" | "uv"> => {
-	const data = JSON.parse(await window.fr.fs.promises.readFile(SettingsPath, "utf8"));
-	return data.proxy;
+	try {
+		if (!window.fr?.fs) return "sj";
+		const data = JSON.parse(await window.fr.fs.promises.readFile(SettingsPath, "utf8"));
+		return data.proxy === "uv" ? "uv" : "sj";
+	} catch {
+		return "sj";
+	}
 };
 
 export const changeProxy = async (proxy: "sj" | "uv"): Promise<void> => {
-	const data = JSON.parse(await window.fr.fs.promises.readFile(SettingsPath, "utf8"));
-	data.proxy = proxy;
-	await window.fr.fs.promises.writeFile(SettingsPath, JSON.stringify(data, null, 2), "utf8");
+	try {
+		if (!window.fr?.fs) return;
+		const data = JSON.parse(await window.fr.fs.promises.readFile(SettingsPath, "utf8"));
+		data.proxy = proxy;
+		await window.fr.fs.promises.writeFile(SettingsPath, JSON.stringify(data, null, 2), "utf8");
+	} catch (error) {
+		console.error("Failed to save proxy selection:", error);
+	}
 };
 
 export const dirExists = async (path: string): Promise<boolean> => {

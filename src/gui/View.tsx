@@ -14,13 +14,11 @@ export const View = ({ children, id }: ViewProps) => {
 	const updateTab = useTabsStore(state => state.updateTab);
 	const lastUrlRef = useRef<string>("");
 
-	// Update tab title/icon when URL changes to an about page
 	useEffect(() => {
 		if (!id) return;
 		const tab = tabs.find(t => t.id === id);
 		if (!tab || !tab.url.includes("about:")) return;
 
-		// Only process if URL changed
 		if (lastUrlRef.current === tab.url) return;
 		lastUrlRef.current = tab.url;
 
@@ -29,7 +27,6 @@ export const View = ({ children, id }: ViewProps) => {
 
 		const pageConfig = aboutPages[pageName];
 
-		// Update tab with page config if it doesn't match
 		if (tab.title !== pageConfig.title || !tab.icon) {
 			updateTab(id, {
 				title: pageConfig.title || pageName,
@@ -44,7 +41,7 @@ export const View = ({ children, id }: ViewProps) => {
 				"absolute inset-0 duration-150" +
 				" " +
 				`
-            ${currentTab ? (currentTab.id !== id ? "opacity-0 translate-y-2 pointer-events-none" : "") : ""}
+            ${currentTab ? (currentTab.id !== id ? "opacity-0 translate-y-2 pointer-events-none inset-shadow-(--inset-shadow-primary)" : "") : ""}
         `
 			}
 		>

@@ -1,22 +1,42 @@
 import { useSettingsStore } from "../store";
-import { SettingsPath, ThemePath } from "../types";
+import { SettingsPath, StaticThemePath, ThemePath } from "../types";
 
 let styleElement: HTMLStyleElement | null = null;
 
-export const initTheme = async () => {
-	const { getSettings, setSettings } = useSettingsStore.getState();
-	const currentTheme = await getSettings("theme");
-	if (currentTheme === null) return;
-	const configBuffer = JSON.parse(await window.fr.fs.promises.readFile(`${ThemePath}/${currentTheme}/index.json`, "utf8"));
-	setSettings("brightness", configBuffer["brightness"]);
-	await loadTheme(currentTheme);
+export const initTheme = async (nameOverride?: string) => {
+	if (!window.fr?.fs) return;
+
+	let name = nameOverride;
+	if (!name) {
+		try {
+			const settings = JSON.parse(await window.fr.fs.promises.readFile(SettingsPath, "utf8"));
+			name = typeof settings.theme === "string" ? settings.theme : "default";
+		} catch {
+			name = "default";
+		}
+	}
+
+	name ??= "default";
+	await loadTheme(name);
 };
 
 export const loadTheme = async (name: string) => {
 	const { setSettings } = useSettingsStore.getState();
 	try {
-		const themeBuffer = await window.fr.fs.promises.readFile(`${ThemePath}/${name}/index.css`, "utf8");
-		const configBuffer = await window.fr.fs.promises.readFile(`${ThemePath}/${name}/index.json`, "utf8");
+		let themeBuffer: string;
+		let brightness = "dark";
+
+		try {
+			themeBuffer = await window.fr.fs.promises.readFile(`${ThemePath}/${name}/index.css`, "utf8");
+			const configBuffer = await window.fr.fs.promises.readFile(`${ThemePath}/${name}/index.json`, "utf8");
+			brightness = JSON.parse(configBuffer).brightness ?? "dark";
+		} catch {
+			const fallbackName = name === "light" ? "light" : "default";
+			const response = await fetch(`${StaticThemePath}/${fallbackName}.css`);
+			if (!response.ok) throw new Error(`Theme fallback returned HTTP ${response.status}`);
+			themeBuffer = await response.text();
+			brightness = fallbackName === "light" ? "light" : "dark";
+		}
 
 		if (!styleElement) {
 			styleElement = document.createElement("style");
@@ -25,13 +45,18 @@ export const loadTheme = async (name: string) => {
 		}
 		styleElement.textContent = themeBuffer;
 		setSettings("theme", name);
-		setSettings("brightness", JSON.parse(configBuffer).brightness);
-		const settings = JSON.parse(await window.fr.fs.promises.readFile(SettingsPath, "utf-8"));
-		settings.theme = name;
-		await window.fr.fs.promises.writeFile(SettingsPath, JSON.stringify(settings, null, 4));
+		setSettings("brightness", brightness);
+
+		try {
+			const settings = JSON.parse(await window.fr.fs.promises.readFile(SettingsPath, "utf8"));
+			settings.theme = name;
+			await window.fr.fs.promises.writeFile(SettingsPath, JSON.stringify(settings, null, 4));
+		} catch (error) {
+			console.warn("Failed to persist selected theme:", error);
+		}
+
 		console.log(`Theme ${name} loaded successfully.`);
 	} catch (error) {
 		console.error(`Failed to load theme ${name}:`, error);
-		return;
 	}
 };

@@ -259,7 +259,8 @@ const Shell = () => {
 
 	const settings = useSettingsStore(state => state.settings);
 
-	const [proxy, setProxy] = useState<"uv" | "sj">("uv");
+	const [proxy, setProxy] = useState<"uv" | "sj">("sj");
+	const proxyUserChangedRef = useRef(false);
 
 	const navButtonsRef = useRef<HTMLDivElement>(null);
 	const uvRef = useRef<HTMLDivElement>(null);
@@ -268,7 +269,7 @@ const Shell = () => {
 	const [isFullscreen, setIsFullscreen] = useState<boolean>(Boolean(document.fullscreenElement));
 
 	const [uvVersion] = useState("v3.2.10");
-	const [sjVersion] = useState(window.parent.$scramjetVersion.version);
+	const sjVersion = typeof $scramjet !== "undefined" ? `v${$scramjet.versionInfo.version}` : "";
 
 	const { openModal } = useModal();
 	const [isFavorited, setIsFavorited] = useState<boolean>(false);
@@ -319,6 +320,7 @@ const Shell = () => {
 		const customEvent = e as CustomEvent;
 		const newProxy = customEvent.detail.proxy;
 		if (newProxy === "sj" || newProxy === "uv") {
+			proxyUserChangedRef.current = true;
 			setProxy(newProxy);
 			await changeProxy(newProxy);
 		}
@@ -326,8 +328,9 @@ const Shell = () => {
 
 	useEffect(() => {
 		const getProx = async () => {
+			if (window.appReady) await window.appReady.catch(() => undefined);
 			const proxy = await getProxy();
-			setProxy(proxy);
+			if (!proxyUserChangedRef.current) setProxy(proxy);
 		};
 		getProx();
 	}, []);
@@ -340,9 +343,9 @@ const Shell = () => {
 	}, []);
 
 	return (
-		<div id="shell" className={"flex justify-between gap-2.5 p-1 rounded-xl duration-200"}>
+		<div id="shell" className={"flex justify-between gap-2.5 p-1 duration-200"}>
 			<div className="flex items-center justify-start gap-2.5">
-				<div className="relative flex items-center justify-center gap-0.5">
+				<div className="relative flex items-center justify-center gap-1">
 					<button
 						className="group relative flex items-center justify-center mr-1 cursor-pointer"
 						title={`Home - Go to the homepage`}
@@ -378,10 +381,10 @@ const Shell = () => {
 							}
 						/>
 					</button>
-					<div ref={navButtonsRef} className={`flex items-center justify-center gap-0.5 duration-150`}>
+					<div ref={navButtonsRef} className={`flex items-center justify-center gap-0.5 p-1.5 bg-(--secondary) inset-shadow-(--inset-shadow-primary) rounded-full duration-150`}>
 						<button
 							className={
-								"group size-8 p-1 rounded-md cursor-pointer duration-150" +
+								"group flex p-2 rounded-full cursor-pointer inset-shadow-[0_0_0_2px_transparent] hover:inset-shadow-[0_0_0_2px_var(--accent)] duration-150" +
 								" " +
 								`
 							${settings.brightness === "light" ? "text-(--text-tertiary) hover:text-(--text-primary) hover:bg-[#00000018]" : "text-(--text-primary) hover:text-(--text-secondary) hover:bg-[#ffffff10]"}
@@ -398,11 +401,11 @@ const Shell = () => {
 								);
 							}}
 						>
-							<ArrowPathIcon className={"size-full stroke-current stroke-1 text-(--text-tertiary) cursor-pointer group-hover:text-(--text-primary) group-hover:rotate-180 duration-300"} />
+							<ArrowPathIcon className={"size-4.5 stroke-current stroke-1 text-(--text-tertiary) cursor-pointer group-hover:text-(--text-primary) group-hover:rotate-180 duration-300"} />
 						</button>
 						<button
 							className={
-								"group size-8 p-1 rounded-md cursor-pointer duration-150" +
+								"group p-2 rounded-full cursor-pointer inset-shadow-[0_0_0_2px_transparent] hover:inset-shadow-[0_0_0_2px_var(--accent)] duration-150" +
 								" " +
 								`
                             ${settings.brightness === "light" ? "text-(--text-tertiary) hover:text-(--text-primary) hover:bg-[#00000018]" : "text-(--text-primary) hover:text-(--text-secondary) hover:bg-[#ffffff10]"}
@@ -430,11 +433,11 @@ const Shell = () => {
 								} as any);
 							}}
 						>
-							<ArrowLeftIcon className={"size-full stroke-current stroke-1 text-(--text-tertiary) cursor-pointer group-hover:text-(--text-primary) duration-300"} />
+							<ArrowLeftIcon className={"size-4.5 stroke-current stroke-1 text-(--text-tertiary) cursor-pointer group-hover:text-(--text-primary) duration-300"} />
 						</button>
 						<button
 							className={
-								"group size-8 p-1 rounded-md cursor-pointer duration-150" +
+								"group p-2 rounded-full cursor-pointer inset-shadow-[0_0_0_2px_transparent] hover:inset-shadow-[0_0_0_2px_var(--accent)] duration-150" +
 								" " +
 								`
                             ${settings.brightness === "light" ? "text-(--text-tertiary) hover:text-(--text-primary) hover:bg-[#00000018]" : "text-(--text-primary) hover:text-(--text-secondary) hover:bg-[#ffffff10]"}
@@ -462,11 +465,11 @@ const Shell = () => {
 								} as any);
 							}}
 						>
-							<ArrowRightIcon className={"size-full stroke-current stroke-1 text-(--text-tertiary) cursor-pointer group-hover:text-(--text-primary) duration-300"} />
+							<ArrowRightIcon className={"size-4.5 stroke-current stroke-1 text-(--text-tertiary) cursor-pointer group-hover:text-(--text-primary) duration-300"} />
 						</button>
 						<button
 							className={
-								"group size-8 p-1 rounded-md cursor-pointer duration-150" +
+								"group p-2 rounded-full cursor-pointer inset-shadow-[0_0_0_2px_transparent] hover:inset-shadow-[0_0_0_2px_var(--accent)] duration-150" +
 								" " +
 								`
                             ${settings.brightness === "light" ? "text-(--text-tertiary) hover:text-(--text-primary) hover:bg-[#00000018]" : "text-(--text-primary) hover:text-(--text-secondary) hover:bg-[#ffffff10]"}
@@ -499,9 +502,9 @@ const Shell = () => {
 							}}
 						>
 							{isFavorited ? (
-								<StarIconSolid className={"size-full text-(--text-tertiary) cursor-pointer group-hover:text-(--text-primary) duration-300"} />
+								<StarIconSolid className={"size-4.5 text-(--text-tertiary) cursor-pointer group-hover:text-(--text-primary) duration-300"} />
 							) : (
-								<StarIconOutline className={"size-full stroke-current stroke-2 text-(--text-tertiary) cursor-pointer group-hover:text-(--text-primary) duration-300"} />
+								<StarIconOutline className={"size-4.5 stroke-current stroke-2 text-(--text-tertiary) cursor-pointer group-hover:text-(--text-primary) duration-300"} />
 							)}
 						</button>
 					</div>
@@ -573,7 +576,7 @@ const Shell = () => {
 						}
 					}}
 				>
-					{isFullscreen ? <ArrowsPointingInIcon className="size-6 text-current stroke-current stroke-0.5" /> : <ArrowsPointingOutIcon className="size-6 text-current stroke-current stroke-0.5" />}
+					{isFullscreen ? <ArrowsPointingInIcon className="p-0.5 size-5 text-current stroke-current stroke-1" /> : <ArrowsPointingOutIcon className="p-0.5 size-5 text-current stroke-current stroke-1" />}
 				</ShellButton>
 				<ShellButton
 					title="Settings"
@@ -587,7 +590,7 @@ const Shell = () => {
 						})
 					}
 				>
-					<Cog6ToothIcon className="size-6" />
+					<Cog6ToothIcon className="size-5" />
 				</ShellButton>
 				<ShellButton
 					title="Page selector"
@@ -600,11 +603,11 @@ const Shell = () => {
 										id: createId(),
 										title: "File Manager",
 										url: "about:files",
-										icon: <FolderIcon className="size-5" />,
+										icon: <FolderIcon className="size-4.5" />,
 										displayUrl: "about:files",
 									});
 								},
-								icon: <FolderIcon className="size-5" />,
+								icon: <FolderIcon className="size-4.5" />,
 							},
 							{
 								title: "Games",
@@ -613,11 +616,11 @@ const Shell = () => {
 										id: createId(),
 										title: "Games",
 										url: "about:games",
-										icon: <PlayIcon className="size-5" />,
+										icon: <PlayIcon className="size-4.5" />,
 										displayUrl: "about:games",
 									});
 								},
-								icon: <PlayIcon className="size-5" />,
+								icon: <PlayIcon className="size-4.5" />,
 							},
 							{
 								title: "Music",
@@ -628,10 +631,10 @@ const Shell = () => {
 										url: "about:music",
 										current: true,
 										displayUrl: "about:music",
-										icon: <MusicalNoteIcon className="size-5" />,
+										icon: <MusicalNoteIcon className="size-4.5" />,
 									});
 								},
-								icon: <MusicalNoteIcon className="size-5" />,
+								icon: <MusicalNoteIcon className="size-4.5" />,
 							},
 						];
 
@@ -643,7 +646,7 @@ const Shell = () => {
 						});
 					}}
 				>
-					<Bars3Icon className="size-6 stroke-1 stroke-current" />
+					<Bars3Icon className="size-4.5 stroke-1 stroke-current" />
 				</ShellButton>
 				{accountinfo ? (
 					<UserCard

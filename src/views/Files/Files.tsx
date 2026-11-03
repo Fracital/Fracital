@@ -1,6 +1,8 @@
-import { useSettingsStore, useFilesStore } from "../../store";
+import { useSettingsStore, useFilesStore, useTabsStore } from "../../store";
 import { useEffect, useRef, useState } from "react";
-import { ChevronRightIcon, FolderIcon, DocumentIcon } from "@heroicons/react/24/solid";
+import { ChevronRightIcon, FolderIcon, DocumentIcon, PlayIcon } from "@heroicons/react/24/solid";
+import { createId } from "@paralleldrive/cuid2";
+import { joinPath, normalizePath } from "./pathUtils";
 
 interface FilesProps {
 	children?: React.ReactNode;
@@ -13,6 +15,7 @@ const Files = ({ children, query }: FilesProps) => {
 	const fileTree = useFilesStore(state => state.fileTree);
 	const currentDirectory = useFilesStore(state => state.currentDirectory);
 	const setCurrentDirectory = useFilesStore(state => state.setCurrentDirectory);
+	const newTab = useTabsStore(state => state.newTab);
 
 	const [crumbs, setCrumbs] = useState<string[]>([]);
 
@@ -43,6 +46,36 @@ const Files = ({ children, query }: FilesProps) => {
 		// This could involve API calls or local file system access depending on the environment
 	}, [query]);
 
+	const openSwfInGamesTab = (entryName: string) => {
+		if (!entryName.toLowerCase().endsWith(".swf")) return;
+
+		const segments = currentDirectory.split("/").filter(Boolean);
+		const gamesIndex = segments.lastIndexOf("games");
+		const gameId = gamesIndex >= 0 && segments[gamesIndex + 1] ? segments[gamesIndex + 1] : segments[segments.length - 1];
+
+		if (!gameId) return;
+
+		newTab({
+			id: createId(),
+			title: "Games",
+			url: `about:games?g=${encodeURIComponent(gameId)}`,
+			displayUrl: `about:games?g=${encodeURIComponent(gameId)}`,
+			icon: <PlayIcon className="size-5" />,
+		});
+	};
+
+	const openFileInTextEditor = (entryName: string) => {
+		const filePath = normalizePath(entryName.startsWith("/") ? entryName : joinPath(currentDirectory, entryName));
+
+		newTab({
+			id: createId(),
+			title: entryName,
+			url: `about:text?path=${filePath}`,
+			displayUrl: `about:text?path=${filePath}`,
+			icon: <DocumentIcon className="size-5" />,
+		});
+	};
+
 	return (
 		<div className="w-full h-full relative overflow-hidden">
 			{
@@ -72,7 +105,7 @@ const Files = ({ children, query }: FilesProps) => {
 												key={index}
 												className="flex items-center p-1.5 px-2 gap-1.5 leading-none text-lg font-semibold hover:bg-[#ffffff10] rounded-md cursor-pointer duration-150"
 												onClick={() => {
-													const path = "/" + crumbs.slice(0, index + 1).join("/");
+													const path = normalizePath("/" + crumbs.slice(0, index + 1).join("/"));
 													setCurrentDirectory(path);
 												}}
 											>
@@ -93,13 +126,15 @@ const Files = ({ children, query }: FilesProps) => {
 								fileTree.map((entry, index) => (
 									<div
 										key={index}
-										className="flex items-center justify-center p-2 gap-1.5 w-max hover:bg-[#ffffff18] rounded-md cursor-pointer duration-100"
+										className="flex items-center justify-center p-2 gap-1.5 w-max hover:bg-[#ffffff18] rounded-md cursor-pointer select-none duration-100"
 										onClick={() => {
 											if (entry.isDirectory) {
-												const newPath = currentDirectory.endsWith("/") ? currentDirectory + entry.name : currentDirectory + "/" + entry.name;
+												const newPath = entry.path ? normalizePath(entry.path) : joinPath(currentDirectory, entry.name);
 												setCurrentDirectory(newPath);
+											} else if (entry.name.toLowerCase().endsWith(".swf")) {
+												openSwfInGamesTab(entry.name);
 											} else {
-												// Handle file click (e.g., open or play the file)
+												openFileInTextEditor(entry.name);
 											}
 										}}
 									>

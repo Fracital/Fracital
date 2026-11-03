@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef, type ChangeEvent } from "react";
-import { XMarkIcon, MagnifyingGlassIcon, Cog6ToothIcon, FolderIcon, MusicalNoteIcon, IdentificationIcon } from "@heroicons/react/24/solid";
+import { XMarkIcon, MagnifyingGlassIcon, Cog6ToothIcon, FolderIcon, MusicalNoteIcon, IdentificationIcon, DocumentIcon } from "@heroicons/react/24/solid";
 import type { TabProps } from "./Tab";
 import { useTabsStore } from "../store";
 import { navigationEvent } from "../libs/eventBus";
@@ -52,6 +52,8 @@ export const Search = ({ tab }: SearchProps) => {
 						return { title: "File Manager", icon: <FolderIcon className="size-5" /> };
 					case "account":
 						return { title: "Account Management", icon: <IdentificationIcon className="size-5" /> };
+					case "text":
+						return { title: "Text Editor", icon: <DocumentIcon className="size-5" /> }
 					default:
 						return { title: "New Tab", icon: null };
 				}
@@ -112,14 +114,14 @@ export const Search = ({ tab }: SearchProps) => {
 				"flex items-center justify-center gap-1.5 duration-250" +
 				" " +
 				`
-			${tabs && tabs.length > 0 && tab && tab.current !== true ? "absolute translate-y-8 opacity-0 pointer-events-none" : ""}
-        `
+					${tabs && tabs.length > 0 && tab && tab.current !== true ? "absolute translate-y-8 opacity-0 pointer-events-none" : ""}
+				`
 			}
 		>
 			<div
 				ref={searchRef}
 				className={
-					"flex items-center bg-(--secondary) h-12 gap-1 rounded-xl cursor-text duration-150" +
+					"flex items-center bg-(--secondary) h-12 gap-1 rounded-2xl cursor-text duration-150" +
 					" " +
 					`
                 ${searchFocused ? "inset-shadow-(--inset-shadow-accent)" : "inset-shadow-(--inset-shadow-secondary)"}

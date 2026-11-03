@@ -1,11 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import { useMusicStore, useSettingsStore } from "../../store";
-import { ArrowUpOnSquareIcon, BookmarkIcon, RectangleGroupIcon, PlusIcon, MusicalNoteIcon } from "@heroicons/react/24/solid";
+import { ArrowUpOnSquareIcon, BookmarkIcon, RectangleGroupIcon, PlusIcon, MusicalNoteIcon, XMarkIcon, MagnifyingGlassIcon } from "@heroicons/react/24/solid";
 import { PlayIcon, EllipsisHorizontalIcon } from "@heroicons/react/24/solid";
 import { MusicPath, type Track } from "../../types";
 import { parseBlob } from "music-metadata";
 import { createId } from "@paralleldrive/cuid2";
 import { ContextMenu, type MenuItem } from "../../components/ContextMenu";
+import { LYRICS_ACCEPT, LYRICS_PROVIDER_NAMES, findOnlineLyrics, readLocalLyrics, saveLyrics, saveParsedLyrics, type Lyrics, type SongQuery } from "../../libs/lyrics";
+import { TRACK_INFO_SOURCE_LABELS, audioDuration, fetchCoverDataUrl, findTrackInfo, guessFromFileName } from "../../libs/trackInfo";
+import { lyricFormatOf } from "../../libs/lrc";
 
 interface MusicLibraryProps {
 	query: string | undefined;
@@ -86,6 +89,22 @@ export const readTags = async (file: File): Promise<AudioTags | false> => {
 	}
 };
 
+// Placeholder values written by tag readers and older uploads count as missing.
+const isBlankTag = (value: unknown) => {
+	const text = (Array.isArray(value) ? value.join(", ") : String(value ?? "")).trim();
+	return !text || /^(unknown( (artist|album|genre|year))?|untitled|null|false)$/i.test(text);
+};
+
+const lyricsSummary = (lyrics: Lyrics) => `${lyrics.synced ? "synced" : "plain"} lyrics from ${LYRICS_PROVIDER_NAMES[lyrics.source] ?? lyrics.source}`;
+
+const blobToDataUrl = (blob: Blob) =>
+	new Promise<string>((resolve, reject) => {
+		const reader = new FileReader();
+		reader.onload = () => resolve(reader.result as string);
+		reader.onerror = () => reject(reader.error);
+		reader.readAsDataURL(blob);
+	});
+
 export const MusicLibrary = ({ query }: MusicLibraryProps) => {
 	const settings = useSettingsStore(state => state.settings);
 	const setCurrentTrack = useMusicStore(state => state.setCurrentTrack);
@@ -101,6 +120,12 @@ export const MusicLibrary = ({ query }: MusicLibraryProps) => {
 	const albumCoverRef = useRef<HTMLImageElement>(null);
 	const [albumCover, setAlbumCover] = useState<boolean | string>(false);
 	const [audio, setAudio] = useState<boolean | null>(null);
+	const [lyricsFile, setLyricsFile] = useState<File | null>(null);
+	const lyricsRef = useRef<HTMLInputElement>(null);
+	const [foundLyrics, setFoundLyrics] = useState<Lyrics | null>(null);
+	const [lookup, setLookup] = useState<{ searching: boolean; message: string }>({ searching: false, message: "" });
+	const lookupId = useRef(0);
+	const durationRef = useRef<number | undefined>(undefined);
 
 	const audioRef = useRef<HTMLInputElement>(null);
 	const titleRef = useRef<HTMLInputElement>(null);
@@ -204,6 +229,143 @@ export const MusicLibrary = ({ query }: MusicLibraryProps) => {
 			});
 		};
 	}, []);
+
+	const setCover = (dataUrl: string | false) => {
+		if (albumCoverRef.current) albumCoverRef.current.src = dataUrl || "";
+		setAlbumCover(dataUrl);
+	};
+
+	/** Fills empty upload fields, the cover and lyrics from online sources using the current title and artist. */
+	const findOnline = async (hasCover: boolean, hasLyrics: boolean) => {
+		const id = ++lookupId.current;
+		const title = titleRef.current?.value.trim() ?? "";
+		const artist = artistRef.current?.value.trim() ?? "";
+		if (!title) {
+			setLookup({ searching: false, message: "Enter a title to search online." });
+			return;
+		}
+		setLookup({ searching: true, message: "Searching online for song info and lyrics…" });
+
+		const songQuery: SongQuery = { title, artist: isBlankTag(artist) ? "" : artist, duration: durationRef.current };
+		const [info, lyrics] = await Promise.all([findTrackInfo(songQuery), hasLyrics ? Promise.resolve(null) : findOnlineLyrics(songQuery)]);
+		if (id !== lookupId.current) return;
+
+		const filled: string[] = [];
+		const fill = (ref: React.RefObject<HTMLInputElement | null>, value: string | undefined, label: string) => {
+			if (ref.current && value && isBlankTag(ref.current.value)) {
+				ref.current.value = value;
+				filled.push(label);
+			}
+		};
+		if (info) {
+			fill(artistRef, info.artist, "artist");
+			fill(albumRef, info.album, "album");
+			fill(genreRef, info.genre, "genre");
+			fill(yearRef, info.year, "year");
+			if (info.coverUrl && !hasCover) {
+				try {
+					const dataUrl = await fetchCoverDataUrl(info.coverUrl);
+					if (id !== lookupId.current) return;
+					setCover(dataUrl);
+					filled.push("cover");
+				} catch (err) {
+					console.warn("Failed to download cover:", err);
+				}
+			}
+		}
+		if (lyrics) setFoundLyrics(lyrics);
+
+		const parts: string[] = [];
+		if (info) parts.push(filled.length ? `Added ${filled.join(", ")} from ${TRACK_INFO_SOURCE_LABELS[info.source]}` : `Found on ${TRACK_INFO_SOURCE_LABELS[info.source]}, nothing new to add`);
+		if (lyrics) parts.push(`found ${lyricsSummary(lyrics)}`);
+		const message = parts.length ? `${parts.join("; ")}.` : "Nothing found online. Check the title and artist, then try again.";
+		setLookup({ searching: false, message: message.charAt(0).toUpperCase() + message.slice(1) });
+	};
+
+	/** Library action: fills missing tags, cover art and lyrics for a song already in the library. */
+	const findOnlineForSong = async (song: Track) => {
+		setContextMenu(null);
+		if (!song.folderName) {
+			window.fr.dialog.alert({ title: "Error", message: "Cannot look up this song: folder information missing." });
+			return;
+		}
+		const folderName = song.folderName;
+		const folderPath = `${MusicPath}/${folderName}`;
+
+		let tags: Record<string, unknown> = {};
+		try {
+			tags = JSON.parse(await window.fr.fs.promises.readFile(`${folderPath}/tags.json`, "utf8"));
+		} catch {
+			tags = {};
+		}
+
+		const guess = guessFromFileName(folderName);
+		const title = isBlankTag(tags.title) ? guess.title : String(tags.title);
+		const artist = isBlankTag(tags.artists) ? guess.artist : Array.isArray(tags.artists) ? tags.artists.join(", ") : String(tags.artists);
+		const local = await readLocalLyrics(song);
+		const songQuery: SongQuery = { title, artist, duration: local.duration };
+
+		const [info, lyrics] = await Promise.all([findTrackInfo(songQuery), local.lyrics ? Promise.resolve(null) : findOnlineLyrics(songQuery)]);
+
+		const filled: string[] = [];
+		if (info) {
+			const setTag = (key: string, value: unknown, label: string) => {
+				if (value && isBlankTag(tags[key])) {
+					tags[key] = value;
+					filled.push(label);
+				}
+			};
+			setTag("title", info.title, "title");
+			setTag(
+				"artists",
+				info.artist
+					.split(/\s*(?:,|&)\s*/)
+					.map(a => a.trim())
+					.filter(Boolean),
+				"artist",
+			);
+			setTag("album", info.album, "album");
+			setTag("genre", info.genre, "genre");
+			setTag("year", info.year, "year");
+			if (info.coverUrl && isBlankTag(tags.cover)) {
+				try {
+					tags.cover = await fetchCoverDataUrl(info.coverUrl);
+					filled.push("cover");
+				} catch (err) {
+					console.warn("Failed to download cover:", err);
+				}
+			}
+		}
+
+		try {
+			if (filled.length) await window.fr.fs.promises.writeFile(`${folderPath}/tags.json`, JSON.stringify(tags, null, 2));
+			if (lyrics) await saveParsedLyrics(folderName, lyrics);
+		} catch (err) {
+			console.error("Failed to save song info:", err);
+			window.fr.dialog.alert({ title: "Error", message: "Found info online but couldn't save it." });
+			return;
+		}
+
+		if (filled.length) {
+			const updated: Partial<Track> = {};
+			if (filled.includes("title")) updated.title = String(tags.title);
+			if (filled.includes("artist")) updated.artists = tags.artists as string[];
+			if (filled.includes("album")) updated.album = String(tags.album);
+			if (filled.includes("genre")) updated.genre = String(tags.genre);
+			if (filled.includes("year")) updated.year = String(tags.year);
+			if (filled.includes("cover")) updated.cover = String(tags.cover);
+			setLibrary(prev => prev.map(s => (s.id === song.id ? { ...s, ...updated } : s)));
+		}
+
+		const parts: string[] = [];
+		if (info) parts.push(filled.length ? `Added ${filled.join(", ")} from ${TRACK_INFO_SOURCE_LABELS[info.source]}.` : `Found "${song.title}" on ${TRACK_INFO_SOURCE_LABELS[info.source]}, but its info is already complete.`);
+		if (lyrics) parts.push(`Saved ${lyricsSummary(lyrics)}.`);
+		else if (local.lyrics) parts.push("It already has lyrics.");
+		window.fr.dialog.alert({
+			title: info || lyrics ? "Song Info Updated" : "Nothing Found",
+			message: info || lyrics ? parts.join(" ") : `Couldn't find "${title}" online. Try setting the title and artist first.`,
+		});
+	};
 
 	const pages = {
 		library: (
@@ -339,6 +501,40 @@ export const MusicLibrary = ({ query }: MusicLibraryProps) => {
 												icon: null,
 											},
 											{
+												title: "Find Info Online",
+												onClick: () => {
+													void findOnlineForSong(song);
+												},
+												icon: null,
+											},
+											{
+												title: "Add Lyrics",
+												onClick: () => {
+													if (!song.folderName) {
+														window.fr.dialog.alert({ title: "Error", message: "Cannot add lyrics: folder information missing." });
+														return;
+													}
+													const folderName = song.folderName;
+													const input = document.createElement("input");
+													input.type = "file";
+													input.accept = LYRICS_ACCEPT;
+													input.onchange = async e => {
+														const file = (e.target as HTMLInputElement).files?.[0];
+														if (!file) return;
+														try {
+															await saveLyrics(folderName, file);
+															window.fr.dialog.alert({ title: "Lyrics Added", message: `Lyrics added for "${song.title}".` });
+														} catch (err) {
+															console.error("Add lyrics failed:", err);
+															window.fr.dialog.alert({ title: "Error", message: err instanceof Error ? err.message : "An error occurred while adding lyrics." });
+														}
+														setContextMenu(null);
+													};
+													input.click();
+												},
+												icon: null,
+											},
+											{
 												title: "Remove from Library",
 												onClick: async () => {
 													try {
@@ -458,65 +654,107 @@ export const MusicLibrary = ({ query }: MusicLibraryProps) => {
                                 `}
 								/>
 							</div>
-							<label className="relative flex  h-max cursor-pointer bg-(--primary) rounded-lg inset-shadow-(--inset-shadow-primary) p-4 hover:bg-(--primary-hover) transition-colors">
-								<div className="relative flex gap-2 justify-center items-center">
-									<span className="text-sm font-semibold">{filename ? filename : "Upload Audio file"}</span>
-									<PlusIcon
-										className={
-											"size-4.5 stroke-current stroke-0.5" +
-											" " +
-											`
+							<div className="flex flex-col gap-2">
+								<label className="relative flex  h-max cursor-pointer bg-(--primary) rounded-lg inset-shadow-(--inset-shadow-primary) p-4 hover:bg-(--primary-hover) transition-colors">
+									<div className="relative flex gap-2 justify-center items-center">
+										<span className="text-sm font-semibold">{filename ? filename : "Upload Audio file"}</span>
+										<PlusIcon
+											className={
+												"size-4.5 stroke-current stroke-0.5" +
+												" " +
+												`
                                         ${filename ? "absolute opacity-0" : ""}
                                     `
-										}
-									/>
-								</div>
-								<input
-									ref={audioRef}
-									type="file"
-									accept="audio/*"
-									className="hidden"
-									onChange={async e => {
-										const file = e.target.files?.[0];
-										if (file) {
-											setAudio(true);
-											const tags = await readTags(file);
+											}
+										/>
+									</div>
+									<input
+										ref={audioRef}
+										type="file"
+										accept="audio/*"
+										className="hidden"
+										onChange={async e => {
+											const file = e.target.files?.[0];
+											if (file) {
+												setAudio(true);
+												setFoundLyrics(null);
+												const tags = await readTags(file);
 
-											setFileName(file.name);
-											const { title, artist, album, genre, year, picture } = tags as AudioTags;
-											console.log(artist);
-											if (titleRef.current && title) {
-												titleRef.current.value = title;
+												setFileName(file.name);
+												const { title, artist, album, genre, year, picture } = tags as AudioTags;
+												if (titleRef.current && title) {
+													titleRef.current.value = title;
+												}
+												if (artistRef.current && artist) {
+													artistRef.current.value = artist;
+												}
+												if (albumRef.current && album) {
+													albumRef.current.value = album;
+												}
+												if (genreRef.current && genre) {
+													// @ts-expect-error you know it works buddy
+													genreRef.current.value = genre;
+												}
+												if (yearRef.current && year) {
+													// @ts-expect-error you know it works buddy
+													yearRef.current.value = year;
+												}
+												let hasCover = albumCover !== false;
+												if (picture && picture.data) {
+													setCover(await blobToDataUrl(new Blob([Uint8Array.from(picture.data)], { type: picture.format })));
+													hasCover = true;
+												}
+
+												// Files without tags are usually named "Artist - Title".
+												const guess = guessFromFileName(file.name);
+												if (titleRef.current && isBlankTag(titleRef.current.value)) titleRef.current.value = guess.title;
+												if (artistRef.current && guess.artist && isBlankTag(artistRef.current.value)) artistRef.current.value = guess.artist;
+
+												durationRef.current = await audioDuration(file);
+												void findOnline(hasCover, !!lyricsFile);
 											}
-											if (artistRef.current && artist) {
-												artistRef.current.value = artist;
+										}}
+									/>
+								</label>
+								<label title="LRC, SRT or TXT lyrics" className="relative flex h-max cursor-pointer bg-(--primary) rounded-lg inset-shadow-(--inset-shadow-primary) p-4 hover:bg-(--primary-hover) transition-colors">
+									<div className="relative flex gap-2 justify-center items-center">
+										<span className="text-sm font-semibold">{lyricsFile ? lyricsFile.name : foundLyrics ? `Lyrics found online (${foundLyrics.synced ? "synced" : "plain"})` : "Add Lyrics (LRC, SRT, TXT)"}</span>
+										{lyricsFile || foundLyrics ? (
+											<XMarkIcon
+												title="Remove lyrics"
+												className="size-4.5 opacity-70 hover:opacity-100 duration-150"
+												onClick={e => {
+													e.preventDefault();
+													if (lyricsFile) {
+														setLyricsFile(null);
+														if (lyricsRef.current) lyricsRef.current.value = "";
+													} else {
+														setFoundLyrics(null);
+													}
+												}}
+											/>
+										) : (
+											<PlusIcon className="size-4.5 stroke-current stroke-0.5" />
+										)}
+									</div>
+									<input
+										ref={lyricsRef}
+										type="file"
+										accept={LYRICS_ACCEPT}
+										className="hidden"
+										onChange={e => {
+											const file = e.target.files?.[0];
+											if (!file) return;
+											if (!lyricFormatOf(file.name)) {
+												window.fr.dialog.alert({ title: "Unsupported Lyrics", message: "Please choose an LRC, SRT or TXT file." });
+												e.target.value = "";
+												return;
 											}
-											if (albumRef.current && album) {
-												albumRef.current.value = album;
-											}
-											if (genreRef.current && genre) {
-												// @ts-expect-error you know it works buddy
-												genreRef.current.value = genre;
-											}
-											if (yearRef.current && year) {
-												// @ts-expect-error you know it works buddy
-												yearRef.current.value = year;
-											}
-											if (albumCoverRef.current && picture && picture.data) {
-												const uint8 = Uint8Array.from(picture.data);
-												const blob = new Blob([uint8], { type: picture.format });
-												const reader = new FileReader();
-												reader.onload = e => {
-													const dataUrl = e.target?.result as string;
-													if (albumCoverRef.current) albumCoverRef.current.src = dataUrl;
-													setAlbumCover(dataUrl);
-												};
-												reader.readAsDataURL(blob);
-											}
-										}
-									}}
-								/>
-							</label>
+											setLyricsFile(file);
+										}}
+									/>
+								</label>
+							</div>
 						</div>
 						<div className="flex flex-col gap-1.5">
 							<span className="text-lg font-semibold">Title</span>
@@ -539,7 +777,17 @@ export const MusicLibrary = ({ query }: MusicLibraryProps) => {
 							<span className="text-lg font-semibold">Year</span>
 							<input ref={yearRef} type="text" className="pl-3 p-2 bg-(--primary) rounded-lg inset-shadow-(--inset-shadow-primary) focus-within:inset-shadow-(--inset-shadow-accent) focus-visible:outline-0 duration-150" />
 						</div>
-						<div className="flex justify-end w-full">
+						{lookup.message && <span className={`text-sm text-(--text-secondary) max-w-md ${lookup.searching ? "animate-pulse" : ""}`}>{lookup.message}</span>}
+						<div className="flex justify-between gap-2 w-full">
+							<button
+								title="Fill in empty fields, cover art and lyrics using the title and artist"
+								disabled={lookup.searching}
+								className="flex items-center gap-2 leading-none p-3 px-4 rounded-lg bg-(--primary) inset-shadow-(--inset-shadow-primary) hover:inset-shadow-(--inset-shadow-accent) focus-visible:inset-shadow-(--inset-shadow-accent) focus-visible:outline-0 cursor-pointer disabled:opacity-60 disabled:cursor-wait duration-150"
+								onClick={() => void findOnline(albumCover !== false, !!lyricsFile)}
+							>
+								<MagnifyingGlassIcon className="size-4" />
+								Find Info Online
+							</button>
 							<button
 								className="leading-none p-3 px-4 rounded-lg bg-(--primary) inset-shadow-(--inset-shadow-primary) hover:inset-shadow-(--inset-shadow-accent) focus-visible:inset-shadow-(--inset-shadow-accent) focus-visible:outline-0 cursor-pointer duration-150"
 								onClick={async () => {
@@ -589,9 +837,21 @@ export const MusicLibrary = ({ query }: MusicLibraryProps) => {
 									};
 									await window.fr.fs.promises.writeFile(`${MusicPath}/${baseName}/tags.json`, JSON.stringify(providedTags, null, 2));
 
+									let lyricsError: string | null = null;
+									const hasLyrics = !!(lyricsFile || foundLyrics);
+									if (hasLyrics) {
+										try {
+											if (lyricsFile) await saveLyrics(baseName, lyricsFile);
+											else if (foundLyrics) await saveParsedLyrics(baseName, foundLyrics);
+										} catch (err) {
+											console.error("Failed to save lyrics:", err);
+											lyricsError = err instanceof Error ? err.message : "Unknown error.";
+										}
+									}
+
 									window.fr.dialog.alert({
 										title: "Upload Successful",
-										message: "Your song and tags have been uploaded!",
+										message: lyricsError ? `Your song and tags have been uploaded, but the lyrics couldn't be saved: ${lyricsError}` : hasLyrics ? "Your song, tags and lyrics have been uploaded!" : "Your song and tags have been uploaded!",
 									});
 									if (titleRef.current) {
 										titleRef.current.value = "";
@@ -612,6 +872,12 @@ export const MusicLibrary = ({ query }: MusicLibraryProps) => {
 										albumCoverRef.current.src = "";
 									}
 									setFileName("");
+									setLyricsFile(null);
+									if (lyricsRef.current) lyricsRef.current.value = "";
+									setFoundLyrics(null);
+									lookupId.current++;
+									setLookup({ searching: false, message: "" });
+									durationRef.current = undefined;
 									setAlbumCover(false);
 									setAudio(null);
 									setpage("library");
