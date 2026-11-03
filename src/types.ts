@@ -131,4 +131,8 @@ export interface Track {
 	cover: string;
 	explicit: boolean;
 	src?: string;
+	/** Set for tracks streamed from the Digital Library, which can link back to their artist/album pages. */
+	source?: "digital-library";
+	artistId?: string;
+	albumId?: string;
 }

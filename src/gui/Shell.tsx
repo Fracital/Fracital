@@ -34,7 +34,8 @@ import type { linkProps } from "../views/Home";
 import { useModal } from "../components/Modal/ModalContext";
 import FavoriteModal from "../components/Modal/Favorite";
 import { Modal } from "../components/Modal/Modal";
-import { changeProxy, clearLogin, getLogin, getProxy } from "../types";
+import { changeProxy, getLogin, getProxy } from "../types";
+import { signOut } from "../libs/auth";
 import { ContextMenu, type MenuItem } from "../components/ContextMenu";
 
 declare global {
@@ -113,9 +114,9 @@ export const UserCard = ({ id, display, handle, avatar }: UserProps) => {
 							onClick={() => {
 								newTab({
 									id: createId(),
-									url: "https://accounts.terbiumon.top/manage",
-									displayUrl: "https://accounts.terbiumon.top/manage",
-									title: "Manage Account",
+									url: "about:account",
+									displayUrl: "about:account",
+									title: "Fracital Account",
 									icon: null,
 									current: true,
 								});
@@ -177,8 +178,7 @@ export const UserCard = ({ id, display, handle, avatar }: UserProps) => {
                         `
 							}
 							onClick={async () => {
-								await clearLogin();
-								window.dispatchEvent(new Event("account-upd"));
+								await signOut();
 							}}
 						>
 							<span className="text-md font-semibold leading-none w-max">Logout</span>
@@ -688,7 +688,7 @@ const Shell = () => {
 								id: createId(),
 								url: "about:account",
 								displayUrl: "about:account",
-								title: "Terbium Cloud Sign-In",
+								title: "Fracital Account",
 								icon: null,
 								current: true,
 							});

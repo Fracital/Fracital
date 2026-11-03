@@ -14,6 +14,7 @@ interface DeezerArtist {
 	picture_xl?: string;
 	picture_big?: string;
 	picture_medium?: string;
+	nb_fan?: number;
 }
 
 interface DeezerTrack {
@@ -41,14 +42,39 @@ export interface RadioTrack {
 
 const DZ = "https://api.deezer.com";
 
-async function dz<T>(path: string): Promise<T | null> {
+// Deezer allows ~50 requests per 5 seconds; queue calls so big batches
+// (e.g. resolving a Last.fm library) don't trip the quota.
+const DZ_MAX_CONCURRENT = 6;
+let dzActive = 0;
+const dzWaiting: (() => void)[] = [];
+
+/** Thrown for transient failures (quota, network) so callers don't cache them as "not found". */
+class DeezerUnavailable extends Error {}
+
+async function dzStrict<T>(path: string, attempt = 0): Promise<T> {
+	if (dzActive >= DZ_MAX_CONCURRENT) await new Promise<void>(resolve => dzWaiting.push(resolve));
+	dzActive++;
+	let data: (T & { error?: { code?: number } }) | null = null;
 	try {
 		const res = await fetch(`${DZ}${path}`, { headers: { Accept: "application/json" }, signal: AbortSignal.timeout(8000) });
-		if (!res.ok) return null;
-		return (await res.json()) as T;
+		data = res.ok ? ((await res.json()) as T & { error?: { code?: number } }) : null;
 	} catch {
-		return null;
+		data = null;
+	} finally {
+		dzActive--;
+		dzWaiting.shift()?.();
 	}
+	// Code 4 = quota exceeded: back off and retry a couple of times.
+	if (data?.error?.code === 4 && attempt < 3) {
+		await new Promise(r => setTimeout(r, 1200 * (attempt + 1)));
+		return dzStrict<T>(path, attempt + 1);
+	}
+	if (!data || data.error) throw new DeezerUnavailable(`Deezer request failed: ${path}`);
+	return data;
+}
+
+async function dz<T>(path: string): Promise<T | null> {
+	return dzStrict<T>(path).catch(() => null);
 }
 
 const artistCache = new Map<string, { at: number; artist: DeezerArtist | null }>();
@@ -59,8 +85,12 @@ export async function findDeezerArtist(name: string): Promise<DeezerArtist | nul
 	const key = name.toLowerCase().trim();
 	const cached = artistCache.get(key);
 	if (cached && Date.now() - cached.at < ARTIST_TTL) return cached.artist;
-	const data = await dz<{ data?: DeezerArtist[] }>(`/search/artist?q=${encodeURIComponent(name)}&limit=1`);
-	const artist = data?.data?.[0] ?? null;
+	let artist: DeezerArtist | null;
+	try {
+		artist = (await dzStrict<{ data?: DeezerArtist[] }>(`/search/artist?q=${encodeURIComponent(name)}&limit=1`)).data?.[0] ?? null;
+	} catch {
+		return null; // transient — don't cache
+	}
 	artistCache.set(key, { at: Date.now(), artist });
 	return artist;
 }
@@ -73,30 +103,57 @@ export async function artistBanner(name: string): Promise<string> {
 
 const bioCache = new Map<string, { at: number; bio: string }>();
 
+interface WikiSummary {
+	type?: string;
+	extract?: string;
+	title?: string;
+	description?: string;
+}
+
+async function wikiSummary(title: string): Promise<WikiSummary | null> {
+	try {
+		const res = await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title.replace(/ /g, "_"))}?redirect=true`, { headers: { "User-Agent": "Fracital/2.0" }, signal: AbortSignal.timeout(6000) });
+		return res.ok ? ((await res.json()) as WikiSummary) : null;
+	} catch {
+		return null;
+	}
+}
+
+/** A real article about a musical act — not one of their albums, a namesake, or a disambiguation page. */
+const isMusicalAct = (s: WikiSummary | null): s is WikiSummary =>
+	s?.type === "standard" &&
+	!!s.extract &&
+	/\b(band|musician|rapper|singer|songwriter|dj|producer|group|duo|trio|artist|composer|vocalist|guitarist|drummer|pianist|entertainer)\b/i.test(s.description ?? "") &&
+	!/\b(album|song|single|ep|mixtape|soundtrack|film|tour)\b/i.test(s.description ?? "");
+
+const norm = (s: string) => s.toLowerCase().replace(/\s*\(.*?\)\s*/g, "").replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+
 /** Short Wikipedia bio for an artist (cached; empty string when none exists). */
 export async function artistBio(name: string): Promise<string> {
 	const key = name.toLowerCase().trim();
 	const cached = bioCache.get(key);
 	if (cached && Date.now() - cached.at < ARTIST_TTL) return cached.bio;
 	let bio = "";
-	try {
-		// Search (biased to musicians) then fetch the page summary.
-		const search = (await (await fetch(`https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(`${name} musician`)}&format=json&srlimit=1`, { signal: AbortSignal.timeout(6000) })).json()) as {
-			query?: { search?: { title?: string }[] };
-		};
-		const title = search.query?.search?.[0]?.title;
-		if (title) {
-			const summary = (await (await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title.replace(/ /g, "_"))}`, { signal: AbortSignal.timeout(6000) })).json()) as {
-				type?: string;
-				extract?: string;
-				title?: string;
-			};
-			// Only use real articles that are actually about this artist.
-			if (summary.type === "standard" && summary.extract && (summary.title ?? "").toLowerCase().includes(name.toLowerCase().split(" ")[0])) bio = summary.extract;
-			else if (summary.type === "standard" && summary.extract && summary.extract.toLowerCase().includes(name.toLowerCase())) bio = summary.extract;
+	// The exact page (Wikipedia follows redirects like "Kanye West" → "Ye"), then common disambiguations.
+	for (const title of [name, `${name} (band)`, `${name} (rapper)`, `${name} (singer)`, `${name} (musician)`]) {
+		const summary = await wikiSummary(title);
+		if (isMusicalAct(summary)) {
+			bio = summary.extract!;
+			break;
 		}
-	} catch {
-		/* no bio */
+	}
+	// Last resort: search, but only accept a page titled after the artist.
+	if (!bio) {
+		try {
+			const search = (await (await fetch(`https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(`${name} musician`)}&format=json&srlimit=3`, { signal: AbortSignal.timeout(6000) })).json()) as {
+				query?: { search?: { title?: string }[] };
+			};
+			const hit = search.query?.search?.find(r => r.title && norm(r.title) === norm(name));
+			const summary = hit?.title ? await wikiSummary(hit.title) : null;
+			if (isMusicalAct(summary)) bio = summary.extract!;
+		} catch {
+			/* no bio */
+		}
 	}
 	bioCache.set(key, { at: Date.now(), bio });
 	return bio;
@@ -105,6 +162,8 @@ export async function artistBio(name: string): Promise<string> {
 export interface SimilarArtist {
 	name: string;
 	picture: string;
+	/** Deezer fan count. */
+	fans?: number;
 }
 
 /** Deezer's related-artists graph for "Similar Artists" shelves. */
@@ -112,7 +171,7 @@ export async function relatedArtists(name: string, limit = 10): Promise<SimilarA
 	const seed = await findDeezerArtist(name);
 	if (!seed) return [];
 	const related = await dz<{ data?: DeezerArtist[] }>(`/artist/${seed.id}/related?limit=${limit}`);
-	return (related?.data ?? []).filter(a => a.name).map(a => ({ name: a.name, picture: a.picture_big || a.picture_medium || "" }));
+	return (related?.data ?? []).filter(a => a.name).map(a => ({ name: a.name, picture: a.picture_big || a.picture_medium || "", fans: a.nb_fan }));
 }
 
 /**
@@ -139,6 +198,29 @@ const toRadioTrack = (t: DeezerTrack, apiBase: string): RadioTrack => ({
 	previewUrl: t.preview || "",
 	explicit: !!t.explicit_lyrics,
 });
+
+const trackCache = new Map<string, { at: number; track: DeezerTrack | null }>();
+
+/**
+ * Resolves a song by title + artist to a playable track (Deezer id, artwork, preview).
+ * Used to turn Last.fm's metadata-only tracks into playable ones. Cached.
+ */
+export async function findDeezerTrack(title: string, artist: string, apiBase: string): Promise<RadioTrack | null> {
+	const key = `${artist}|${title}`.toLowerCase();
+	const cached = trackCache.get(key);
+	let track: DeezerTrack | null;
+	if (cached && Date.now() - cached.at < ARTIST_TTL) track = cached.track;
+	else {
+		try {
+			const strict = await dzStrict<{ data?: DeezerTrack[] }>(`/search/track?q=${encodeURIComponent(`artist:"${artist}" track:"${title}"`)}&limit=1`);
+			track = strict.data?.[0] ?? (await dzStrict<{ data?: DeezerTrack[] }>(`/search/track?q=${encodeURIComponent(`${artist} ${title}`)}&limit=1`)).data?.[0] ?? null;
+		} catch {
+			return null; // transient — don't cache, so the next request retries
+		}
+		trackCache.set(key, { at: Date.now(), track });
+	}
+	return track ? toRadioTrack(track, apiBase) : null;
+}
 
 const shuffle = <T,>(list: T[]): T[] => {
 	const copy = [...list];

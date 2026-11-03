@@ -9,6 +9,7 @@ import { ContextMenu, type MenuItem } from "../../components/ContextMenu";
 import { LYRICS_ACCEPT, LYRICS_PROVIDER_NAMES, findOnlineLyrics, readLocalLyrics, saveLyrics, saveParsedLyrics, type Lyrics, type SongQuery } from "../../libs/lyrics";
 import { TRACK_INFO_SOURCE_LABELS, audioDuration, fetchCoverDataUrl, findTrackInfo, guessFromFileName } from "../../libs/trackInfo";
 import { lyricFormatOf } from "../../libs/lrc";
+import { splitArtistCredit } from "../../libs/artistCredit";
 
 interface MusicLibraryProps {
 	query: string | undefined;
@@ -318,10 +319,7 @@ export const MusicLibrary = ({ query }: MusicLibraryProps) => {
 			setTag("title", info.title, "title");
 			setTag(
 				"artists",
-				info.artist
-					.split(/\s*(?:,|&)\s*/)
-					.map(a => a.trim())
-					.filter(Boolean),
+				splitArtistCredit(info.artist),
 				"artist",
 			);
 			setTag("album", info.album, "album");

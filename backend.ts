@@ -14,7 +14,10 @@ import { server as wisp } from "@mercuryworkshop/wisp-js/server";
 import { create as createYoutubeDl } from "youtube-dl-exec";
 import ytSearch from "yt-search";
 import { rankAlbums, rankArtists, rankTracks } from "./src/server/music-rank";
-import { artistBanner, artistTopTracks, buildRadio, findDeezerArtist } from "./src/server/music-radio";
+import { artistBanner, artistBio, artistTopTracks, buildRadio, findDeezerArtist, relatedArtists } from "./src/server/music-radio";
+import { artistStats, lastfmKey, trackPlays } from "./src/server/music-stats";
+import { getAccountsApp, initAccounts } from "./src/server/accounts";
+import { artistExtras } from "./src/server/artist-extras";
 
 export function fsrv() {
 	config.config();
@@ -115,6 +118,12 @@ export function fsrv() {
 	}
 
 	// ============================================================
+	// Fracital Accounts (/api/auth, /api/me)
+	// ============================================================
+	void initAccounts();
+	app.route("/", getAccountsApp());
+
+	// ============================================================
 	// Music API
 	// ============================================================
 	const ytDlpPath = process.env.YT_DLP_PATH || "yt-dlp";
@@ -135,7 +144,26 @@ export function fsrv() {
 		} catch { return null; }
 	};
 
-	app.get("/api/music/health", c => c.json({ status: "ok", caches: { videos: trackToVideoCache.size, streams: streamUrlCache.size } }));
+	// Social links + gallery photos for the artist page hero (loaded after the page).
+	app.get("/api/music/artist-extras", async c => {
+		const name = c.req.query("name")?.trim();
+		if (!name) return c.json({ error: "name is required" }, 400);
+		c.header("Cache-Control", "public, max-age=3600");
+		return c.json(await artistExtras(name));
+	});
+
+	// Play count for one song (YouTube views of its best-matching upload).
+	app.get("/api/music/plays", async c => {
+		const title = c.req.query("title")?.trim();
+		const artist = c.req.query("artist")?.trim();
+		if (!title || !artist) return c.json({ error: "title and artist are required" }, 400);
+		const stats = await trackPlays(title, artist);
+		// Only cache hits, so a miss (e.g. before a Last.fm key is added) can be retried.
+		c.header("Cache-Control", stats ? "public, max-age=3600" : "no-store");
+		return c.json({ plays: stats?.plays ?? null, listeners: stats?.listeners ?? null, source: stats?.source ?? null });
+	});
+
+	app.get("/api/music/health", c => c.json({ status: "ok", lastfm: !!lastfmKey(), caches: { videos: trackToVideoCache.size, streams: streamUrlCache.size } }));
 
 	// Radio: a seeded, variety-tunable mix built from Deezer's artist graph.
 	app.get("/api/music/radio", async c => {
@@ -240,10 +268,16 @@ export function fsrv() {
 			const ad = (await ar.json()) as { results?: any[] };
 			const rec = (sd.results || [])[0] || (ad.results || [])[0];
 			const artistName = rec?.artistName || "Unknown";
-			const banner = artistName !== "Unknown" ? await artistBanner(artistName) : "";
-			const artist = { id: String(rec?.artistId || id), name: artistName, picture: banner || artworkHd(rec?.artistId ? rec?.artworkUrl100 : ""), banner };
-			// Top tracks ranked by real streaming popularity (Deezer rank); iTunes order is the fallback.
-			const ranked = artistName !== "Unknown" ? await artistTopTracks(artistName, "/api/music", 20).catch(() => []) : [];
+			const known = artistName !== "Unknown";
+			const [banner, bio, similar, ranked, dzArtist] = await Promise.all([
+				known ? artistBanner(artistName) : Promise.resolve(""),
+				known ? artistBio(artistName).catch(() => "") : Promise.resolve(""),
+				known ? relatedArtists(artistName).catch(() => []) : Promise.resolve([]),
+				// Top tracks ranked by real streaming popularity (Deezer rank); iTunes order is the fallback.
+				known ? artistTopTracks(artistName, "/api/music", 20).catch(() => []) : Promise.resolve([]),
+				known ? findDeezerArtist(artistName).catch(() => null) : Promise.resolve(null),
+			]);
+			const artist = { id: String(rec?.artistId || id), name: artistName, picture: banner || artworkHd(rec?.artistId ? rec?.artworkUrl100 : ""), banner, bio, fans: dzArtist?.nb_fan };
 			const tracks = ranked.length > 0
 				? ranked
 				: (sd.results || []).filter((r: any) => r.wrapperType === "track" && r.kind === "song").map((item: any) => ({
@@ -254,9 +288,16 @@ export function fsrv() {
 					previewUrl: item.previewUrl || "", explicit: item.trackExplicitness === "explicit",
 				}));
 			const albums = (ad.results || []).filter((r: any) => r.wrapperType === "collection").map((r: any) => ({
-				id: String(r.collectionId), title: r.collectionName, artist: r.artistName, artwork: artworkHd(r.artworkUrl100), trackCount: r.trackCount, releaseDate: r.releaseDate, type: albumType(r.collectionName),
+				id: String(r.collectionId), title: r.collectionName, artist: r.artistName, artwork: artworkHd(r.artworkUrl100), trackCount: r.trackCount, releaseDate: r.releaseDate, type: albumType(r.collectionName), explicit: r.collectionExplicitness === "explicit",
 			})).sort((a: any, b: any) => new Date(b.releaseDate || 0).getTime() - new Date(a.releaseDate || 0).getTime());
-			return c.json({ artist, tracks, albums });
+			// Last.fm listener counts (no-op without LASTFM_API_KEY).
+			const [mainStats, ...similarStats] = await Promise.all([artistStats(artistName), ...similar.map(s => artistStats(s.name))]);
+			return c.json({
+				artist: { ...artist, listeners: mainStats?.listeners, scrobbles: mainStats?.plays },
+				similar: similar.map((s, i) => ({ ...s, listeners: similarStats[i]?.listeners })),
+				tracks,
+				albums,
+			});
 		} catch (err: any) { return c.json({ error: err.message }, 502); }
 	});
 
@@ -309,7 +350,8 @@ export function fsrv() {
 
 		let videoId: string | null = null;
 		if (videoIdPattern.test(id)) { videoId = id; }
-		else if (/^\d+$/.test(id)) {
+		// Numeric catalog ids, or lfm-<hash> for Last.fm songs that resolve via the title/artist hints.
+		else if (/^(\d+|lfm-[a-f0-9]+)$/.test(id)) {
 			videoId = trackToVideoCache.get(id) || null;
 			if (!videoId) {
 				let t = titleHint, a = artistHint;

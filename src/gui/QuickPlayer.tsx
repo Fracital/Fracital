@@ -7,6 +7,24 @@ import { useMusicStore, usePlaybackStore, useSettingsStore, useTabsStore } from 
 import { ContextMenu, type MenuItem } from "../components/ContextMenu";
 import { AudvisVisualizer } from "../components/AudvisVisualizer";
 import { openMusicPlayer, registerAudio } from "../libs/playback";
+import { openLibraryPage } from "../libs/aboutPages";
+import type { Track } from "../types";
+
+/** Digital Library tracks link their artist names to artist pages. */
+const openTrackArtist = (track: Track, name: string) => {
+	const solo = !Array.isArray(track.artists) || track.artists.length === 1;
+	if (solo && track.artistId) openLibraryPage(`artist=${encodeURIComponent(track.artistId)}`, name);
+	else openLibraryPage(`artistName=${encodeURIComponent(name)}`, name);
+};
+
+/** Digital Library tracks link their title to the album or single they come from. */
+const openTrackAlbum = (track: Track) => {
+	if (track.albumId) return openLibraryPage(`album=${encodeURIComponent(track.albumId)}`, track.album || track.title);
+	const artist = Array.isArray(track.artists) ? track.artists[0] : track.artists;
+	openLibraryPage(`track=${encodeURIComponent(track.title)}&by=${encodeURIComponent(artist)}`, track.album || track.title);
+};
+
+const isLinkable = (track: Track | null | undefined) => track?.source === "digital-library";
 
 interface QuickPlayerProps {
 	panelsOpen: boolean;
@@ -484,7 +502,11 @@ export const QuickPlayer = ({ panelsOpen, className, onMouseDown }: QuickPlayerP
 													</div>
 												)}
 												<div className="flex flex-col gap-1">
-													<h1 title={currentTrack.title} className={`text-md font-semibold leading-none`}>
+													<h1
+														title={currentTrack.title}
+														className={`text-md font-semibold leading-none ${isLinkable(currentTrack) ? "cursor-pointer hover:underline" : ""}`}
+														onClick={isLinkable(currentTrack) ? () => openTrackAlbum(currentTrack) : undefined}
+													>
 														{currentTrack.title.length > 22 ? currentTrack.title.slice(0, 22) + "..." : currentTrack.title}
 													</h1>
 													{Array.isArray(currentTrack.artists) && currentTrack.artists.length > 1 ? (
@@ -493,7 +515,11 @@ export const QuickPlayer = ({ panelsOpen, className, onMouseDown }: QuickPlayerP
 															<div className="flex lg:flex-row flex-col gap-0.5">
 																{currentTrack.artists.map((artist, index) => (
 																	<div key={index} className={`flex justify-center items-center w-max`}>
-																		<span className="text-xs leading-none duration-150" key={index}>
+																		<span
+																			className={`text-xs leading-none duration-150 ${isLinkable(currentTrack) ? "cursor-pointer hover:underline" : ""}`}
+																			key={index}
+																			onClick={isLinkable(currentTrack) ? () => openTrackArtist(currentTrack, artist) : undefined}
+																		>
 																			{artist}
 																		</span>
 																		{index < currentTrack.artists.length - 1 && <span>,</span>}
@@ -512,7 +538,12 @@ export const QuickPlayer = ({ panelsOpen, className, onMouseDown }: QuickPlayerP
 															)}
 														</div>
 													) : (
-														<h2 className={`text-sm leading-none cursor-pointer duration-150`}>{Array.isArray(currentTrack.artists) ? currentTrack.artists[0] : currentTrack.artists}</h2>
+														<h2
+															className={`text-sm leading-none cursor-pointer duration-150 ${isLinkable(currentTrack) ? "hover:underline" : ""}`}
+															onClick={isLinkable(currentTrack) ? () => openTrackArtist(currentTrack, Array.isArray(currentTrack.artists) ? currentTrack.artists[0] : currentTrack.artists) : undefined}
+														>
+															{Array.isArray(currentTrack.artists) ? currentTrack.artists[0] : currentTrack.artists}
+														</h2>
 													)}
 												</div>
 											</div>
@@ -1002,8 +1033,25 @@ export const QuickPlayer = ({ panelsOpen, className, onMouseDown }: QuickPlayerP
 								</div>
 								<div className="flex flex-col items-center justify-center w-full gap-2">
 									<div className="flex flex-col items-center gap-1.5">
-										<h1 className="font-bold text-2xl leading-none">{currentTrack?.title}</h1>
-										<h2 className="font-semibold text-lg text-center leading-none mt-0.5">{Array.isArray(currentTrack?.artists) ? currentTrack.artists.join(", ") : (currentTrack?.artists ?? "")}</h2>
+										<h1
+											className={`font-bold text-2xl leading-none ${isLinkable(currentTrack) ? "cursor-pointer hover:underline" : ""}`}
+											onClick={isLinkable(currentTrack) ? () => openTrackAlbum(currentTrack!) : undefined}
+										>
+											{currentTrack?.title}
+										</h1>
+										<h2 className="font-semibold text-lg text-center leading-none mt-0.5">
+											{(Array.isArray(currentTrack?.artists) ? currentTrack.artists : currentTrack?.artists ? [currentTrack.artists] : []).map((artist, i, all) => (
+												<span key={`${artist}-${i}`}>
+													<span
+														className={isLinkable(currentTrack) ? "cursor-pointer hover:underline" : ""}
+														onClick={isLinkable(currentTrack) ? () => openTrackArtist(currentTrack!, artist) : undefined}
+													>
+														{artist}
+													</span>
+													{i < all.length - 1 && ", "}
+												</span>
+											))}
+										</h2>
 									</div>
 									<div className="flex w-full">
 										<div className="relative flex justify-center items-center w-full h-9">

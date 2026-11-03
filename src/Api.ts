@@ -1,4 +1,5 @@
-import { fetcher } from "./libs/auth";
+import { meFetch, refreshMe } from "./libs/auth";
+import { startScrobbler } from "./libs/scrobbler";
 import { useSettingsStore } from "./store";
 import { getLogin, SettingsPath, ThemePath, wispURL, type COM } from "./types";
 import { libcurl } from "libcurl.js";
@@ -48,35 +49,30 @@ export const Api = async () => {
 		sh: new Filer.fs.Shell(),
 		net: libcurl,
 		sync: {
+			// Settings sync with the signed-in Fracital Account (stores the raw settings.json text).
 			get: async () => {
 				window.fr.sync.syncing = true;
-				const rp = await fetcher("https://auth.terbiumon.top/kv/retrieve/frac_settings", {
-					credentials: "include",
-				});
-				if (!rp.ok) return false;
-				const settings = await rp.json();
-				if (!settings.value) {
-					window.fr.sync.syncing = false;
+				try {
+					const settings = await meFetch<{ value: string | null }>("/api/me/settings");
+					if (!settings.value) return false;
+					await window.fr.fs.promises.writeFile(SettingsPath, settings.value);
+					return true;
+				} catch {
 					return false;
+				} finally {
+					window.fr.sync.syncing = false;
 				}
-				await window.fr.fs.promises.writeFile(SettingsPath, settings.value);
-				window.fr.sync.syncing = false;
-				return true;
 			},
 			set: async () => {
 				window.fr.sync.syncing = true;
-				const rp = await fetcher("https://auth.terbiumon.top/kv/set/frac_settings", {
-					credentials: "include",
-					method: "POST",
-					headers: {
-						"Content-Type": "application/json",
-					},
-					body: JSON.stringify({
-						value: JSON.stringify(await window.fr.fs.promises.readFile(SettingsPath, "utf8")),
-					}),
-				});
-				window.fr.sync.syncing = false;
-				return rp.json();
+				try {
+					const value = await window.fr.fs.promises.readFile(SettingsPath, "utf8");
+					await meFetch("/api/me/settings", { method: "PUT", body: JSON.stringify({ value }) });
+				} catch (err) {
+					console.error("Settings sync failed:", err);
+				} finally {
+					window.fr.sync.syncing = false;
+				}
 			},
 			syncing: false,
 		},
@@ -89,7 +85,10 @@ export const Api = async () => {
 			.then(() => libcurl.set_websocket(wispURL as `ws://${string}` | `wss://${string}`))
 			.catch(error => console.error("Failed to load libcurl WASM:", error));
 
+		startScrobbler();
 		void (async () => {
+			// Confirm the saved login still has a live session (clears it if it expired).
+			if ((await getLogin()) !== null) await refreshMe();
 			if ((await getLogin()) !== null) {
 				await window.fr.sync.get();
 				window.fr.fs.watch(SettingsPath, async (e: string, _f: string) => {

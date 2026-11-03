@@ -9,7 +9,8 @@
  * Configure the base URL via `configureMusicApi()` in init.ts.
  */
 
-import { fileExists } from "../types";
+import { fileExists, type Track } from "../types";
+import { rememberArtistNames, splitArtistCredit } from "./artistCredit";
 
 // ============================================================
 // Configuration
@@ -65,6 +66,7 @@ export interface MusicAlbum {
 	trackCount?: number;
 	/** Release kind, derived from iTunes's " - Single" / " - EP" title suffixes. */
 	type?: "album" | "single" | "ep";
+	explicit?: boolean;
 }
 
 /** Album title without iTunes's " - Single" / " - EP" suffix. */
@@ -78,6 +80,29 @@ export interface MusicArtist {
 	picture: string;
 	/** Full-size image for the artist page hero banner. */
 	banner?: string;
+	/** Short Wikipedia bio shown on the artist page hero. */
+	bio?: string;
+	/** Deezer fan count. */
+	fans?: number;
+	/** Last.fm unique listeners (only when the server has a Last.fm key). */
+	listeners?: number;
+	/** Last.fm total scrobbles. */
+	scrobbles?: number;
+}
+
+/** A related artist from Deezer's graph — has no catalog id, so it's opened by name. */
+export interface SimilarArtist {
+	name: string;
+	picture: string;
+	fans?: number;
+	listeners?: number;
+}
+
+export interface TrackPlays {
+	plays: number;
+	listeners?: number;
+	/** "lastfm" = scrobbles, "youtube" = view count of the best-matching upload. */
+	source: "lastfm" | "youtube";
 }
 
 export interface SearchResults {
@@ -95,6 +120,7 @@ export interface ArtistDetail {
 	artist: MusicArtist;
 	albums: MusicAlbum[];
 	tracks: MusicTrack[];
+	similar?: SimilarArtist[];
 }
 
 // ============================================================
@@ -136,7 +162,9 @@ async function apiFetch<T>(path: string, signal?: AbortSignal): Promise<T> {
 // --- Search ---
 
 export async function searchTracks(query: string, limit = 24, signal?: AbortSignal): Promise<SearchResults> {
-	return apiFetch(`/search?q=${encodeURIComponent(query)}&limit=${limit}`, signal);
+	const res = await apiFetch<SearchResults>(`/search?q=${encodeURIComponent(query)}&limit=${limit}`, signal);
+	rememberArtistNames((res.artists ?? []).map(a => a.name));
+	return res;
 }
 
 // --- Albums ---
@@ -148,7 +176,90 @@ export async function getAlbum(id: string): Promise<AlbumDetail> {
 // --- Artists ---
 
 export async function getArtist(id: string): Promise<ArtistDetail> {
-	return apiFetch(`/artist/${encodeURIComponent(id)}`);
+	const res = await apiFetch<ArtistDetail>(`/artist/${encodeURIComponent(id)}`);
+	rememberArtistNames([res.artist?.name, ...(res.similar ?? []).map(s => s.name)]);
+	return res;
+}
+
+const playsCache = new Map<string, Promise<TrackPlays | null>>();
+
+/** A song's play count (Last.fm scrobbles, or YouTube views as a fallback); null when unknown. */
+export function getTrackPlays(title: string, artist: string): Promise<TrackPlays | null> {
+	const key = `${artist}|${title}`.toLowerCase();
+	let pending = playsCache.get(key);
+	if (!pending) {
+		// v=2 skips stale browser-cached misses from before Last.fm support.
+		pending = apiFetch<{ plays: number | null; listeners: number | null; source: TrackPlays["source"] | null }>(`/plays?title=${encodeURIComponent(title)}&artist=${encodeURIComponent(artist)}&v=2`)
+			.then(r => (r.plays && r.source ? { plays: r.plays, listeners: r.listeners ?? undefined, source: r.source } : null))
+			.catch(() => {
+				playsCache.delete(key);
+				return null;
+			});
+		playsCache.set(key, pending);
+	}
+	return pending;
+}
+
+// --- Artist page extras (social links + gallery photos) ---
+
+export type ArtistLinkKind = "instagram" | "spotify" | "youtube" | "tidal" | "apple" | "soundcloud" | "x" | "tiktok" | "facebook" | "bandcamp" | "deezer" | "website";
+
+export interface ArtistExtras {
+	links: { kind: ArtistLinkKind; url: string }[];
+	images: string[];
+}
+
+export function getArtistExtras(name: string): Promise<ArtistExtras> {
+	return apiFetch<ArtistExtras>(`/artist-extras?name=${encodeURIComponent(name)}`).catch(() => ({ links: [], images: [] }));
+}
+
+// --- Your Library (Fracital Account + Last.fm; same-origin /api/me) ---
+
+export type LibraryTrack = MusicTrack & { userPlays?: number; lovedAt?: number; playedAt?: number; nowPlaying?: boolean };
+export interface LibraryArtist {
+	name: string;
+	picture: string;
+	fans?: number;
+	userPlays?: number;
+	because?: string;
+}
+export interface LibraryAlbum {
+	title: string;
+	artist: string;
+	artwork: string;
+	userPlays?: number;
+}
+export type LastfmPeriod = "7day" | "1month" | "3month" | "6month" | "12month" | "overall";
+
+async function meJson<T>(path: string, init: RequestInit = {}): Promise<T> {
+	const res = await fetch(path, { ...init, credentials: "include", headers: init.body ? { "Content-Type": "application/json" } : undefined });
+	const data = await res.json().catch(() => ({}));
+	if (!res.ok) throw Object.assign(new Error((data as { error?: string }).error || `Request failed (${res.status})`), { status: res.status });
+	return data as T;
+}
+
+const resolveLibrary = <T extends { tracks?: MusicTrack[] }>(data: T): T => ({ ...data, tracks: data.tracks?.map(resolveTrackUrls) });
+
+export const library = {
+	loved: () => meJson<{ total: number; tracks: LibraryTrack[] }>("/api/me/library/loved?limit=50").then(resolveLibrary),
+	recent: () => meJson<{ tracks: LibraryTrack[] }>("/api/me/library/recent?limit=30").then(resolveLibrary),
+	topTracks: (period: LastfmPeriod) => meJson<{ tracks: LibraryTrack[] }>(`/api/me/library/top-tracks?period=${period}&limit=30`).then(resolveLibrary),
+	topArtists: (period: LastfmPeriod) => meJson<{ artists: LibraryArtist[] }>(`/api/me/library/top-artists?period=${period}&limit=30`),
+	topAlbums: (period: LastfmPeriod) => meJson<{ albums: LibraryAlbum[] }>(`/api/me/library/top-albums?period=${period}&limit=30`),
+	recommendations: () => meJson<{ artists: LibraryArtist[]; tracks: LibraryTrack[] }>("/api/me/recommendations").then(resolveLibrary),
+	savedArtists: () => meJson<{ artists: { id: string; name: string; picture: string }[] }>("/api/me/artists"),
+	saveArtist: (id: string, name: string, picture: string, saved: boolean) =>
+		meJson<{ saved: boolean }>(`/api/me/artists/${encodeURIComponent(id)}`, saved ? { method: "PUT", body: JSON.stringify({ name, picture }) } : { method: "DELETE" }),
+	/** The user's own plays + loved state per song, keyed by the caller's keys. */
+	trackStats: (tracks: { key: string; title: string; artist: string }[]) =>
+		meJson<Record<string, { userPlays: number; loved: boolean }>>("/api/me/stats/tracks", { method: "POST", body: JSON.stringify({ tracks }) }),
+	artistStats: (name: string) => meJson<{ userPlays: number | null }>(`/api/me/stats/artist?name=${encodeURIComponent(name)}`),
+	love: (title: string, artist: string, loved: boolean) => meJson<{ loved: boolean }>("/api/me/love", { method: "POST", body: JSON.stringify({ title, artist, loved }) }),
+};
+
+/** Compact count like Spotify's: 271M, 2.75M, 84.8K. */
+export function formatCount(n: number): string {
+	return new Intl.NumberFormat("en", { notation: "compact", maximumSignificantDigits: 3 }).format(n);
 }
 
 export async function getArtistTop(id: string, limit = 20): Promise<{ tracks: MusicTrack[] }> {
@@ -213,17 +324,14 @@ export function formatDuration(seconds: number): string {
 	return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
-/** Splits a combined credit like "Jenny Rejects & ilostmykeys" into individual artist names. */
-export function splitArtistCredit(credit: string): string[] {
-	return credit
-		.split(/\s*(?:,|&|\bfeat\.?\b|\bft\.?\b|\bfeaturing\b|\bwith\b|\bvs\.?\b|\bx\b)\s*/i)
-		.map(s => s.trim())
-		.filter(Boolean);
-}
+export { splitArtistCredit };
 
-export function trackToFracital(track: MusicTrack) {
+export function trackToFracital(track: MusicTrack): Track {
 	const artists = splitArtistCredit(track.artist);
 	return {
+		source: "digital-library",
+		artistId: track.artistId,
+		albumId: track.albumId,
 		id: `ms-${track.id}`,
 		title: track.title,
 		// An array lets the player render collab credits individually.

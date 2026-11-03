@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from "react";
 import { useMusicStore, useSettingsStore, useTabsStore } from "../store";
 import { updatePageTab } from "../libs/aboutPages";
-import { MagnifyingGlassIcon, PlayIcon, PlusIcon, MusicalNoteIcon, ChartBarIcon, RadioIcon, AdjustmentsHorizontalIcon } from "@heroicons/react/24/solid";
+import { MagnifyingGlassIcon, PlayIcon, PlusIcon, MusicalNoteIcon, ChartBarIcon, RadioIcon, AdjustmentsHorizontalIcon, EllipsisHorizontalIcon, UserIcon } from "@heroicons/react/24/solid";
 import { FireIcon } from "@heroicons/react/24/outline";
 import { createId } from "@paralleldrive/cuid2";
 import {
@@ -17,14 +17,64 @@ import {
 	cleanAlbumTitle,
 	splitArtistCredit,
 	getMusicApiConfig,
+	getTrackPlays,
+	getArtistExtras,
+	library,
+	formatCount,
+	type ArtistExtras,
+	type ArtistLinkKind,
 	type MusicTrack,
 	type MusicAlbum,
 	type MusicArtist,
 	type AlbumDetail,
 	type ArtistDetail,
+	type TrackPlays,
 } from "../libs/music-service";
+import { ContextMenu, type MenuItem } from "../components/ContextMenu";
+import { Shelf } from "../components/Shelf";
+import { YourLibrary } from "./YourLibrary";
+import { songKey, useLastfmStore } from "../libs/lastfmState";
+import { CheckIcon, GlobeAltIcon, HeartIcon } from "@heroicons/react/24/solid";
+import { HeartIcon as HeartOutlineIcon, SquaresPlusIcon } from "@heroicons/react/24/outline";
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+import { faApple, faBandcamp, faDeezer, faFacebook, faInstagram, faSoundcloud, faSpotify, faTidal, faTiktok, faXTwitter, faYoutube, type IconDefinition } from "@fortawesome/free-brands-svg-icons";
 
 type Page = "home" | "search" | "album" | "artist";
+
+const LINK_ICONS: Partial<Record<ArtistLinkKind, IconDefinition>> = {
+	instagram: faInstagram,
+	spotify: faSpotify,
+	youtube: faYoutube,
+	tidal: faTidal,
+	apple: faApple,
+	soundcloud: faSoundcloud,
+	x: faXTwitter,
+	tiktok: faTiktok,
+	facebook: faFacebook,
+	bandcamp: faBandcamp,
+	deezer: faDeezer,
+};
+
+const LINK_LABELS: Record<ArtistLinkKind, string> = {
+	instagram: "Instagram",
+	spotify: "Spotify",
+	youtube: "YouTube",
+	tidal: "TIDAL",
+	apple: "Apple Music",
+	soundcloud: "SoundCloud",
+	x: "X",
+	tiktok: "TikTok",
+	facebook: "Facebook",
+	bandcamp: "Bandcamp",
+	deezer: "Deezer",
+	website: "Website",
+};
+
+const LinkIcon = ({ kind, small }: { kind: ArtistLinkKind; small?: boolean }) => {
+	const icon = LINK_ICONS[kind];
+	const size = small ? "size-4" : "size-6";
+	return icon ? <FontAwesomeIcon icon={icon} className={size} /> : <GlobeAltIcon className={size} />;
+};
 
 interface DigitalLibraryProps {
 	query: string | undefined;
@@ -48,6 +98,63 @@ export const DigitalLibrary = ({ query }: DigitalLibraryProps) => {
 	const [error, setError] = useState<string | null>(null);
 	const [albumDetail, setAlbumDetail] = useState<AlbumDetail | null>(null);
 	const [artistDetail, setArtistDetail] = useState<ArtistDetail | null>(null);
+	// Artist page UI state lives here (not in ArtistPage) so it survives re-renders.
+	const [bioExpanded, setBioExpanded] = useState(false);
+	const [topSongsExpanded, setTopSongsExpanded] = useState(false);
+	/** Play counts keyed by track id: undefined = loading, null = unknown. */
+	const [trackPlays, setTrackPlays] = useState<Record<string, TrackPlays | null>>({});
+	const [songMenu, setSongMenu] = useState<{ items: MenuItem[]; position: { x: number; y: number } } | null>(null);
+	const [extras, setExtras] = useState<ArtistExtras | null>(null);
+	const [savedArtistIds, setSavedArtistIds] = useState<Set<string> | null>(null);
+	const [showMoreLinks, setShowMoreLinks] = useState(false);
+
+	// The user's Last.fm (loved songs + personal play counts) — empty when not connected.
+	const lastfmUser = useLastfmStore(s => s.username);
+	const lovedSongs = useLastfmStore(s => s.loved);
+	const myPlays = useLastfmStore(s => s.userPlays);
+	const toggleLove = useLastfmStore(s => s.toggleLove);
+	useEffect(() => {
+		void useLastfmStore.getState().refresh();
+	}, []);
+	useEffect(() => {
+		if (!artistDetail || !lastfmUser) return;
+		void useLastfmStore.getState().loadStats(artistDetail.tracks.slice(0, 20));
+		const name = artistDetail.artist.name;
+		library
+			.artistStats(name)
+			.then(r => r.userPlays && useLastfmStore.setState(s => ({ userPlays: { ...s.userPlays, [`artist:${name.toLowerCase()}`]: r.userPlays! } })))
+			.catch(() => {});
+	}, [artistDetail, lastfmUser]);
+
+	// Social links + gallery photos for the artist hero.
+	useEffect(() => {
+		if (!artistDetail) return;
+		let alive = true;
+		getArtistExtras(artistDetail.artist.name).then(x => alive && setExtras(x));
+		return () => {
+			alive = false;
+		};
+	}, [artistDetail]);
+
+	// Which artists the signed-in user has saved (null when signed out).
+	useEffect(() => {
+		library
+			.savedArtists()
+			.then(r => setSavedArtistIds(new Set(r.artists.map(a => a.id))))
+			.catch(() => setSavedArtistIds(null));
+	}, [lastfmUser]);
+
+	// Fetch play counts for the artist's ranked songs; each fills in as it arrives.
+	useEffect(() => {
+		if (!artistDetail) return;
+		let cancelled = false;
+		artistDetail.tracks.slice(0, 20).forEach(t => {
+			getTrackPlays(t.title, t.artist).then(plays => {
+				if (!cancelled) setTrackPlays(prev => ({ ...prev, [t.id]: plays }));
+			});
+		});
+		return () => { cancelled = true; };
+	}, [artistDetail]);
 
 	// Radio controls
 	const [radioVariety, setRadioVariety] = useState<number>(() => Number(localStorage.getItem("fracital:radio-variety")) || 40);
@@ -151,7 +258,12 @@ export const DigitalLibrary = ({ query }: DigitalLibraryProps) => {
 		setLoading(true);
 		try {
 			const detail = await getArtist(id);
+			setTrackPlays({});
+			setExtras(null);
+			setShowMoreLinks(false);
 			setArtistDetail(detail);
+			setBioExpanded(false);
+			setTopSongsExpanded(false);
 			setPage("artist");
 			if (sync) syncUrl(`artist=${encodeURIComponent(id)}`, detail.artist.name);
 		} catch (err) {
@@ -175,6 +287,38 @@ export const DigitalLibrary = ({ query }: DigitalLibraryProps) => {
 		}
 	};
 
+	/** Opens the album/single a song belongs to when only its title and artist are known. */
+	const openAlbumForTrack = async (title: string, artist: string) => {
+		setLoading(true);
+		try {
+			const res = await searchTracks(`${title} ${artist}`, 10);
+			const norm = (s: string) => s.toLowerCase().trim();
+			const candidates = (res.tracks || []).filter(t => t.albumId);
+			const hit = candidates.find(t => norm(t.title) === norm(title) && norm(t.artist).includes(norm(artist))) ?? candidates.find(t => norm(t.title) === norm(title)) ?? candidates[0];
+			if (hit?.albumId) await openAlbum(hit.albumId);
+		} catch (err) {
+			console.error("Failed to resolve album:", err);
+		} finally {
+			setLoading(false);
+		}
+	};
+
+	/** Opens an album known only by title + artist (Last.fm top albums). */
+	const openAlbumByName = async (title: string, artist: string) => {
+		setLoading(true);
+		try {
+			const res = await searchTracks(`${title} ${artist}`, 5);
+			const norm = (s: string) => cleanAlbumTitle(s).toLowerCase().trim();
+			const hit = (res.albums || []).find(a => norm(a.title) === norm(title)) ?? res.albums?.[0];
+			if (hit) await openAlbum(hit.id);
+			else await openAlbumForTrack(title, artist);
+		} catch (err) {
+			console.error("Failed to resolve album:", err);
+		} finally {
+			setLoading(false);
+		}
+	};
+
 	// Follow the tab URL: restores the view after refreshes AND reacts to tab
 	// history navigation (back/forward), without re-pushing our own updates.
 	useEffect(() => {
@@ -185,8 +329,13 @@ export const DigitalLibrary = ({ query }: DigitalLibraryProps) => {
 		const artist = params.get("artist");
 		const album = params.get("album");
 		const q = params.get("q");
+		const artistName = params.get("artistName");
+		const trackTitle = params.get("track");
 		if (artist) openArtist(artist, false);
 		else if (album) openAlbum(album, false);
+		// Name-based links (e.g. from the quick player) resolve to an id, then rewrite the URL.
+		else if (artistName) openArtistByName(artistName);
+		else if (trackTitle) openAlbumForTrack(trackTitle, params.get("by") || "");
 		else if (q) { setSearchQuery(q); doSearch(q, false); }
 		else { setPage("home"); setAlbumDetail(null); setArtistDetail(null); }
 		// eslint-disable-next-line react-hooks/exhaustive-deps
@@ -304,30 +453,111 @@ export const DigitalLibrary = ({ query }: DigitalLibraryProps) => {
 		);
 	};
 
-	/** A discography shelf: a single collapsed row with a "Show all" toggle. */
-	const ReleaseSection = ({ title, releases }: { title: string; releases: MusicAlbum[] }) => {
-		const [expanded, setExpanded] = useState(false);
-		const PREVIEW = 6;
-		if (releases.length === 0) return null;
-		const visible = expanded ? releases : releases.slice(0, PREVIEW);
+	/** A compact release tile for artist shelves: artwork, title, then an "E" badge and year. */
+	const ReleaseTile = ({ album }: { album: MusicAlbum }) => {
+		const year = album.releaseDate ? new Date(album.releaseDate).getFullYear() : null;
 		return (
-			<div className="flex flex-col gap-2">
-				<div className="flex items-center justify-between px-1">
-					<div className="flex items-baseline gap-2">
-						<h2 className="text-lg font-bold">{title}</h2>
-						<span className="text-xs text-(--text-tertiary)">{releases.length}</span>
+			<div
+				className={`flex flex-col gap-1.5 w-32 shrink-0 p-1.5 rounded-lg cursor-pointer duration-150 ${brightness === "dark" ? "hover:bg-[#ffffff10]" : "hover:bg-[#00000008]"}`}
+				onClick={() => openAlbum(album.id)}
+			>
+				<img src={artworkHighRes(album.artwork)} alt="" className="w-full aspect-square rounded-md object-cover bg-(--tertiary)" loading="lazy" />
+				<div className="flex flex-col min-w-0 gap-0.5">
+					<span title={cleanAlbumTitle(album.title)} className="text-xs font-semibold leading-tight line-clamp-2">{cleanAlbumTitle(album.title)}</span>
+					<span className="flex items-center gap-1 text-[10px] text-(--text-tertiary) leading-none">
+						{album.explicit && <span className="px-[3px] py-px rounded-[3px] bg-(--text-tertiary) text-(--secondary) font-bold">E</span>}
+						{year}
+					</span>
+				</div>
+			</div>
+		);
+	};
+
+	/** Opens the "⋯" menu for a song card. */
+	const openSongMenu = (e: React.MouseEvent, track: MusicTrack) => {
+		e.stopPropagation();
+		const isLoved = lovedSongs[songKey(track.title, track.artist)];
+		const items: MenuItem[] = [
+			{ title: "Play", onClick: () => handlePlay(track), icon: <PlayIcon className="size-5" /> },
+			{ title: "Add to queue", onClick: () => handleQueue(track), icon: <PlusIcon className="size-5" /> },
+			...(lastfmUser ? [{ title: isLoved ? "Remove from Liked Songs" : "Add to Liked Songs", onClick: () => void toggleLove(track.title, track.artist), icon: isLoved ? <HeartIcon className="size-5 text-[#ff3b5c]" /> : <HeartOutlineIcon className="size-5" /> }] : []),
+			{ title: "Start radio", onClick: () => startRadio(track.artist, track.title), icon: <RadioIcon className="size-5" /> },
+			{
+				title: "Go to album",
+				onClick: () => (track.albumId ? openAlbum(track.albumId) : openAlbumForTrack(track.title, track.artist)),
+				icon: <MusicalNoteIcon className="size-5" />,
+			},
+			{ title: "Go to artist", onClick: () => openArtistByName(splitArtistCredit(track.artist)[0] || track.artist), icon: <UserIcon className="size-5" /> },
+		];
+		setSongMenu({ items, position: { x: e.clientX, y: e.clientY } });
+	};
+
+	/** Plays a list from `index`, queueing the rest after it (Your Library shelves). */
+	const playListFrom = (list: MusicTrack[], index: number) => {
+		const ordered = [...list.slice(index), ...list.slice(0, index)];
+		handlePlayAll(ordered);
+	};
+
+	/** A top song as its own full-width card: artwork, title/artist, play count, and a "⋯" menu. */
+	const TopSongCard = ({ track }: { track: MusicTrack }) => {
+		const plays = trackPlays[track.id];
+		const key = songKey(track.title, track.artist);
+		const isLoved = !!lovedSongs[key];
+		const mine = myPlays[key];
+		return (
+			<div
+				className={`group grid ${lastfmUser ? "grid-cols-[minmax(0,1.7fr)_minmax(6rem,1fr)_4.25rem]" : "grid-cols-[minmax(0,1.7fr)_minmax(6rem,1fr)_2rem]"} items-center gap-3 h-15 px-4 rounded-xl cursor-pointer duration-150 ${brightness === "dark" ? "bg-[#ffffff14] hover:bg-[#ffffff21]" : "bg-[#0000000a] hover:bg-[#00000014]"}`}
+				onClick={() => handlePlay(track)}
+				onContextMenu={e => { e.preventDefault(); openSongMenu(e, track); }}
+			>
+				<div className="flex items-center gap-3 min-w-0">
+					<div className="relative shrink-0">
+						<img src={track.artwork} alt="" className="size-9 rounded-md object-cover bg-(--tertiary)" loading="lazy" />
+						<div className="absolute inset-0 hidden group-hover:flex items-center justify-center rounded-md bg-black/45">
+							<PlayIcon className="size-4 text-white" />
+						</div>
 					</div>
-					{releases.length > PREVIEW && (
+					<div className="flex flex-col min-w-0">
+						<span title={track.title} className="flex items-center gap-1.5 text-sm font-semibold leading-tight truncate">
+							<span className="truncate">{track.title}</span>
+							{track.explicit && <span className="shrink-0 text-[9px] px-1 py-0.5 rounded-[3px] bg-(--text-tertiary) text-(--secondary) font-bold leading-none">E</span>}
+						</span>
+						<span className="text-xs text-(--text-tertiary) leading-tight truncate">{track.artist}</span>
+					</div>
+				</div>
+				<span
+					className="text-sm font-semibold text-(--text-secondary) tabular-nums"
+					title={
+						!plays
+							? undefined
+							: plays.source === "lastfm"
+								? `${plays.plays.toLocaleString()} Last.fm scrobbles${plays.listeners ? ` from ${plays.listeners.toLocaleString()} listeners` : ""}`
+								: `${plays.plays.toLocaleString()} YouTube views`
+					}
+				>
+					{plays === undefined ? <span className={`inline-block h-3 w-20 rounded-full animate-pulse ${brightness === "dark" ? "bg-[#ffffff1a]" : "bg-[#00000012]"}`} /> : plays === null ? "" : `${formatCount(plays.plays)} plays`}
+					{!!mine && <span className="block text-[11px] font-medium text-(--text-tertiary)">You: {formatCount(mine)}</span>}
+				</span>
+				<div className="flex items-center justify-end gap-0.5">
+					{lastfmUser && (
 						<button
-							className={`text-xs px-3 py-1.5 rounded-lg duration-150 ${brightness === "dark" ? "bg-[#ffffff15] hover:bg-[#ffffff25]" : "bg-[#00000010] hover:bg-[#00000020]"}`}
-							onClick={() => setExpanded(e => !e)}
+							className={`flex items-center justify-center size-8 rounded-full duration-150 ${isLoved ? "" : "opacity-0 group-hover:opacity-100"} ${brightness === "dark" ? "hover:bg-[#ffffff1f]" : "hover:bg-[#00000012]"}`}
+							title={isLoved ? "Remove from Liked Songs" : "Add to Liked Songs"}
+							onClick={e => {
+								e.stopPropagation();
+								void toggleLove(track.title, track.artist);
+							}}
 						>
-							{expanded ? "Show less" : `Show all (${releases.length})`}
+							{isLoved ? <HeartIcon className="size-5 text-[#ff3b5c]" /> : <HeartOutlineIcon className="size-5" />}
 						</button>
 					)}
-				</div>
-				<div className="grid grid-cols-[repeat(auto-fill,minmax(140px,1fr))] gap-1">
-					{visible.map(a => <AlbumCard key={a.id} album={a} showMeta />)}
+					<button
+						className={`flex items-center justify-center size-8 rounded-full duration-150 ${brightness === "dark" ? "hover:bg-[#ffffff1f]" : "hover:bg-[#00000012]"}`}
+						title="More"
+						onClick={e => openSongMenu(e, track)}
+					>
+						<EllipsisHorizontalIcon className="size-6" />
+					</button>
 				</div>
 			</div>
 		);
@@ -365,6 +595,7 @@ export const DigitalLibrary = ({ query }: DigitalLibraryProps) => {
 
 	const HomePage = () => (
 		<div className="flex flex-col gap-6">
+			<YourLibrary dark={brightness === "dark"} onPlayList={playListFrom} onOpenArtist={openArtistByName} onOpenAlbum={openAlbumByName} onSongMenu={openSongMenu} />
 			{chartAlbums.length > 0 && (
 				<div className="flex flex-col gap-2">
 					<h2 className="text-lg font-bold px-1">Popular Albums</h2>
@@ -478,77 +709,231 @@ export const DigitalLibrary = ({ query }: DigitalLibraryProps) => {
 
 	const ArtistPage = () => {
 		if (!artistDetail) return null;
-		const { artist, albums: artistAlbums, tracks: artistTracks } = artistDetail;
+		const { artist, albums: artistAlbums, tracks: artistTracks, similar } = artistDetail;
+		const dark = brightness === "dark";
 		const banner = artist.banner || artist.picture;
-		return (
-			<div className="flex flex-col gap-6">
-				{/* Hero banner — no overflow-hidden so the radio settings popover isn't clipped; rounding lives on each layer. */}
-				<div className="relative w-full h-52 sm:h-64 rounded-2xl bg-(--tertiary)">
-					{banner && <img src={banner} alt="" className="absolute inset-0 w-full h-full object-cover object-[center_25%] rounded-2xl" />}
-					<div className="absolute inset-0 bg-linear-to-t from-black/75 via-black/20 to-transparent rounded-2xl" />
-					<div className="absolute bottom-0 left-0 right-0 flex items-end justify-between gap-3 p-5">
-						<div className="flex flex-col gap-1 min-w-0">
-							<span className="text-xs uppercase font-medium text-white/70">Artist</span>
-							<h1 className="text-3xl sm:text-4xl font-bold text-white truncate">{artist.name}</h1>
+		const chip = `text-[11px] font-semibold px-2.5 py-1 rounded-full duration-150 ${dark ? "bg-[#ffffff1f] hover:bg-[#ffffff33]" : "bg-[#00000012] hover:bg-[#00000022]"}`;
+		const TOP_SONGS_MIN = 10;
+		const TOP_SONGS_MAX = 20;
+		const rankedSongs = artistTracks.slice(0, TOP_SONGS_MAX);
+		const topSongs = topSongsExpanded ? rankedSongs : rankedSongs.slice(0, TOP_SONGS_MIN);
+		// iTunes lists clean and explicit editions separately; keep one per title, preferring explicit.
+		const dedupe = (list: MusicAlbum[]) => {
+			const byTitle = new Map<string, MusicAlbum>();
+			for (const a of list) {
+				const key = cleanAlbumTitle(a.title).toLowerCase().trim();
+				const seen = byTitle.get(key);
+				if (!seen || (a.explicit && !seen.explicit)) byTitle.set(key, a);
+			}
+			return list.filter(a => byTitle.get(cleanAlbumTitle(a.title).toLowerCase().trim()) === a);
+		};
+		const albumsAndEps = dedupe(artistAlbums.filter(a => (a.type ?? "album") === "album" || a.type === "ep"));
+		const singles = dedupe(artistAlbums.filter(a => a.type === "single"));
+		const hasLongBio = !!artist.bio && artist.bio.length > 110;
+		const myArtistPlays = myPlays[`artist:${artist.name.toLowerCase()}`];
+
+		// Collage photos: extra artist photos first, then album covers to fill any gaps.
+		const gallery = [...new Set([...(extras?.images ?? []).filter(u => u !== banner), ...albumsAndEps.map(a => artworkHighRes(a.artwork)), ...singles.map(a => artworkHighRes(a.artwork))])].slice(0, 4);
+
+		const savedHere = !!savedArtistIds?.has(artist.id);
+		const toggleSaveArtist = () => {
+			if (!savedArtistIds) {
+				useTabsStore.getState().newTab({ id: createId(), url: "about:account", displayUrl: "about:account", title: "Fracital Account", icon: null, current: true });
+				return;
+			}
+			const next = !savedHere;
+			setSavedArtistIds(prev => {
+				const s = new Set(prev);
+				if (next) s.add(artist.id);
+				else s.delete(artist.id);
+				return s;
+			});
+			library.saveArtist(artist.id, artist.name, artist.picture, next).catch(() => setSavedArtistIds(prev => {
+				const s = new Set(prev);
+				if (next) s.delete(artist.id);
+				else s.add(artist.id);
+				return s;
+			}));
+		};
+
+		const openLink = (url: string, title: string) => useTabsStore.getState().newTab({ id: createId(), url, displayUrl: url, title, icon: null, current: true });
+
+		const radioControls = () => (
+			<div className="relative flex items-center gap-2">
+				<button
+					className="flex items-center gap-1.5 px-3.5 py-2 rounded-full font-semibold text-sm bg-white text-black hover:bg-white/90 duration-150 disabled:opacity-60"
+					disabled={radioLoading}
+					onClick={() => startRadio(artist.name)}
+					title="Start a station seeded by this artist"
+				>
+					<RadioIcon className="size-4" />
+					{radioLoading ? "Tuning..." : "Start Radio"}
+				</button>
+				<button className="flex items-center justify-center size-9 rounded-full bg-white text-black hover:bg-white/90 duration-150" title="Radio settings" onClick={() => setShowRadioSettings(s => !s)}>
+					<AdjustmentsHorizontalIcon className="size-4" />
+				</button>
+				{showRadioSettings && (
+					<div className={`absolute right-0 bottom-12 z-20 flex flex-col gap-3 w-64 p-4 rounded-xl shadow-xl ${dark ? "bg-[#222227]" : "bg-white"}`}>
+						<div className="flex flex-col gap-1">
+							<div className="flex justify-between text-xs">
+								<span className="font-medium">Variety</span>
+								<span className="text-(--text-tertiary)">{radioVariety < 25 ? "This artist" : radioVariety < 60 ? "Balanced mix" : "Discover similar"}</span>
+							</div>
+							<input type="range" min={0} max={100} value={radioVariety} onChange={e => saveRadioPrefs(Number(e.target.value), radioLength)} className="w-full accent-(--accent,white)" />
+							<div className="flex justify-between text-[10px] text-(--text-tertiary)">
+								<span>Only {artist.name}</span>
+								<span>Similar artists</span>
+							</div>
 						</div>
-						<div className="relative flex items-center gap-2 shrink-0">
-							<button
-								className="flex items-center gap-1.5 px-4 py-2 rounded-full font-medium text-sm bg-white text-black hover:bg-white/90 duration-150 disabled:opacity-60"
-								disabled={radioLoading}
-								onClick={() => startRadio(artist.name)}
-								title="Start a station seeded by this artist"
-							>
-								<RadioIcon className="size-4" />
-								{radioLoading ? "Tuning..." : "Start Radio"}
-							</button>
-							<button
-								className="flex items-center justify-center p-2 rounded-full bg-white/20 text-white hover:bg-white/30 duration-150"
-								title="Radio settings"
-								onClick={() => setShowRadioSettings(s => !s)}
-							>
-								<AdjustmentsHorizontalIcon className="size-4" />
-							</button>
-							{showRadioSettings && (
-								<div className={`absolute right-0 top-12 z-20 flex flex-col gap-3 w-64 p-4 rounded-xl shadow-xl ${brightness === "dark" ? "bg-[#222227]" : "bg-white"}`}>
-									<div className="flex flex-col gap-1">
-										<div className="flex justify-between text-xs">
-											<span className="font-medium">Variety</span>
-											<span className="text-(--text-tertiary)">{radioVariety < 25 ? "This artist" : radioVariety < 60 ? "Balanced mix" : "Discover similar"}</span>
-										</div>
-										<input type="range" min={0} max={100} value={radioVariety} onChange={e => saveRadioPrefs(Number(e.target.value), radioLength)} className="w-full accent-(--accent,white)" />
-										<div className="flex justify-between text-[10px] text-(--text-tertiary)">
-											<span>Only {artist.name}</span>
-											<span>Similar artists</span>
-										</div>
-									</div>
-									<div className="flex flex-col gap-1">
-										<div className="flex justify-between text-xs">
-											<span className="font-medium">Station length</span>
-											<span className="text-(--text-tertiary)">{radioLength} tracks</span>
-										</div>
-										<input type="range" min={10} max={50} step={5} value={radioLength} onChange={e => saveRadioPrefs(radioVariety, Number(e.target.value))} className="w-full accent-(--accent,white)" />
-									</div>
+						<div className="flex flex-col gap-1">
+							<div className="flex justify-between text-xs">
+								<span className="font-medium">Station length</span>
+								<span className="text-(--text-tertiary)">{radioLength} tracks</span>
+							</div>
+							<input type="range" min={10} max={50} step={5} value={radioLength} onChange={e => saveRadioPrefs(radioVariety, Number(e.target.value))} className="w-full accent-(--accent,white)" />
+						</div>
+					</div>
+				)}
+			</div>
+		);
+
+		return (
+			<div className="flex flex-col gap-3">
+				{/* Hero — a name/bio panel plus a photo collage (collapses to the panel on narrow widths).
+				    No overflow-hidden so the radio settings popover isn't clipped; rounding lives on each layer. */}
+				<div className={`@container relative p-1.5 rounded-[1.4rem] ${dark ? "bg-[#ffffff0a] ring-1 ring-[#ffffff14]" : "bg-[#00000006] ring-1 ring-[#00000010]"}`}>
+					<div className="flex gap-1.5 h-60 @3xl:h-64">
+						{/* Name, bio, stats, social links */}
+						<div className="relative flex flex-col flex-[1.9] min-w-0 rounded-2xl bg-(--tertiary)">
+							{banner && <img src={banner} alt="" className="absolute inset-0 w-full h-full object-cover object-[center_25%] rounded-2xl" />}
+							<div className={`absolute inset-0 rounded-2xl duration-300 ${bioExpanded ? "bg-black/75" : "bg-linear-to-b from-black/75 via-black/30 to-black/60"}`} />
+							<div className="relative flex flex-col gap-1 p-4 pb-0 min-h-0">
+								<h1 className="text-4xl @3xl:text-5xl font-extrabold tracking-tight leading-none text-white/90 truncate">{artist.name}</h1>
+								{artist.bio && <p className={`text-sm font-semibold text-white/75 leading-snug ${bioExpanded ? "max-h-28 overflow-y-auto pr-1" : "line-clamp-2"}`}>{artist.bio}</p>}
+								<div className="flex items-center justify-between gap-2">
+									{artist.listeners ? (
+										<span className="text-xs font-medium text-white/60" title={artist.scrobbles ? `${artist.scrobbles.toLocaleString()} Last.fm scrobbles` : undefined}>
+											{formatCount(artist.listeners)} listeners{artist.scrobbles ? ` · ${formatCount(artist.scrobbles)} plays` : ""}
+											{!!myArtistPlays && ` · you: ${formatCount(myArtistPlays)}`}
+										</span>
+									) : (
+										<span className="text-xs font-medium text-white/60">{artist.fans ? `${formatCount(artist.fans)} fans` : ""}</span>
+									)}
+									{hasLongBio && (
+										<button className="shrink-0 text-sm font-semibold text-white/80 hover:text-white duration-150" onClick={() => setBioExpanded(b => !b)}>
+											{bioExpanded ? "show less" : "read more"}
+										</button>
+									)}
 								</div>
-							)}
+							</div>
+							<div className="relative mt-auto flex items-end justify-between gap-2 p-3">
+								{/* Official links: the first four as icons, the rest behind "+" */}
+								<div className="relative flex items-center gap-2.5">
+									{(extras?.links ?? []).slice(0, 4).map(l => (
+										<button key={l.kind} className="text-white/90 hover:text-white hover:scale-110 duration-150" title={LINK_LABELS[l.kind]} onClick={() => openLink(l.url, LINK_LABELS[l.kind])}>
+											<LinkIcon kind={l.kind} />
+										</button>
+									))}
+									{(extras?.links.length ?? 0) > 4 && (
+										<button className="text-white/90 hover:text-white hover:scale-110 duration-150" title="More links" onClick={() => setShowMoreLinks(s => !s)}>
+											<PlusIcon className="size-6" />
+										</button>
+									)}
+									{showMoreLinks && (
+										<div className={`absolute left-0 bottom-9 z-20 flex flex-col p-1.5 min-w-44 rounded-xl shadow-xl ${dark ? "bg-[#222227]" : "bg-white"}`}>
+											{(extras?.links ?? []).slice(4).map(l => (
+												<button
+													key={l.kind}
+													className={`flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm font-medium text-left duration-150 ${dark ? "hover:bg-[#ffffff12]" : "hover:bg-[#00000010]"}`}
+													onClick={() => {
+														setShowMoreLinks(false);
+														openLink(l.url, LINK_LABELS[l.kind]);
+													}}
+												>
+													<LinkIcon kind={l.kind} small />
+													{LINK_LABELS[l.kind]}
+												</button>
+											))}
+										</div>
+									)}
+								</div>
+								{/* Narrow layout: radio controls live on this panel instead of the big tile. */}
+								<div className="@3xl:hidden">{radioControls()}</div>
+							</div>
+						</div>
+
+						{/* Photo collage */}
+						<div className="hidden @3xl:block relative flex-[0.85] min-w-0 rounded-2xl overflow-hidden bg-(--tertiary)">
+							{gallery[0] ? <img src={gallery[0]} alt="" className="w-full h-full object-cover" loading="lazy" /> : <div className="w-full h-full animate-pulse" />}
+						</div>
+						<div className="hidden @3xl:flex flex-col gap-1.5 flex-[0.5] min-w-0">
+							<div className="flex-1 min-h-0 rounded-2xl overflow-hidden bg-(--tertiary)">{gallery[1] ? <img src={gallery[1]} alt="" className="w-full h-full object-cover" loading="lazy" /> : <div className="w-full h-full animate-pulse" />}</div>
+							<div className="w-full aspect-square shrink-0 rounded-full overflow-hidden bg-(--tertiary)">{gallery[2] ? <img src={gallery[2]} alt="" className="w-full h-full object-cover" loading="lazy" /> : <div className="w-full h-full animate-pulse" />}</div>
+						</div>
+						<div className="hidden @3xl:block relative flex-[1.35] min-w-0 rounded-2xl bg-(--tertiary)">
+							{gallery[3] ? <img src={gallery[3]} alt="" className="absolute inset-0 w-full h-full object-cover rounded-2xl" loading="lazy" /> : <div className="absolute inset-0 rounded-2xl animate-pulse" />}
+							<div className="absolute inset-0 rounded-2xl bg-linear-to-t from-black/45 via-transparent to-transparent" />
+							<div className="absolute bottom-3 right-3">{radioControls()}</div>
+						</div>
+
+						{/* Add to Your Library */}
+						<div className="flex items-center justify-center w-11 shrink-0">
+							<button
+								className={`flex items-center justify-center size-10 rounded-full duration-150 ${savedHere ? (dark ? "bg-white text-black" : "bg-black text-white") : dark ? "bg-[#ffffff1f] hover:bg-[#ffffff33]" : "bg-[#00000012] hover:bg-[#00000022]"}`}
+								title={savedArtistIds ? (savedHere ? "Saved to Your Library" : "Add to Your Library") : "Sign in to save artists"}
+								onClick={toggleSaveArtist}
+							>
+								{savedHere ? <CheckIcon className="size-5" /> : <SquaresPlusIcon className="size-5.5" />}
+							</button>
 						</div>
 					</div>
 				</div>
-				{artistTracks.length > 0 && (
-					<div className="flex flex-col gap-2">
-						<div className="flex items-center justify-between px-1">
-							<h2 className="text-lg font-bold">Top Tracks</h2>
-							<button
-								className={`text-xs px-3 py-1.5 rounded-lg duration-150 ${brightness === "dark" ? "bg-[#ffffff15] hover:bg-[#ffffff25]" : "bg-[#00000010] hover:bg-[#00000020]"}`}
-								onClick={() => handlePlayAll(artistTracks)}
-							>
-								Play all
-							</button>
+
+				{rankedSongs.length > 0 && (
+					<div className="flex flex-col gap-2.5">
+						{topSongs.map(t => <TopSongCard key={t.id} track={t} />)}
+						<div className="flex items-center justify-center gap-1.5">
+							<button className={chip} onClick={() => handlePlayAll(rankedSongs)}>Play All</button>
+							{rankedSongs.length > TOP_SONGS_MIN && (
+								<button className={chip} onClick={() => setTopSongsExpanded(e => !e)}>{topSongsExpanded ? "Show Less" : `Show All ${rankedSongs.length}`}</button>
+							)}
 						</div>
-						<div className="flex flex-col">{artistTracks.map((t, i) => <TrackRow key={t.id} track={t} index={i} />)}</div>
 					</div>
 				)}
-				<ReleaseSection title="Albums & EPs" releases={artistAlbums.filter(a => (a.type ?? "album") === "album" || a.type === "ep")} />
-				<ReleaseSection title="Singles" releases={artistAlbums.filter(a => a.type === "single")} />
+
+				<div className="flex flex-col gap-4 mt-1">
+					<Shelf title="Albums" count={albumsAndEps.length} dark={dark}>
+						{albumsAndEps.map(a => <ReleaseTile key={a.id} album={a} />)}
+					</Shelf>
+					<Shelf title="Singles" count={singles.length} dark={dark}>
+						{singles.map(a => <ReleaseTile key={a.id} album={a} />)}
+					</Shelf>
+					<Shelf title="Fans might also like" dark={dark} gridMin={112}>
+						{(similar ?? []).map(s => (
+							<div
+								key={s.name}
+								className={`flex flex-col items-center gap-1.5 w-28 shrink-0 p-2 rounded-xl cursor-pointer duration-150 ${dark ? "hover:bg-[#ffffff10]" : "hover:bg-[#00000008]"}`}
+								onClick={() => openArtistByName(s.name)}
+							>
+								{s.picture ? (
+									<img src={s.picture} alt={s.name} title={s.name} className="size-24 rounded-full object-cover bg-(--tertiary)" loading="lazy" />
+								) : (
+									<div title={s.name} className={`flex items-center justify-center size-24 rounded-full text-2xl font-bold ${dark ? "bg-[#ffffff15]" : "bg-[#00000012]"} text-(--text-secondary)`}>
+										{s.name.charAt(0).toUpperCase()}
+									</div>
+								)}
+								<div className="flex flex-col items-center w-full leading-tight">
+									<span title={s.name} className="text-xs font-semibold text-center truncate w-full">{s.name}</span>
+									{s.listeners ? (
+										<span className="text-[10px] text-(--text-tertiary)">{formatCount(s.listeners)} listeners</span>
+									) : (
+										!!s.fans && <span className="text-[10px] text-(--text-tertiary)">{formatCount(s.fans)} fans</span>
+									)}
+								</div>
+							</div>
+						))}
+					</Shelf>
+				</div>
 			</div>
 		);
 	};
@@ -587,11 +972,14 @@ export const DigitalLibrary = ({ query }: DigitalLibraryProps) => {
 
 			{/* Content */}
 			<div className="flex-1 overflow-auto px-4 pb-4">
-				{page === "home" && <HomePage />}
+				{/* Called (not <HomePage />) so Your Library keeps its state across re-renders. */}
+				{page === "home" && HomePage()}
 				{page === "search" && <SearchPage />}
 				{page === "album" && <AlbumPage />}
-				{page === "artist" && <ArtistPage />}
+				{/* Called, not mounted as <ArtistPage />: a fresh component identity each render would remount it as play counts stream in. */}
+				{page === "artist" && ArtistPage()}
 			</div>
+			{songMenu && <ContextMenu items={songMenu.items} position={songMenu.position} onClose={() => setSongMenu(null)} />}
 		</div>
 	);
 };

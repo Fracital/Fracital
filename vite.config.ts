@@ -1,3 +1,4 @@
+import "dotenv/config";
 import { defineConfig } from "vite";
 import { viteStaticCopy } from "vite-plugin-static-copy";
 import react from "@vitejs/plugin-react-swc";

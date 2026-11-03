@@ -1,4 +1,6 @@
 import { type ReactNode } from "react";
+import { createId } from "@paralleldrive/cuid2";
+import { useTabsStore } from "../store";
 import { Cog6ToothIcon, MusicalNoteIcon, FolderIcon, UserCircleIcon, PlayIcon, PlayCircleIcon, GlobeAltIcon, DocumentIcon, SignalIcon } from "@heroicons/react/24/solid";
 
 import Home from "../views/Home";
@@ -6,7 +8,7 @@ import Settings from "../views/Settings";
 import { MusicLibrary } from "../views/Music/MusicLibrary";
 import { MusicPlayer } from "../views/Music/MusicPlayer";
 import Files from "../views/Files/Files";
-import { Login } from "../views/Login";
+import { Account } from "../views/Account";
 import Games from "../views/Games";
 import { TextEditor } from "../views/TextEditor";
 import { DigitalLibrary } from "../views/DigitalLibrary";
@@ -84,9 +86,9 @@ export const aboutPages: Record<string, AboutPage> = {
 	},
 	account: {
 		name: "account",
-		component: Login,
+		component: Account,
 		icon: <UserCircleIcon className="size-5" />,
-		title: "Account Management",
+		title: "Fracital Account",
 		hasQuery: true,
 	},
 	text: {
@@ -104,6 +106,19 @@ export const aboutPages: Record<string, AboutPage> = {
 		title: "Digital Library",
 		hasQuery: true,
 	},
+};
+
+/** Focuses the existing Digital Library tab (navigating it to `query`) or opens a new one. */
+export const openLibraryPage = (query: string, title?: string) => {
+	const { tabs, setCurrentTab, newTab } = useTabsStore.getState();
+	const existing = tabs.find(t => getPageFromUrl(t.url) === "library");
+	if (existing) {
+		setCurrentTab(existing.id);
+		updatePageTab(existing.id, "library", { query, title });
+		return;
+	}
+	const url = `about:library?${query}`;
+	newTab({ id: createId(), title: title || aboutPages.library.title || "Digital Library", icon: aboutPages.library.icon, url, displayUrl: url });
 };
 
 export const getPageFromUrl = (url: string): string | null => {

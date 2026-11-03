@@ -3,6 +3,20 @@ import { create as createYoutubeDl } from "youtube-dl-exec";
 import ytSearch from "yt-search";
 import { rankAlbums, rankArtists, rankTracks } from "./music-rank";
 import { artistBanner, artistBio, artistTopTracks, buildRadio, findDeezerArtist, relatedArtists } from "./music-radio";
+import { artistStats, lastfmKey, trackPlays } from "./music-stats";
+import { getRequestListener } from "@hono/node-server";
+import { getAccountsApp, initAccounts } from "./accounts";
+import { artistExtras } from "./artist-extras";
+import type { SimilarArtist } from "./music-radio";
+
+/** Adds Last.fm listener counts to an artist and its similar artists (no-op without a key). */
+async function withListeners<A extends { name: string }>(artist: A, similar: SimilarArtist[]) {
+	const [main, ...rest] = await Promise.all([artistStats(artist.name), ...similar.map(s => artistStats(s.name))]);
+	return {
+		artist: { ...artist, listeners: main?.listeners, scrobbles: main?.plays },
+		similar: similar.map((s, i) => ({ ...s, listeners: rest[i]?.listeners })),
+	};
+}
 
 interface ItunesTrack {
 	trackId?: number;
@@ -71,6 +85,14 @@ async function lookupItunesTrack(id: string): Promise<{ title: string; artist: s
 
 function registerMusicApi(server: { middlewares: ViteDevServer["middlewares"] }, apiBase: string, resolverPath: string) {
 	const youtubeDl = createYoutubeDl(resolverPath);
+
+	// Fracital Accounts — the same Hono app the production server mounts.
+	void initAccounts();
+	const accounts = getRequestListener(getAccountsApp().fetch);
+	server.middlewares.use((req, res, next) => {
+		if (/^\/api\/(auth|me)(\/|\?|$)/.test(req.url || "")) void accounts(req, res);
+		else next();
+	});
 
 	server.middlewares.use(`${apiBase}/search`, async (req, res) => {
 		if (req.method !== "GET") return sendJson(res, 405, { error: "Method not allowed" });
@@ -191,14 +213,15 @@ function registerMusicApi(server: { middlewares: ViteDevServer["middlewares"] },
 
 			const name = artistRecord?.artistName || "Unknown Artist";
 			const known = name !== "Unknown Artist";
-			const [banner, bio, similar, ranked] = await Promise.all([
+			const [banner, bio, similar, ranked, dzArtist] = await Promise.all([
 				known ? artistBanner(name) : Promise.resolve(""),
 				known ? artistBio(name).catch(() => "") : Promise.resolve(""),
 				known ? relatedArtists(name).catch(() => []) : Promise.resolve([]),
 				// Top tracks ranked by real streaming popularity (Deezer rank); iTunes order is the fallback.
 				known ? artistTopTracks(name, apiBase, 20).catch(() => []) : Promise.resolve([]),
+				known ? findDeezerArtist(name).catch(() => null) : Promise.resolve(null),
 			]);
-			const artist = { id: String(artistRecord?.artistId || id), name, picture: banner || artworkHd(artistRecord?.artworkUrl100 || ""), banner, bio };
+			const artist = { id: String(artistRecord?.artistId || id), name, picture: banner || artworkHd(artistRecord?.artworkUrl100 || ""), banner, bio, fans: dzArtist?.nb_fan };
 			const tracks = ranked.length > 0
 				? ranked
 				: (songsData.results || [])
@@ -212,10 +235,10 @@ function registerMusicApi(server: { middlewares: ViteDevServer["middlewares"] },
 					}));
 			const albums = (albumsData.results || [])
 				.filter((r: any) => r.wrapperType === "collection")
-				.map((r: any) => ({ id: String(r.collectionId), title: r.collectionName, artist: r.artistName, artwork: artworkHd(r.artworkUrl100), trackCount: r.trackCount, releaseDate: r.releaseDate, type: albumType(r.collectionName) }))
+				.map((r: any) => ({ id: String(r.collectionId), title: r.collectionName, artist: r.artistName, artwork: artworkHd(r.artworkUrl100), trackCount: r.trackCount, releaseDate: r.releaseDate, type: albumType(r.collectionName), explicit: r.collectionExplicitness === "explicit" }))
 				.sort((a: any, b: any) => new Date(b.releaseDate || 0).getTime() - new Date(a.releaseDate || 0).getTime());
 
-			sendJson(res, 200, { artist, tracks, albums, similar });
+			sendJson(res, 200, { ...(await withListeners(artist, similar)), tracks, albums });
 		} catch (err) {
 			sendJson(res, 502, { error: err instanceof Error ? err.message : "Artist lookup failed" });
 		}
@@ -283,7 +306,8 @@ function registerMusicApi(server: { middlewares: ViteDevServer["middlewares"] },
 		let videoId: string | null = null;
 		if (videoIdPattern.test(id)) {
 			videoId = id;
-		} else if (/^\d+$/.test(id)) {
+			// Numeric catalog ids, or lfm-<hash> for Last.fm songs that resolve via the title/artist hints.
+		} else if (/^(\d+|lfm-[a-f0-9]+)$/.test(id)) {
 			videoId = trackToVideoCache.get(id) || null;
 			if (!videoId) {
 				let title = titleHint, artist = artistHint;
@@ -358,8 +382,29 @@ function registerMusicApi(server: { middlewares: ViteDevServer["middlewares"] },
 		}
 	});
 
+	// Social links + gallery photos for the artist page hero (loaded after the page).
+	server.middlewares.use(`${apiBase}/artist-extras`, async (req, res) => {
+		const name = parseUrl(req.url).searchParams.get("name")?.trim();
+		if (!name) return sendJson(res, 400, { error: "name is required" });
+		res.setHeader("Cache-Control", "public, max-age=3600");
+		sendJson(res, 200, await artistExtras(name));
+	});
+
+	// Play count for one song (YouTube views of its best-matching upload).
+	server.middlewares.use(`${apiBase}/plays`, async (req, res) => {
+		if (req.method !== "GET") return sendJson(res, 405, { error: "Method not allowed" });
+		const reqUrl = parseUrl(req.url);
+		const title = reqUrl.searchParams.get("title")?.trim();
+		const artist = reqUrl.searchParams.get("artist")?.trim();
+		if (!title || !artist) return sendJson(res, 400, { error: "title and artist are required" });
+		const stats = await trackPlays(title, artist);
+		// Only cache hits, so a miss (e.g. before a Last.fm key is added) can be retried.
+		res.setHeader("Cache-Control", stats ? "public, max-age=3600" : "no-store");
+		sendJson(res, 200, { plays: stats?.plays ?? null, listeners: stats?.listeners ?? null, source: stats?.source ?? null });
+	});
+
 	server.middlewares.use(`${apiBase}/health`, (_req, res) => {
-		sendJson(res, 200, { status: "ok", caches: { videos: trackToVideoCache.size, streams: streamUrlCache.size } });
+		sendJson(res, 200, { status: "ok", lastfm: !!lastfmKey(), caches: { videos: trackToVideoCache.size, streams: streamUrlCache.size } });
 	});
 }
 
