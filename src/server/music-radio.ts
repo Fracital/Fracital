@@ -1,12 +1,15 @@
 /**
- * Artist banners and the radio mix algorithm, powered by Deezer's free
- * catalog graph (artist search, top tracks, related artists).
+ * Artist banners, bios, related artists, and the radio station algorithm.
  *
- * Radio algorithm: a seed artist's top tracks are blended with the top
- * tracks of Deezer's related artists. The `variety` knob (0..100) controls
- * the blend: 0 is pure seed artist, 100 is almost all related artists.
- * Tracks are interleaved with weighted randomness so every mix differs.
+ * Radio: candidates come from Last.fm's listening graph (songs similar to the seed
+ * song, artists similar to the seed artist, each with a 0–1 match score) plus the
+ * seed artist's popular tracks on Deezer. A station is then drawn by weighted
+ * sampling with rules: the seed song plays first, no artist repeats within 3 songs,
+ * per-artist caps, no duplicate versions, and `variety` (0..100) setting how much of
+ * the station is the seed artist vs. similar artists (and how far out it reaches).
+ * Falls back to Deezer's related-artists graph when Last.fm isn't configured.
  */
+import { asArray, lastfmCall, lastfmKey } from "./lastfm";
 
 interface DeezerArtist {
 	id: number;
@@ -24,6 +27,7 @@ interface DeezerTrack {
 	duration?: number;
 	preview?: string;
 	explicit_lyrics?: boolean;
+	rank?: number;
 	artist?: { id: number; name: string };
 	album?: { id: number; title: string; cover_xl?: string; cover_big?: string; cover_medium?: string };
 }
@@ -212,8 +216,12 @@ export async function findDeezerTrack(title: string, artist: string, apiBase: st
 	if (cached && Date.now() - cached.at < ARTIST_TTL) track = cached.track;
 	else {
 		try {
-			const strict = await dzStrict<{ data?: DeezerTrack[] }>(`/search/track?q=${encodeURIComponent(`artist:"${artist}" track:"${title}"`)}&limit=1`);
-			track = strict.data?.[0] ?? (await dzStrict<{ data?: DeezerTrack[] }>(`/search/track?q=${encodeURIComponent(`${artist} ${title}`)}&limit=1`)).data?.[0] ?? null;
+			// Deezer's field search sometimes returns unrelated songs, so pool both searches and verify.
+			const [strict, loose] = await Promise.all([
+				dzStrict<{ data?: DeezerTrack[] }>(`/search/track?q=${encodeURIComponent(`artist:"${artist}" track:"${title}"`)}&limit=5`),
+				dzStrict<{ data?: DeezerTrack[] }>(`/search/track?q=${encodeURIComponent(`${artist} ${title}`)}&limit=10`),
+			]);
+			track = bestTrackMatch([...(strict.data ?? []), ...(loose.data ?? [])], title, artist);
 		} catch {
 			return null; // transient — don't cache, so the next request retries
 		}
@@ -222,68 +230,229 @@ export async function findDeezerTrack(title: string, artist: string, apiBase: st
 	return track ? toRadioTrack(track, apiBase) : null;
 }
 
-const shuffle = <T,>(list: T[]): T[] => {
-	const copy = [...list];
-	for (let i = copy.length - 1; i > 0; i--) {
-		const j = Math.floor(Math.random() * (i + 1));
-		[copy[i], copy[j]] = [copy[j], copy[i]];
+const plain = (s: string) => s.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "");
+const titleCore = (s: string) => plain(s.replace(/\(.*?\)|\[.*?\]/g, " ").replace(/\s-\s.*$/, " ").replace(/\b(feat|ft)\.?\b.*$/i, " "));
+
+/**
+ * The candidate that's really this song: the artist must match (any credited artist)
+ * and the title must match; prefers the original over acoustic/remix/live versions.
+ */
+function bestTrackMatch(list: DeezerTrack[], title: string, artist: string): DeezerTrack | null {
+	const wantTitle = titleCore(title);
+	const wantArtists = artist
+		.split(/\s*(?:,|&|\bfeat\.?|\bft\.?|\bwith\b|\bx\b)\s*/i)
+		.map(plain)
+		.filter(Boolean);
+	const wantsVersion = /\b(acoustic|remix|live|sped|slowed|instrumental|edit)\b/i.test(title);
+	let best: { t: DeezerTrack; score: number } | null = null;
+	for (const t of list) {
+		const got = plain(t.artist?.name ?? "");
+		const artistOk = !!got && wantArtists.some(a => a === got || (a.length >= 4 && (got.includes(a) || a.includes(got))));
+		const gotTitle = titleCore(t.title_short || t.title);
+		const titleOk = !!wantTitle && (gotTitle === wantTitle || (wantTitle.length >= 4 && (gotTitle.startsWith(wantTitle) || wantTitle.startsWith(gotTitle))));
+		if (!artistOk || !titleOk) continue;
+		let score = gotTitle === wantTitle ? 2 : 1;
+		if (!wantsVersion && /\b(acoustic|remix|live|sped|slowed|instrumental|edit)\b/i.test(t.title)) score -= 1.5;
+		if (!best || score > best.score) best = { t, score };
 	}
-	return copy;
-};
+	return best?.t ?? null;
+}
 
 export interface RadioOptions {
 	/** Seed artist name (required). */
 	artist: string;
-	/** Optional seed track title — its artist mix leads the station. */
+	/** Optional seed song title — the station starts with it and follows its sound. */
 	title?: string;
-	/** 0..100: 0 = only the seed artist, 100 = almost all related artists. */
+	/** 0..100: 0 = mostly the seed artist, 100 = mostly similar artists, reaching further out. */
 	variety: number;
 	limit: number;
+}
+
+interface Candidate {
+	title: string;
+	artist: string;
+	/** 0..1 — how well this fits the station. */
+	score: number;
+	/** Already-resolved Deezer track, when it came from Deezer. */
+	dz?: DeezerTrack;
+}
+
+/** Comparable song identity: no "(feat. …)", "[Remastered]", " - Radio Edit", punctuation or case. */
+const songKey = (title: string, artist: string) =>
+	`${artist.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "")}|${title
+		.toLowerCase()
+		.replace(/\(.*?\)|\[.*?\]/g, " ")
+		.replace(/\s-\s.*$/, " ")
+		.replace(/\b(feat|ft)\.?\b.*$/, " ")
+		.replace(/[^\p{L}\p{N}]+/gu, "")}`;
+
+const artistKey = (name: string) => name.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "");
+
+/** Skits, interludes, live cuts, sped-up edits etc. don't belong on a station. */
+const NOT_A_SONG = /\b(skit|interlude|intro|outro|live|instrumental|acapella|a cappella|sped up|slowed|reverb|commentary|voice memo)\b/i;
+
+/** Last.fm's "similar" lists, keyed off the seed artist / song (empty without a key). */
+async function lastfmSimilar(artist: string, title?: string) {
+	type Sim = { name?: string; match?: string; artist?: { name?: string } | string };
+	const [artists, tracks] = await Promise.all([
+		lastfmCall<{ similarartists?: { artist?: Sim | Sim[] } }>({ method: "artist.getSimilar", artist, limit: "30", autocorrect: "1" }),
+		title ? lastfmCall<{ similartracks?: { track?: Sim | Sim[] } }>({ method: "track.getSimilar", artist, track: title, limit: "100", autocorrect: "1" }) : Promise.resolve(null),
+	]);
+	return {
+		artists: asArray(artists?.similarartists?.artist)
+			.filter(a => a.name)
+			.map(a => ({ name: a.name!, match: Number(a.match) || 0 })),
+		tracks: asArray(tracks?.similartracks?.track)
+			.map(t => ({ title: t.name || "", artist: typeof t.artist === "string" ? t.artist : t.artist?.name || "", match: Number(t.match) || 0 }))
+			.filter(t => t.title && t.artist),
+	};
+}
+
+/** Weighted random pick (weights ≥ 0). */
+function pickWeighted<T>(items: T[], weight: (item: T) => number): T | undefined {
+	const total = items.reduce((sum, it) => sum + Math.max(0, weight(it)), 0);
+	if (total <= 0) return items[0];
+	let r = Math.random() * total;
+	for (const it of items) {
+		r -= Math.max(0, weight(it));
+		if (r <= 0) return it;
+	}
+	return items[items.length - 1];
 }
 
 export async function buildRadio({ artist, title, variety, limit }: RadioOptions, apiBase: string): Promise<{ seed: { artist: string; banner: string }; tracks: RadioTrack[] } | null> {
 	const seed = await findDeezerArtist(artist);
 	if (!seed) return null;
-
 	const v = Math.min(100, Math.max(0, variety)) / 100;
+	const seedKey = artistKey(seed.name);
 
-	// Pool A: the seed artist's top tracks.
-	const topData = await dz<{ data?: DeezerTrack[] }>(`/artist/${seed.id}/top?limit=40`);
-	let seedPool = topData?.data ?? [];
-	// A track seed leads the station with that song first.
-	if (title) {
-		const norm = (s: string) => s.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
-		seedPool = [...seedPool].sort((a, b) => (norm(b.title).includes(norm(title)) ? 1 : 0) - (norm(a.title).includes(norm(title)) ? 1 : 0));
+	const [seedSong, seedTop, similar] = await Promise.all([
+		title ? findDeezerTrack(title, seed.name, apiBase).catch(() => null) : Promise.resolve(null),
+		dz<{ data?: DeezerTrack[] }>(`/artist/${seed.id}/top?limit=50`),
+		lastfmKey() ? lastfmSimilar(seed.name, title) : Promise.resolve({ artists: [], tracks: [] }),
+	]);
+
+	// Similar artists: Last.fm (with match scores), else Deezer's related list ranked by position.
+	let similarArtists = similar.artists;
+	if (!similarArtists.length) {
+		const related = await dz<{ data?: DeezerArtist[] }>(`/artist/${seed.id}/related?limit=20`);
+		similarArtists = (related?.data ?? []).map((a, i, all) => ({ name: a.name, match: 1 - i / Math.max(1, all.length) }));
+	}
+	similarArtists = similarArtists.filter(a => artistKey(a.name) !== seedKey);
+	// Low variety stays close (top matches only); high variety reaches further down the list.
+	const reach = Math.round(5 + v * 13);
+	const chosenArtists = similarArtists.slice(0, reach);
+
+	const candidates = new Map<string, Candidate>();
+	const add = (c: Candidate) => {
+		if (!c.title || !c.artist || NOT_A_SONG.test(c.title)) return;
+		const key = songKey(c.title, c.artist);
+		const prev = candidates.get(key);
+		if (!prev || c.score > prev.score) candidates.set(key, { ...c, dz: c.dz ?? prev?.dz });
+	};
+
+	// The seed artist's catalog, weighted by popularity (Deezer rank).
+	const top = seedTop?.data ?? [];
+	const maxRank = Math.max(1, ...top.map(t => t.rank ?? 0));
+	for (const t of top) add({ title: t.title_short || t.title, artist: t.artist?.name || seed.name, score: 0.35 + 0.65 * ((t.rank ?? 0) / maxRank), dz: t });
+
+	// Songs that sound like the seed song (strongest signal for a song station).
+	const maxTrackMatch = Math.max(0.01, ...similar.tracks.map(t => t.match));
+	for (const t of similar.tracks) add({ title: t.title, artist: t.artist, score: 0.5 + 0.7 * (t.match / maxTrackMatch) });
+
+	// Popular songs from similar artists, weighted by how similar the artist is.
+	const tops = await Promise.all(
+		chosenArtists.map(async a => {
+			const dzArtist = await findDeezerArtist(a.name).catch(() => null);
+			const res = dzArtist ? await dz<{ data?: DeezerTrack[] }>(`/artist/${dzArtist.id}/top?limit=10`) : null;
+			return { match: a.match, tracks: res?.data ?? [] };
+		}),
+	);
+	const maxArtistMatch = Math.max(0.01, ...chosenArtists.map(a => a.match));
+	for (const { match, tracks } of tops) {
+		const tMax = Math.max(1, ...tracks.map(t => t.rank ?? 0));
+		for (const t of tracks) {
+			add({ title: t.title_short || t.title, artist: t.artist?.name || "", score: (title ? 0.75 : 1) * (match / maxArtistMatch) * (0.4 + 0.6 * ((t.rank ?? 0) / tMax)), dz: t });
+		}
 	}
 
-	// Pool B: top tracks of related artists, breadth scaled by variety.
-	let relatedPool: DeezerTrack[] = [];
-	if (v > 0) {
-		const related = await dz<{ data?: DeezerArtist[] }>(`/artist/${seed.id}/related?limit=12`);
-		const take = Math.max(1, Math.round((related?.data?.length ?? 0) * Math.min(1, v + 0.2)));
-		const chosen = shuffle(related?.data ?? []).slice(0, take);
-		const tops = await Promise.all(chosen.map(a => dz<{ data?: DeezerTrack[] }>(`/artist/${a.id}/top?limit=10`)));
-		relatedPool = shuffle(tops.flatMap(t => t?.data ?? []));
+	// --- Draw the station ---
+	const seedShare = 0.85 - 0.75 * v; // v=0 → 85% seed artist, v=0.4 → 55%, v=1 → 10%
+	const otherCap = Math.max(2, Math.ceil(limit / 10)); // max songs per non-seed artist
+	const spacing = 3; // other artists can't repeat within this many songs
+	// The seed artist may repeat sooner when the station is mostly them (low variety).
+	const seedSpacing = seedShare >= 0.6 ? 0 : seedShare >= 0.35 ? 1 : 2;
+
+	const picked: Candidate[] = [];
+	const used = new Set<string>();
+	const perArtist = new Map<string, number>();
+	const take = (c: Candidate) => {
+		picked.push(c);
+		used.add(songKey(c.title, c.artist));
+		perArtist.set(artistKey(c.artist), (perArtist.get(artistKey(c.artist)) ?? 0) + 1);
+	};
+
+	const pool = [...candidates.values()];
+	const isSeed = (c: Candidate) => artistKey(c.artist) === seedKey;
+
+	// A song station opens with that song; an artist station with one of their popular songs.
+	if (title) take(seedSong ? { title: seedSong.title, artist: seedSong.artist, score: 1 } : { title, artist: seed.name, score: 1 });
+	else {
+		const opener = pickWeighted(
+			pool.filter(c => isSeed(c) && c.score >= 0.7),
+			c => c.score,
+		);
+		if (opener) take(opener);
 	}
 
-	// Blend: each slot picks from the related pool with probability `v`.
-	const seedShuffled = title ? [...seedPool.slice(0, 1), ...shuffle(seedPool.slice(1))] : shuffle(seedPool);
-	const out: DeezerTrack[] = [];
-	const seen = new Set<string>();
-	let a = 0;
-	let b = 0;
-	while (out.length < limit && (a < seedShuffled.length || b < relatedPool.length)) {
-		const useRelated = (Math.random() < v && b < relatedPool.length) || a >= seedShuffled.length;
-		const track = useRelated ? relatedPool[b++] : seedShuffled[a++];
-		if (!track) continue;
-		const key = `${track.title.toLowerCase()}|${track.artist?.name?.toLowerCase()}`;
-		if (seen.has(key)) continue;
-		seen.add(key);
-		out.push(track);
+	while (picked.length < limit) {
+		const recentOther = new Set(picked.slice(-spacing).map(c => artistKey(c.artist)));
+		const recentSeed = seedSpacing > 0 && picked.slice(-seedSpacing).some(isSeed);
+		const open = pool.filter(c => !used.has(songKey(c.title, c.artist)));
+		if (!open.length) break;
+		const allowed = (c: Candidate, strict: boolean) => {
+			const ak = artistKey(c.artist);
+			if (strict && (isSeed(c) ? recentSeed : recentOther.has(ak))) return false;
+			return isSeed(c) || (perArtist.get(ak) ?? 0) < otherCap;
+		};
+		// Keep the seed-artist share on target, with some randomness so stations differ.
+		const seedCount = picked.filter(isSeed).length;
+		const wantSeed = seedCount < seedShare * (picked.length + 1) - Math.random() * 0.8;
+		const bucket = (strict: boolean) => {
+			const ok = open.filter(c => allowed(c, strict));
+			const preferred = ok.filter(c => isSeed(c) === wantSeed);
+			return preferred.length ? preferred : ok;
+		};
+		const choices = bucket(true).length ? bucket(true) : bucket(false);
+		// Squaring the score favors strong matches without making stations predictable.
+		const next = pickWeighted(choices, c => c.score * c.score);
+		if (!next) break;
+		take(next);
 	}
+
+	// Resolve Last.fm-only picks to playable tracks (Deezer match, else YouTube via hints).
+	const tracks = await Promise.all(
+		picked.map(async c => {
+			if (c.dz) return toRadioTrack(c.dz, apiBase);
+			if (title && c === picked[0] && seedSong) return seedSong;
+			const resolved = await findDeezerTrack(c.title, c.artist, apiBase).catch(() => null);
+			if (resolved) return { ...resolved, title: c.title, artist: c.artist };
+			const id = `lfm-${Buffer.from(songKey(c.title, c.artist)).toString("hex").slice(0, 16)}`;
+			return {
+				id,
+				title: c.title,
+				artist: c.artist,
+				duration: 0,
+				artwork: "",
+				streamUrl: `${apiBase}/playback/${id}?title=${encodeURIComponent(c.title)}&artist=${encodeURIComponent(c.artist)}`,
+				previewUrl: "",
+				explicit: false,
+			};
+		}),
+	);
 
 	return {
 		seed: { artist: seed.name, banner: seed.picture_xl || seed.picture_big || "" },
-		tracks: out.map(t => toRadioTrack(t, apiBase)),
+		tracks,
 	};
 }
