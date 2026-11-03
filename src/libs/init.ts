@@ -184,4 +184,13 @@ export const init = async () => {
 	configureMusicApi({
 		baseUrl: "/api/music",
 	});
+
+	// Mirror the persistent-tabs setting into localStorage so the stores can
+	// read it synchronously at module load (settings.json loads async).
+	try {
+		const saved = JSON.parse(await window.fr.fs.promises.readFile(SettingsPath, "utf8"));
+		window.localStorage.setItem("fracital:persist-tabs", String(saved["persistent-tabs"] === true));
+	} catch {
+		/* defaults apply */
+	}
 };

@@ -412,3 +412,75 @@ export const useFilesStore = create<{
 		setFileTree: tree => set({ fileTree: tree }),
 	};
 });
+// ============================================================
+// Optional persistence (Settings → "Persistent Tabs")
+// Tabs, groups and the music queue survive page refreshes when
+// the flag is on. The flag lives in localStorage so it is
+// readable synchronously at module load, and is kept in sync
+// with settings.json by init() and the Settings toggle.
+// ============================================================
+
+export const PERSIST_FLAG = "fracital:persist-tabs";
+export const PERSIST_TABS_KEY = "fracital:saved-tabs";
+export const PERSIST_MUSIC_KEY = "fracital:saved-music";
+
+const persistOn = () => {
+	try {
+		return localStorage.getItem(PERSIST_FLAG) === "true";
+	} catch {
+		return false;
+	}
+};
+
+// React icon nodes aren't serializable; drop them (the Tab component re-derives them).
+const serialize = (value: unknown) => JSON.stringify(value, (key, v) => (key === "icon" && typeof v !== "string" ? undefined : v));
+
+if (typeof window !== "undefined") {
+	// --- Hydrate ---
+	if (persistOn()) {
+		try {
+			const savedTabs = JSON.parse(localStorage.getItem(PERSIST_TABS_KEY) || "null");
+			if (savedTabs?.tabs?.length) useTabsStore.setState({ tabs: savedTabs.tabs, groups: savedTabs.groups ?? [] });
+		} catch {
+			/* corrupted snapshot — start fresh */
+		}
+		try {
+			const savedMusic = JSON.parse(localStorage.getItem(PERSIST_MUSIC_KEY) || "null");
+			if (savedMusic) {
+				const alive = (t: Track | null) => !!t?.src && !t.src.startsWith("blob:");
+				useMusicStore.setState({
+					queue: (savedMusic.queue ?? []).filter(alive),
+					currentTrack: alive(savedMusic.currentTrack) ? savedMusic.currentTrack : null,
+					src: alive(savedMusic.currentTrack) ? savedMusic.currentTrack.src : "",
+					playerView: savedMusic.playerView === "tracks" ? "tracks" : "bigplayer",
+				});
+			}
+		} catch {
+			/* corrupted snapshot — start fresh */
+		}
+	}
+
+	// --- Save on change ---
+	useTabsStore.subscribe(state => {
+		if (!persistOn()) return;
+		try {
+			localStorage.setItem(PERSIST_TABS_KEY, serialize({ tabs: state.tabs, groups: state.groups }));
+		} catch {
+			/* storage full/unavailable */
+		}
+	});
+
+	useMusicStore.subscribe(state => {
+		if (!persistOn()) return;
+		try {
+			// Blob URLs die with the page; only server/remote tracks are restorable.
+			const keep = (t: Track | null) => !!t?.src && !t.src.startsWith("blob:");
+			localStorage.setItem(
+				PERSIST_MUSIC_KEY,
+				serialize({ queue: state.queue.filter(keep), currentTrack: keep(state.currentTrack) ? state.currentTrack : null, playerView: state.playerView }),
+			);
+		} catch {
+			/* storage full/unavailable */
+		}
+	});
+}

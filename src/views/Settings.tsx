@@ -270,6 +270,47 @@ const Settings = ({ className }: SettingsProps) => {
 						</span>
 					</label>
 				</div>
+				<div className="flex gap-2">
+					<h2 title="Keep your open tabs, pages and music queue across page refreshes" className="text-xl font-medium">
+						Persistent Tabs
+					</h2>
+					<label className="flex items-center gap-3 cursor-pointer select-none">
+						<input
+							type="checkbox"
+							checked={settings["persistent-tabs"] === true}
+							onChange={async () => {
+								const next = !(settings["persistent-tabs"] === true);
+								await window.fr.fs.promises.writeFile(SettingsPath, JSON.stringify({ ...settings, "persistent-tabs": next }, null, 4), "utf-8");
+								setSettings("persistent-tabs", next);
+								window.localStorage.setItem("fracital:persist-tabs", String(next));
+								if (!next) {
+									window.localStorage.removeItem("fracital:saved-tabs");
+									window.localStorage.removeItem("fracital:saved-music");
+								}
+							}}
+							className="sr-only peer"
+						/>
+						<span
+							className={
+								"relative inline-block w-12 h-7 transition-colors duration-200 rounded-full" +
+								" " +
+								`
+                            ${settings["persistent-tabs"] === true ? "bg-(--accent)" : `${settings.brightness === "dark" ? "bg-[#ffffff10] hover:bg-[#ffffff20]" : "bg-[#00000025] hover:bg-[#00000035]"}`}
+                        `
+							}
+						>
+							<span
+								className={
+									"absolute left-1 top-1 w-5 h-5 bg-white rounded-full shadow transform transition-transform duration-200" +
+									" " +
+									`
+                                ${settings["persistent-tabs"] === true ? "translate-x-5" : ""}
+                            `
+								}
+							/>
+						</span>
+					</label>
+				</div>
 				<h1 className="text-2xl font-bold">Theme</h1>
 				<div className="flex flex-wrap gap-2">
 					{themes.length > 0 ? (

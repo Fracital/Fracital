@@ -581,7 +581,7 @@ const App = () => {
 									" " +
 									`
                                 ${panelsOpen ? "w-full" : "w-50"}
-                                ${settings["floating-tabs"] && panelsOpen ? "rounded-lg" : "rounded-2xl"}
+                                ${settings["floating-tabs"] && panelsOpen ? "rounded-xl" : "rounded-2xl"}
                                 ${settings["floating-tabs"] && "shadow-[0_0_16px_3px_#00000035]"}
                             `
 								}

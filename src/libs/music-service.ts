@@ -45,6 +45,7 @@ export interface MusicTrack {
 	id: string;
 	title: string;
 	artist: string;
+	artistId?: string;
 	album?: string;
 	albumId?: string;
 	duration: number;
@@ -62,12 +63,21 @@ export interface MusicAlbum {
 	artwork: string;
 	releaseDate?: string;
 	trackCount?: number;
+	/** Release kind, derived from iTunes's " - Single" / " - EP" title suffixes. */
+	type?: "album" | "single" | "ep";
+}
+
+/** Album title without iTunes's " - Single" / " - EP" suffix. */
+export function cleanAlbumTitle(title: string): string {
+	return title.replace(/\s*-\s*(Single|EP)\s*$/i, "");
 }
 
 export interface MusicArtist {
 	id: string;
 	name: string;
 	picture: string;
+	/** Full-size image for the artist page hero banner. */
+	banner?: string;
 }
 
 export interface SearchResults {
@@ -151,6 +161,24 @@ export async function getCharts(limit = 25): Promise<{ tracks: MusicTrack[]; alb
 	return apiFetch(`/charts?limit=${limit}`);
 }
 
+// --- Radio ---
+
+export interface RadioOptions {
+	/** Seed artist name. */
+	artist: string;
+	/** Optional seed track title — the station leads with it. */
+	title?: string;
+	/** 0..100: 0 = only the seed artist, 100 = mostly related artists. */
+	variety?: number;
+	limit?: number;
+}
+
+export async function getRadio({ artist, title, variety = 40, limit = 25 }: RadioOptions): Promise<{ seed: { artist: string; banner: string }; tracks: MusicTrack[] }> {
+	const params = new URLSearchParams({ artist, variety: String(variety), limit: String(limit) });
+	if (title) params.set("title", title);
+	return apiFetch(`/radio?${params}`);
+}
+
 // --- Stream URL ---
 
 /**
@@ -185,11 +213,21 @@ export function formatDuration(seconds: number): string {
 	return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
+/** Splits a combined credit like "Jenny Rejects & ilostmykeys" into individual artist names. */
+export function splitArtistCredit(credit: string): string[] {
+	return credit
+		.split(/\s*(?:,|&|\bfeat\.?\b|\bft\.?\b|\bfeaturing\b|\bwith\b|\bvs\.?\b|\bx\b)\s*/i)
+		.map(s => s.trim())
+		.filter(Boolean);
+}
+
 export function trackToFracital(track: MusicTrack) {
+	const artists = splitArtistCredit(track.artist);
 	return {
 		id: `ms-${track.id}`,
 		title: track.title,
-		artists: track.artist,
+		// An array lets the player render collab credits individually.
+		artists: artists.length > 1 ? artists : track.artist,
 		album: track.album || "",
 		genre: "",
 		year: "",

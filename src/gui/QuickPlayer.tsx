@@ -512,7 +512,7 @@ export const QuickPlayer = ({ panelsOpen, className, onMouseDown }: QuickPlayerP
 															)}
 														</div>
 													) : (
-														<h2 className={`text-sm leading-none cursor-pointer duration-150`}>{currentTrack.artists[0]}</h2>
+														<h2 className={`text-sm leading-none cursor-pointer duration-150`}>{Array.isArray(currentTrack.artists) ? currentTrack.artists[0] : currentTrack.artists}</h2>
 													)}
 												</div>
 											</div>
@@ -624,7 +624,7 @@ export const QuickPlayer = ({ panelsOpen, className, onMouseDown }: QuickPlayerP
 																</div>
 															</div>
 														) : (
-															<h2 className={`text-sm leading-none duration-150`}>{song.artists[0]}</h2>
+															<h2 className={`text-sm leading-none duration-150`}>{Array.isArray(song.artists) ? song.artists[0] : song.artists}</h2>
 														)}
 													</div>
 												</div>

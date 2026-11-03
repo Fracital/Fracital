@@ -1,10 +1,9 @@
 import { parseBlob } from "music-metadata";
 import { MusicPath, type Track } from "../types";
-import { fetchJson } from "./imgHandler";
 import { LYRIC_FORMATS, lyricFormatOf, parseLrc, parseLyrics, toLrc, type LyricFormat, type ParsedLyrics } from "./lrc";
-import { artistsMatch, stripCredits, titlesMatch } from "./lyricMatch";
+import { artistSimilarity, artistsMatch, titleSimilarity, titlesMatch } from "./lyricMatch";
 
-export type LyricsSource = "file" | "embedded" | "lrclib" | "netease";
+export type LyricsSource = "file" | "embedded" | "lrclib";
 
 export interface Lyrics extends ParsedLyrics {
 	source: LyricsSource;
@@ -12,37 +11,22 @@ export interface Lyrics extends ParsedLyrics {
 
 export const LYRICS_PROVIDER_NAMES: Partial<Record<LyricsSource, string>> = {
 	lrclib: "LRCLIB",
-	netease: "NetEase Cloud Music",
 };
 
 export const LYRICS_SOURCE_LABELS: Record<LyricsSource, string> = {
 	file: "Lyrics from music folder",
 	embedded: "Lyrics from file tags",
 	lrclib: "Lyrics from LRCLIB",
-	netease: "Lyrics from NetEase Cloud Music",
 };
 
 interface LrclibResult {
 	trackName?: string;
 	artistName?: string;
+	albumName?: string;
 	duration?: number;
 	instrumental?: boolean;
 	plainLyrics?: string | null;
 	syncedLyrics?: string | null;
-}
-
-interface NeteaseSong {
-	id: number;
-	name: string;
-	artists?: { name: string }[];
-	/** Milliseconds. */
-	duration?: number;
-}
-
-interface NeteaseLyricResponse {
-	nolyric?: boolean;
-	uncollected?: boolean;
-	lrc?: { lyric?: string };
 }
 
 // Synced formats are checked before plain text.
@@ -79,6 +63,9 @@ const fromFolder = async (track: Track): Promise<Lyrics | null> => {
 /** Reads lyrics embedded in the audio file's tags, plus the file's duration for matching online results. */
 const fromEmbeddedTags = async (track: Track): Promise<{ lyrics: Lyrics | null; duration?: number }> => {
 	if (!track.src) return { lyrics: null };
+	// Streamed tracks (Digital Library / remote URLs) have no embedded lyrics worth the
+	// full-file download it would take to check; go straight to the online providers.
+	if (track.src.includes("/api/music/playback/") || /^https?:\/\//i.test(track.src)) return { lyrics: null };
 	try {
 		const blob = await (await fetch(track.src)).blob();
 		const { common, format } = await parseBlob(blob, { skipCovers: true });
@@ -115,69 +102,89 @@ export interface SongQuery {
 	title: string;
 	/** Comma-separated artists, or empty when unknown. */
 	artist: string;
+	/** Album name, used for exact signature matching. */
+	album?: string;
 	/** Seconds, used to pick the right version of a song. */
 	duration?: number;
 }
 
-const fromLrclib = async ({ title, artist, duration }: SongQuery): Promise<Lyrics | null> => {
+const lrclibResultToLyrics = (result: LrclibResult, useSynced: boolean): Lyrics | null => {
+	const parsed = parseLrc((useSynced ? result.syncedLyrics : result.plainLyrics) || "");
+	return hasLines(parsed) ? { ...parsed, source: "lrclib" } : null;
+};
+
+/**
+ * LRCLIB's exact-signature endpoint: matches the precise recording by
+ * title + artist + album + duration (±2s server-side). No fuzziness at all.
+ */
+const lrclibGet = async ({ title, artist, album, duration }: SongQuery): Promise<Lyrics | null> => {
+	if (!artist || !album || !duration) return null;
+	const params = new URLSearchParams({ track_name: title, artist_name: artist, album_name: album, duration: String(Math.round(duration)) });
+	const response = await fetch(`https://lrclib.net/api/get?${params}`, { signal: AbortSignal.timeout(8000) });
+	if (!response.ok) return null; // 404 = no exact record
+	const result = (await response.json()) as LrclibResult;
+	if (result.instrumental) return null;
+	return lrclibResultToLyrics(result, !!result.syncedLyrics) ?? lrclibResultToLyrics(result, false);
+};
+
+/** LRCLIB's fuzzy search, with every candidate verified and ranked before use. */
+const lrclibSearch = async ({ title, artist, album, duration }: SongQuery): Promise<Lyrics | null> => {
 	const params = new URLSearchParams({ track_name: title });
 	if (artist) params.set("artist_name", artist);
+	if (album) params.set("album_name", album);
 
+	const response = await fetch(`https://lrclib.net/api/search?${params}`, { signal: AbortSignal.timeout(8000) });
+	if (!response.ok) throw new Error(`LRCLIB returned ${response.status}`);
+	let raw = (await response.json()) as LrclibResult[];
+	// The album filter can be too narrow (deluxe editions, singles); retry without it.
+	if ((!Array.isArray(raw) || raw.length === 0) && album) {
+		params.delete("album_name");
+		const retry = await fetch(`https://lrclib.net/api/search?${params}`, { signal: AbortSignal.timeout(8000) });
+		if (retry.ok) raw = (await retry.json()) as LrclibResult[];
+	}
+	if (!Array.isArray(raw) || raw.length === 0) return null;
+
+	// The search is fuzzy — gate every candidate on real title/artist similarity.
+	const results = raw.filter(r => !r.instrumental && titlesMatch(title, r.trackName ?? "") && artistsMatch(artist, r.artistName ? [r.artistName] : []));
+	if (results.length === 0) return null;
+
+	// Synced lyrics from a different-length cut would drift, so only use them when the length matches; plain lyrics are fine either way.
+	const syncedFits = (r: LrclibResult) => !!r.syncedLyrics && durationOff(duration, r.duration) <= MAX_DURATION_DIFF;
+	// Rank by similarity: title and artist dominate, then album agreement,
+	// then how close the duration is; synced availability breaks ties up front.
+	const score = (r: LrclibResult) => {
+		let s = titleSimilarity(title, r.trackName ?? "") * 4 + artistSimilarity(artist, r.artistName ? [r.artistName] : []) * 3;
+		if (album && r.albumName) s += titleSimilarity(album, r.albumName);
+		if (duration && r.duration) s += Math.max(0, 1 - durationOff(duration, r.duration) / MAX_DURATION_DIFF);
+		if (syncedFits(r)) s += 2;
+		return s;
+	};
+	const best = results.filter(r => syncedFits(r) || r.plainLyrics).sort((a, b) => score(b) - score(a))[0];
+	if (!best) return null;
+	return lrclibResultToLyrics(best, syncedFits(best));
+};
+
+const fromLrclib = async (query: SongQuery): Promise<Lyrics | null> => {
 	try {
-		const results = await fetchJson<LrclibResult[]>(`https://lrclib.net/api/search?${params}`);
-		if (!Array.isArray(results) || results.length === 0) return null;
-
-		// Synced lyrics from a different-length cut would drift, so only use them when the length matches; plain lyrics are fine either way.
-		const syncedFits = (r: LrclibResult) => !!r.syncedLyrics && durationOff(duration, r.duration) <= MAX_DURATION_DIFF;
-		const score = (r: LrclibResult) => (syncedFits(r) ? 0 : 1000) + durationOff(duration, r.duration);
-		const best = results.filter(r => syncedFits(r) || r.plainLyrics).sort((a, b) => score(a) - score(b))[0];
-		if (!best) return null;
-
-		const parsed = parseLrc((syncedFits(best) ? best.syncedLyrics : best.plainLyrics) || "");
-		return hasLines(parsed) ? { ...parsed, source: "lrclib" } : null;
+		// LRCLIB sends CORS headers, so fetch it directly — the proxy transport is far slower.
+		// The exact-signature lookup comes first; fuzzy search is the fallback.
+		return (await lrclibGet(query)) ?? (await lrclibSearch(query));
 	} catch (error) {
 		console.warn("Failed to fetch lyrics from LRCLIB:", error);
 		return null;
 	}
 };
 
-const fromNetease = async ({ title, artist, duration }: SongQuery): Promise<Lyrics | null> => {
-	const params = new URLSearchParams({ s: artist ? `${title} ${artist}` : title, type: "1", limit: "10" });
-
-	try {
-		const search = await fetchJson<{ result?: { songs?: NeteaseSong[] } }>(`https://music.163.com/api/search/get?${params}`);
-		const candidates = (search.result?.songs ?? [])
-			.filter(song => titlesMatch(title, song.name) && artistsMatch(artist, song.artists?.map(a => a.name) ?? []))
-			.map(song => ({ song, off: durationOff(duration, song.duration ? song.duration / 1000 : undefined) }))
-			.filter(({ off }) => off <= MAX_DURATION_DIFF)
-			.sort((a, b) => a.off - b.off)
-			.slice(0, 3);
-
-		for (const { song } of candidates) {
-			const data = await fetchJson<NeteaseLyricResponse>(`https://music.163.com/api/song/lyric?id=${song.id}&lv=1&tv=-1`);
-			if (data.nolyric || data.uncollected || !data.lrc?.lyric) continue;
-			const parsed = parseLrc(data.lrc.lyric);
-			const lyrics = { ...parsed, lines: stripCredits(parsed.lines) };
-			if (hasLines(lyrics)) return { ...lyrics, source: "netease" };
-		}
-	} catch (error) {
-		console.warn("Failed to fetch lyrics from NetEase:", error);
-	}
-	return null;
-};
-
-/** Queries every online provider at once, preferring synced lyrics, then provider order. */
+/** Queries LRCLIB; every result is verified against the track's title and artist. */
 export const findOnlineLyrics = async (query: SongQuery): Promise<Lyrics | null> => {
 	const title = query.title.trim();
 	if (!title) return null;
-	const trimmed = { ...query, title, artist: UNKNOWN_ARTIST.test(query.artist.trim()) ? "" : query.artist.trim() };
-	const results = await Promise.all([fromLrclib(trimmed), fromNetease(trimmed)]);
-	return results.find(lyrics => lyrics?.synced) ?? results.find(Boolean) ?? null;
+	return fromLrclib({ ...query, title, artist: UNKNOWN_ARTIST.test(query.artist.trim()) ? "" : query.artist.trim() });
 };
 
 /**
  * Looks for lyrics in order: `lyrics.lrc`/`lyrics.srt`/`lyrics.txt` in the song's music folder,
- * lyrics embedded in the audio file's tags, then online (LRCLIB and NetEase Cloud Music).
+ * lyrics embedded in the audio file's tags, then online (LRCLIB).
  */
 export const loadLyrics = (track: Track, duration?: number): Promise<Lyrics | null> => {
 	const key = track.folderName || track.src || `${track.title}|${artistOf(track)}`;
@@ -189,7 +196,7 @@ export const loadLyrics = (track: Track, duration?: number): Promise<Lyrics | nu
 		if (file) return file;
 		const embedded = await fromEmbeddedTags(track);
 		// The file's own duration is more reliable than the player's, which may still belong to the previous track.
-		return embedded.lyrics ?? (await findOnlineLyrics({ title: track.title ?? "", artist: artistOf(track), duration: embedded.duration ?? duration }));
+		return embedded.lyrics ?? (await findOnlineLyrics({ title: track.title ?? "", artist: artistOf(track), album: track.album || undefined, duration: embedded.duration ?? duration }));
 	})();
 	cache.set(key, pending);
 	// Don't cache misses forever so newly added lyric files get picked up.

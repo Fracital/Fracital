@@ -1,10 +1,10 @@
 import { createServer, type IncomingMessage } from "node:http";
+import dns from "node:dns";
 import { Hono } from "hono";
 import { getRequestListener } from "@hono/node-server";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { cors } from "hono/cors";
 import { getCookie, setCookie } from "hono/cookie";
-import { stream } from "hono/streaming";
 import config from "dotenv";
 import fs from "node:fs";
 import path from "node:path";
@@ -13,9 +13,14 @@ import { version } from "./package.json";
 import { server as wisp } from "@mercuryworkshop/wisp-js/server";
 import { create as createYoutubeDl } from "youtube-dl-exec";
 import ytSearch from "yt-search";
+import { rankAlbums, rankArtists, rankTracks } from "./src/server/music-rank";
+import { artistBanner, artistTopTracks, buildRadio, findDeezerArtist } from "./src/server/music-radio";
 
 export function fsrv() {
 	config.config();
+	// yt-dlp resolves googlevideo URLs IP-locked with forceIpv4; node's fetch must
+	// connect from the same family or the CDN resets the stream mid-transfer.
+	dns.setDefaultResultOrder("ipv4first");
 	const __filename = fileURLToPath(import.meta.url);
 	const __dirname = path.dirname(__filename);
 
@@ -120,6 +125,8 @@ export function fsrv() {
 	const STREAM_URL_TTL = 15 * 60_000;
 
 	const artworkHd = (url: string | undefined) => (url || "").replace(/\d+x\d+bb/, "600x600bb");
+	// iTunes marks singles and EPs with a title suffix.
+	const albumType = (title: string | undefined): "album" | "single" | "ep" => (/ - single$/i.test(title || "") ? "single" : / - ep$/i.test(title || "") ? "ep" : "album");
 
 	const findVideoId = async (title: string, artist: string): Promise<string | null> => {
 		try {
@@ -130,33 +137,73 @@ export function fsrv() {
 
 	app.get("/api/music/health", c => c.json({ status: "ok", caches: { videos: trackToVideoCache.size, streams: streamUrlCache.size } }));
 
+	// Radio: a seeded, variety-tunable mix built from Deezer's artist graph.
+	app.get("/api/music/radio", async c => {
+		const artist = c.req.query("artist")?.trim();
+		if (!artist) return c.json({ error: "artist is required" }, 400);
+		try {
+			const mix = await buildRadio(
+				{
+					artist,
+					title: c.req.query("title")?.trim() || undefined,
+					variety: Number(c.req.query("variety")) || 40,
+					limit: Math.min(Number(c.req.query("limit")) || 25, 50),
+				},
+				"/api/music",
+			);
+			if (!mix) return c.json({ error: "Artist not found" }, 404);
+			return c.json(mix);
+		} catch (err: any) {
+			return c.json({ error: err.message }, 502);
+		}
+	});
+
+
 	app.get("/api/music/search", async c => {
 		const q = c.req.query("q")?.trim();
-		if (!q) return c.json({ tracks: [], albums: [] });
+		if (!q) return c.json({ tracks: [], albums: [], artists: [] });
 		const limit = Math.min(Number(c.req.query("limit")) || 24, 50);
 		try {
-			const ir = await fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(q)}&entity=song&limit=${limit}&country=US`, { headers: { Accept: "application/json" } });
-			if (!ir.ok) throw new Error(`iTunes ${ir.status}`);
-			const catalog = (await ir.json()) as { results?: any[] };
-			const candidates = (catalog.results || []).filter((i: any) => i.wrapperType === "track" && i.kind === "song" && i.trackName && i.artistName);
-			const albumMap = new Map<string, any>();
-			for (const item of catalog.results || []) {
-				if (item.collectionId && item.collectionName && !albumMap.has(String(item.collectionId)))
-					albumMap.set(String(item.collectionId), { id: String(item.collectionId), title: item.collectionName, artist: item.artistName || "", artwork: artworkHd(item.artworkUrl100) });
-			}
-			const tracks = (await Promise.all(candidates.map(async (item: any) => {
-				const vid = await findVideoId(item.trackName, item.artistName);
-				if (!vid) return null;
-				if (item.trackId) trackToVideoCache.set(String(item.trackId), vid);
-				return {
-					id: String(item.trackId || vid), title: item.trackName, artist: item.artistName,
-					album: item.collectionName || undefined, albumId: item.collectionId ? String(item.collectionId) : undefined,
-					duration: Math.round((item.trackTimeMillis || 0) / 1000), artwork: artworkHd(item.artworkUrl100),
-					streamUrl: `/api/music/playback/${vid}?fallback=${encodeURIComponent(item.previewUrl || "")}`,
-					previewUrl: item.previewUrl || "", explicit: item.trackExplicitness === "explicit",
-				};
-			}))).filter(Boolean);
-			return c.json({ tracks, albums: [...albumMap.values()].slice(0, 12) });
+			// Query songs, albums and artists in parallel for full search coverage.
+			const term = encodeURIComponent(q);
+			const [songRes, albumRes, artistRes] = await Promise.all([
+				fetch(`https://itunes.apple.com/search?term=${term}&entity=song&limit=${limit}&country=US`, { headers: { Accept: "application/json" } }),
+				fetch(`https://itunes.apple.com/search?term=${term}&entity=album&limit=12&country=US`, { headers: { Accept: "application/json" } }),
+				fetch(`https://itunes.apple.com/search?term=${term}&entity=musicArtist&limit=6&country=US`, { headers: { Accept: "application/json" } }),
+			]);
+			if (!songRes.ok) throw new Error(`iTunes ${songRes.status}`);
+			const songCatalog = (await songRes.json()) as { results?: any[] };
+			const albumCatalog = albumRes.ok ? ((await albumRes.json()) as { results?: any[] }) : { results: [] };
+			const artistCatalog = artistRes.ok ? ((await artistRes.json()) as { results?: any[] }) : { results: [] };
+			const candidates = (songCatalog.results || []).filter((i: any) => i.wrapperType === "track" && i.kind === "song" && i.trackName && i.artistName);
+			// YouTube resolution is deferred to playback time so search responds instantly.
+			const tracks = candidates.map((item: any) => ({
+				id: String(item.trackId), title: item.trackName, artist: item.artistName,
+				artistId: item.artistId ? String(item.artistId) : undefined,
+				album: item.collectionName || undefined, albumId: item.collectionId ? String(item.collectionId) : undefined,
+				duration: Math.round((item.trackTimeMillis || 0) / 1000), artwork: artworkHd(item.artworkUrl100),
+				// Title/artist hints let playback resolve YouTube without another iTunes lookup.
+				streamUrl: `/api/music/playback/${item.trackId}?fallback=${encodeURIComponent(item.previewUrl || "")}&title=${encodeURIComponent(item.trackName || "")}&artist=${encodeURIComponent(item.artistName || "")}`,
+				previewUrl: item.previewUrl || "", explicit: item.trackExplicitness === "explicit",
+			}));
+			const albums = (albumCatalog.results || [])
+				.filter((r: any) => r.wrapperType === "collection" && r.collectionName)
+				.map((r: any) => ({
+					id: String(r.collectionId), title: r.collectionName, artist: r.artistName || "",
+					artistId: r.artistId ? String(r.artistId) : undefined,
+					artwork: artworkHd(r.artworkUrl100), trackCount: r.trackCount, releaseDate: r.releaseDate, type: albumType(r.collectionName),
+				}));
+			// Profile pictures come from Deezer (cached); iTunes has none.
+			const artists = await Promise.all(
+				(artistCatalog.results || [])
+					.filter((r: any) => r.artistId && r.artistName)
+					.slice(0, 6)
+					.map(async (r: any) => {
+						const dz = await findDeezerArtist(r.artistName).catch(() => null);
+						return { id: String(r.artistId), name: r.artistName, picture: dz?.picture_big || dz?.picture_medium || "" };
+					}),
+			);
+			return c.json({ tracks: rankTracks(q, tracks), albums: rankAlbums(q, albums), artists: rankArtists(q, artists) });
 		} catch (err: any) { return c.json({ error: err.message }, 502); }
 	});
 
@@ -169,7 +216,7 @@ export function fsrv() {
 			const results = catalog.results || [];
 			const col = results.find((r: any) => r.wrapperType === "collection");
 			const songs = results.filter((r: any) => r.wrapperType === "track" && r.kind === "song");
-			const album = col ? { id: String(col.collectionId), title: col.collectionName, artist: col.artistName, artwork: artworkHd(col.artworkUrl100), trackCount: col.trackCount, releaseDate: col.releaseDate } : { id, title: "Album", artist: "", artwork: "" };
+			const album = col ? { id: String(col.collectionId), title: col.collectionName, artist: col.artistName, artistId: col.artistId ? String(col.artistId) : undefined, artwork: artworkHd(col.artworkUrl100), trackCount: col.trackCount, releaseDate: col.releaseDate, type: albumType(col.collectionName) } : { id, title: "Album", artist: "", artwork: "" };
 			const tracks = songs.map((item: any) => ({
 				id: String(item.trackId), title: item.trackName || "Unknown", artist: item.artistName || "",
 				album: item.collectionName || album.title, albumId: String(item.collectionId || id),
@@ -185,46 +232,71 @@ export function fsrv() {
 		const id = c.req.param("id");
 		try {
 			const [sr, ar] = await Promise.all([
-				fetch(`https://itunes.apple.com/lookup?id=${id}&entity=song&limit=20`, { headers: { Accept: "application/json" } }),
-				fetch(`https://itunes.apple.com/lookup?id=${id}&entity=album&limit=20`, { headers: { Accept: "application/json" } }),
+				fetch(`https://itunes.apple.com/lookup?id=${id}&entity=song&limit=25`, { headers: { Accept: "application/json" } }),
+				// 200 is the lookup API's maximum — the artist's entire discography.
+				fetch(`https://itunes.apple.com/lookup?id=${id}&entity=album&limit=200`, { headers: { Accept: "application/json" } }),
 			]);
 			const sd = (await sr.json()) as { results?: any[] };
 			const ad = (await ar.json()) as { results?: any[] };
 			const rec = (sd.results || [])[0] || (ad.results || [])[0];
-			const artist = { id: String(rec?.artistId || id), name: rec?.artistName || "Unknown", picture: artworkHd(rec?.artworkUrl100) };
-			const tracks = (sd.results || []).filter((r: any) => r.wrapperType === "track" && r.kind === "song").map((item: any) => ({
-				id: String(item.trackId), title: item.trackName, artist: item.artistName, album: item.collectionName,
-				albumId: item.collectionId ? String(item.collectionId) : undefined,
-				duration: Math.round((item.trackTimeMillis || 0) / 1000), artwork: artworkHd(item.artworkUrl100),
-				streamUrl: `/api/music/playback/${item.trackId}?fallback=${encodeURIComponent(item.previewUrl || "")}&title=${encodeURIComponent(item.trackName || "")}&artist=${encodeURIComponent(item.artistName || "")}`,
-				previewUrl: item.previewUrl || "", explicit: item.trackExplicitness === "explicit",
-			}));
-			const albums = (ad.results || []).filter((r: any) => r.wrapperType === "collection").map((r: any) => ({
-				id: String(r.collectionId), title: r.collectionName, artist: r.artistName, artwork: artworkHd(r.artworkUrl100), trackCount: r.trackCount, releaseDate: r.releaseDate,
-			}));
-			return c.json({ artist, tracks, albums });
-		} catch (err: any) { return c.json({ error: err.message }, 502); }
-	});
-
-	app.get("/api/music/charts", async c => {
-		const limit = Math.min(Number(c.req.query("limit")) || 25, 50);
-		try {
-			const ir = await fetch(`https://itunes.apple.com/search?term=top+hits+2026&entity=song&limit=${limit}&country=US`, { headers: { Accept: "application/json" } });
-			const catalog = (await ir.json()) as { results?: any[] };
-			const songs = (catalog.results || []).filter((r: any) => r.wrapperType === "track" && r.kind === "song");
-			const albumMap = new Map<string, any>();
-			const tracks = songs.map((item: any) => {
-				if (item.collectionId && !albumMap.has(String(item.collectionId)))
-					albumMap.set(String(item.collectionId), { id: String(item.collectionId), title: item.collectionName, artist: item.artistName, artwork: artworkHd(item.artworkUrl100) });
-				return {
+			const artistName = rec?.artistName || "Unknown";
+			const banner = artistName !== "Unknown" ? await artistBanner(artistName) : "";
+			const artist = { id: String(rec?.artistId || id), name: artistName, picture: banner || artworkHd(rec?.artistId ? rec?.artworkUrl100 : ""), banner };
+			// Top tracks ranked by real streaming popularity (Deezer rank); iTunes order is the fallback.
+			const ranked = artistName !== "Unknown" ? await artistTopTracks(artistName, "/api/music", 20).catch(() => []) : [];
+			const tracks = ranked.length > 0
+				? ranked
+				: (sd.results || []).filter((r: any) => r.wrapperType === "track" && r.kind === "song").map((item: any) => ({
 					id: String(item.trackId), title: item.trackName, artist: item.artistName, album: item.collectionName,
 					albumId: item.collectionId ? String(item.collectionId) : undefined,
 					duration: Math.round((item.trackTimeMillis || 0) / 1000), artwork: artworkHd(item.artworkUrl100),
 					streamUrl: `/api/music/playback/${item.trackId}?fallback=${encodeURIComponent(item.previewUrl || "")}&title=${encodeURIComponent(item.trackName || "")}&artist=${encodeURIComponent(item.artistName || "")}`,
 					previewUrl: item.previewUrl || "", explicit: item.trackExplicitness === "explicit",
-				};
-			});
-			return c.json({ tracks, albums: [...albumMap.values()].slice(0, 12) });
+				}));
+			const albums = (ad.results || []).filter((r: any) => r.wrapperType === "collection").map((r: any) => ({
+				id: String(r.collectionId), title: r.collectionName, artist: r.artistName, artwork: artworkHd(r.artworkUrl100), trackCount: r.trackCount, releaseDate: r.releaseDate, type: albumType(r.collectionName),
+			})).sort((a: any, b: any) => new Date(b.releaseDate || 0).getTime() - new Date(a.releaseDate || 0).getTime());
+			return c.json({ artist, tracks, albums });
+		} catch (err: any) { return c.json({ error: err.message }, 502); }
+	});
+
+	// Real Apple Music most-played chart, resolved to full tracks and cached.
+	let chartsCache: { at: number; payload: unknown } | null = null;
+	const CHARTS_TTL = 30 * 60_000;
+
+	app.get("/api/music/charts", async c => {
+		const limit = Math.min(Number(c.req.query("limit")) || 25, 50);
+		try {
+			if (chartsCache && Date.now() - chartsCache.at < CHARTS_TTL) return c.json(chartsCache.payload as object);
+
+			const feed = (await (await fetch(`https://rss.marketingtools.apple.com/api/v2/us/music/most-played/${limit}/songs.json`, { headers: { Accept: "application/json" } })).json()) as { feed?: { results?: { id: string }[] } };
+			const ids = (feed.feed?.results || []).map(r => r.id).filter(Boolean);
+			if (ids.length === 0) throw new Error("Empty charts feed");
+
+			const lookup = (await (await fetch(`https://itunes.apple.com/lookup?id=${ids.join(",")}&entity=song`, { headers: { Accept: "application/json" } })).json()) as { results?: any[] };
+			const byId = new Map((lookup.results || []).filter((r: any) => r.wrapperType === "track").map((r: any) => [String(r.trackId), r]));
+
+			const albumMap = new Map<string, any>();
+			// Keep the feed's chart order, not the lookup's.
+			const tracks = ids
+				.map(id => byId.get(id))
+				.filter((item: any) => item?.trackName && item?.artistName)
+				.map((item: any) => {
+					if (item.collectionId && !albumMap.has(String(item.collectionId)))
+						albumMap.set(String(item.collectionId), { id: String(item.collectionId), title: item.collectionName, artist: item.artistName, artwork: artworkHd(item.artworkUrl100) });
+					return {
+						id: String(item.trackId), title: item.trackName, artist: item.artistName,
+						artistId: item.artistId ? String(item.artistId) : undefined,
+						album: item.collectionName, albumId: item.collectionId ? String(item.collectionId) : undefined,
+						duration: Math.round((item.trackTimeMillis || 0) / 1000), artwork: artworkHd(item.artworkUrl100),
+						streamUrl: `/api/music/playback/${item.trackId}?fallback=${encodeURIComponent(item.previewUrl || "")}&title=${encodeURIComponent(item.trackName || "")}&artist=${encodeURIComponent(item.artistName || "")}`,
+						previewUrl: item.previewUrl || "", explicit: item.trackExplicitness === "explicit",
+					};
+				});
+
+			const payload = { tracks, albums: [...albumMap.values()].slice(0, 12) };
+			chartsCache = { at: Date.now(), payload };
+			return c.json(payload);
 		} catch (err: any) { return c.json({ error: err.message }, 502); }
 	});
 
@@ -271,41 +343,39 @@ export function fsrv() {
 		}
 
 		try {
-			const cached = streamUrlCache.get(videoId);
-			let streamUrl = cached && Date.now() - cached.at < STREAM_URL_TTL ? cached.url : "";
-			if (!streamUrl) {
+			const resolveStream = async (fresh: boolean): Promise<string> => {
+				const cached = fresh ? undefined : streamUrlCache.get(videoId);
+				if (cached && Date.now() - cached.at < STREAM_URL_TTL) return cached.url;
 				const result = (await youtubeDl(`https://www.youtube.com/watch?v=${videoId}`, { format: "bestaudio/best", getUrl: true, forceIpv4: true }, { timeout: 20_000 })) as unknown as string;
-				streamUrl = String(result).trim().split("\n")[0];
-				if (!streamUrl.startsWith("http")) throw new Error("yt-dlp failed");
-				streamUrlCache.set(videoId, { url: streamUrl, at: Date.now() });
-			}
+				const url = String(result).trim().split("\n")[0];
+				if (!url.startsWith("http")) throw new Error("yt-dlp failed");
+				streamUrlCache.set(videoId, { url, at: Date.now() });
+				return url;
+			};
 
 			const headers: Record<string, string> = { "User-Agent": "Mozilla/5.0", Referer: "https://www.youtube.com/" };
 			const range = c.req.header("range");
 			if (range) headers.Range = range;
 
-			const upstream = await fetch(streamUrl, { headers });
+			// A cached googlevideo URL can expire or be IP-bound; retry once with a fresh resolution.
+			let upstream = await fetch(await resolveStream(false), { headers }).catch(() => null);
+			if (!upstream || !upstream.ok || !upstream.body) {
+				upstream = await fetch(await resolveStream(true), { headers });
+			}
 			if (!upstream.ok || !upstream.body) throw new Error(`Upstream ${upstream.status}`);
 
+			// Pass the audio straight through with the real content-type and status —
+			// Hono's stream() helper would default everything to text/plain + 200,
+			// which browsers reject as an unsupported media source.
 			const respHeaders = new Headers();
 			for (const name of ["content-type", "content-length", "content-range", "accept-ranges"]) {
 				const v = upstream.headers.get(name);
 				if (v) respHeaders.set(name, v);
 			}
+			if (!respHeaders.has("content-type")) respHeaders.set("content-type", "audio/webm");
 			respHeaders.set("Cache-Control", "private, max-age=3600");
 
-			return stream(c, async s => {
-				const reader = upstream.body!.getReader();
-				try {
-					while (true) {
-						const { done, value } = await reader.read();
-						if (done) break;
-						await s.write(value);
-					}
-				} finally {
-					reader.cancel().catch(() => {});
-				}
-			}, undefined, respHeaders);
+			return new Response(upstream.body, { status: upstream.status, headers: respHeaders });
 		} catch (err: any) {
 			if (fallback.startsWith("https://")) return c.redirect(fallback, 302);
 			return c.json({ error: err.message }, 502);
