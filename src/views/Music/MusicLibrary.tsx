@@ -10,6 +10,7 @@ import { LYRICS_ACCEPT, LYRICS_PROVIDER_NAMES, findOnlineLyrics, readLocalLyrics
 import { TRACK_INFO_SOURCE_LABELS, audioDuration, fetchCoverDataUrl, findTrackInfo, guessFromFileName } from "../../libs/trackInfo";
 import { lyricFormatOf } from "../../libs/lrc";
 import { splitArtistCredit } from "../../libs/artistCredit";
+import { PlayCount } from "../../components/PlayCount";
 
 interface MusicLibraryProps {
 	query: string | undefined;
@@ -397,6 +398,7 @@ export const MusicLibrary = ({ query }: MusicLibraryProps) => {
 								<div className="flex flex-col gap-1 justify-center pr-2 pointer-events-none">
 									<span className="text-xl font-medium">{song.title}</span>
 									<span className="text-md">{Array.isArray(song.artists) ? song.artists.join(", ") : song.artists}</span>
+									<PlayCount title={song.title} artist={song.artists} skeleton={false} className="text-xs text-(--text-tertiary)" />
 								</div>
 								<div
 									id="options"

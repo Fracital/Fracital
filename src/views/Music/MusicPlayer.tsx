@@ -7,6 +7,7 @@ import { AudvisVisualizer } from "../../components/AudvisVisualizer";
 import { formatTime, next, parsePlayerMode, play, playerUrl, previous, seek, setVolume, toggleLoop, toggleMute, togglePlay, type PlayerMode } from "../../libs/playback";
 import { LYRICS_CHANGED_EVENT, LYRICS_SOURCE_LABELS, loadLyrics, type Lyrics } from "../../libs/lyrics";
 import { activeLineIndex } from "../../libs/lrc";
+import { PlayCount } from "../../components/PlayCount";
 
 interface MusicPlayerProps {
 	query?: string;
@@ -287,7 +288,10 @@ const QueuePanel = () => {
 						<Cover track={song} className="size-12 shrink-0 rounded-md" />
 						<div className="flex min-w-0 flex-col gap-1">
 							<span className="truncate font-semibold leading-none">{song.title}</span>
-							<span className="truncate text-sm leading-none text-(--text-secondary)">{artistText(song)}</span>
+							<span className="truncate text-sm leading-none text-(--text-secondary)">
+								{artistText(song)}
+								<PlayCount title={song.title} artist={song.artists} skeleton={false} prefix=" · " className="text-(--text-tertiary)" />
+							</span>
 						</div>
 					</div>
 					<button
@@ -399,6 +403,7 @@ export const MusicPlayer = ({ query, className }: MusicPlayerProps) => {
 								</h1>
 								<h2 className="text-lg font-semibold text-(--text-secondary)">{artistText(currentTrack)}</h2>
 								{currentTrack.album && !/^unknown/i.test(currentTrack.album) && <span className="text-sm text-(--text-tertiary)">{currentTrack.album}</span>}
+								<PlayCount title={currentTrack.title} artist={currentTrack.artists} skeleton={false} className="text-sm font-medium text-(--text-tertiary)" />
 							</div>
 
 							<div className={`flex w-full flex-col items-center gap-4 ${sidePanel ? "" : "max-w-2xl"}`}>

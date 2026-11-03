@@ -182,15 +182,28 @@ export async function getArtist(id: string): Promise<ArtistDetail> {
 }
 
 const playsCache = new Map<string, Promise<TrackPlays | null>>();
+/** Settled results, readable synchronously so re-mounted rows don't flash a placeholder. */
+const playsResolved = new Map<string, TrackPlays | null>();
+
+const playsKey = (title: string, artist: string) => `${artist}|${title}`.toLowerCase();
+
+/** The cached play count if already loaded: TrackPlays, null (unknown), or undefined (not loaded yet). */
+export function peekTrackPlays(title: string, artist: string): TrackPlays | null | undefined {
+	return playsResolved.get(playsKey(title, artist));
+}
 
 /** A song's play count (Last.fm scrobbles, or YouTube views as a fallback); null when unknown. */
 export function getTrackPlays(title: string, artist: string): Promise<TrackPlays | null> {
-	const key = `${artist}|${title}`.toLowerCase();
+	const key = playsKey(title, artist);
 	let pending = playsCache.get(key);
 	if (!pending) {
 		// v=2 skips stale browser-cached misses from before Last.fm support.
 		pending = apiFetch<{ plays: number | null; listeners: number | null; source: TrackPlays["source"] | null }>(`/plays?title=${encodeURIComponent(title)}&artist=${encodeURIComponent(artist)}&v=2`)
-			.then(r => (r.plays && r.source ? { plays: r.plays, listeners: r.listeners ?? undefined, source: r.source } : null))
+			.then(r => {
+				const value = r.plays && r.source ? { plays: r.plays, listeners: r.listeners ?? undefined, source: r.source } : null;
+				playsResolved.set(key, value);
+				return value;
+			})
 			.catch(() => {
 				playsCache.delete(key);
 				return null;

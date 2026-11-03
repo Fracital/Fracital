@@ -4,6 +4,7 @@ import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { createId } from "@paralleldrive/cuid2";
 import { useEffect, useState } from "react";
 import { Shelf } from "../components/Shelf";
+import { PlayCount } from "../components/PlayCount";
 import { connectLastfm, getMe, type Me } from "../libs/auth";
 import { songKey, useLastfmStore } from "../libs/lastfmState";
 import { formatCount, library, type LastfmPeriod, type LibraryAlbum, type LibraryArtist, type LibraryTrack } from "../libs/music-service";
@@ -165,7 +166,10 @@ export const YourLibrary = ({ dark, onPlayList, onOpenArtist, onOpenAlbum, onSon
 				>
 					{track.artist}
 				</span>
-				{meta && <span className="text-[10px] text-(--text-tertiary) truncate">{meta}</span>}
+				<span className="text-[10px] text-(--text-tertiary) truncate">
+					{meta}
+					<PlayCount title={track.title} artist={track.artist} skeleton={false} prefix={meta ? " · " : ""} />
+				</span>
 			</div>
 		</div>
 	);
@@ -252,7 +256,10 @@ export const YourLibrary = ({ dark, onPlayList, onOpenArtist, onOpenAlbum, onSon
 									<span className="text-sm font-semibold truncate">{t.title}</span>
 									<span className="text-xs text-(--text-tertiary) truncate">{t.artist}</span>
 								</div>
-								{!!t.userPlays && <span className="text-xs font-semibold text-(--text-secondary) tabular-nums">{formatCount(t.userPlays)} plays</span>}
+								<div className="flex flex-col items-end leading-tight">
+									<PlayCount title={t.title} artist={t.artist} className="text-xs font-semibold text-(--text-secondary)" />
+									{!!t.userPlays && <span className="text-[11px] text-(--text-tertiary) tabular-nums">You: {formatCount(t.userPlays)}</span>}
+								</div>
 							</div>
 						))}
 					</div>

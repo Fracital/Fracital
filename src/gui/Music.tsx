@@ -4,6 +4,7 @@ import { QueueListIcon, MusicalNoteIcon, PlusIcon, HeartIcon, BookmarkIcon } fro
 import { HeartIcon as HeartOutline } from "@heroicons/react/24/outline";
 import { PlayIcon } from "@heroicons/react/24/solid";
 import { useMusicStore, usePanelsStore, useSettingsStore, useTabsStore } from "../store";
+import { PlayCount } from "../components/PlayCount";
 
 interface QuickPlayerProps {
 	tabsOpen: boolean;
@@ -127,6 +128,7 @@ export const QuickPlayer = ({ tabsOpen, className }: QuickPlayerProps) => {
 											) : (
 												<h2>{currentTrack.artists}</h2>
 											)}
+											<PlayCount title={currentTrack.title} artist={currentTrack.artists} skeleton={false} className="text-xs text-[#ffffff8c]" />
 										</div>
 									</div>
 								</div>

@@ -8,6 +8,7 @@ import { ContextMenu, type MenuItem } from "../components/ContextMenu";
 import { AudvisVisualizer } from "../components/AudvisVisualizer";
 import { openMusicPlayer, registerAudio } from "../libs/playback";
 import { openLibraryPage } from "../libs/aboutPages";
+import { PlayCount } from "../components/PlayCount";
 import type { Track } from "../types";
 
 /** Digital Library tracks link their artist names to artist pages. */
@@ -545,6 +546,7 @@ export const QuickPlayer = ({ panelsOpen, className, onMouseDown }: QuickPlayerP
 															{Array.isArray(currentTrack.artists) ? currentTrack.artists[0] : currentTrack.artists}
 														</h2>
 													)}
+													<PlayCount title={currentTrack.title} artist={currentTrack.artists} skeleton={false} className="text-[11px] leading-none opacity-60" />
 												</div>
 											</div>
 											<EllipsisHorizontalIcon
@@ -657,6 +659,7 @@ export const QuickPlayer = ({ panelsOpen, className, onMouseDown }: QuickPlayerP
 														) : (
 															<h2 className={`text-sm leading-none duration-150`}>{Array.isArray(song.artists) ? song.artists[0] : song.artists}</h2>
 														)}
+														<PlayCount title={song.title} artist={song.artists} skeleton={false} className="text-[11px] leading-none opacity-60" />
 													</div>
 												</div>
 												<EllipsisHorizontalIcon
@@ -1052,6 +1055,7 @@ export const QuickPlayer = ({ panelsOpen, className, onMouseDown }: QuickPlayerP
 												</span>
 											))}
 										</h2>
+										{currentTrack && <PlayCount title={currentTrack.title} artist={currentTrack.artists} skeleton={false} className="text-xs font-medium opacity-60" />}
 									</div>
 									<div className="flex w-full">
 										<div className="relative flex justify-center items-center w-full h-9">

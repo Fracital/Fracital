@@ -17,7 +17,6 @@ import {
 	cleanAlbumTitle,
 	splitArtistCredit,
 	getMusicApiConfig,
-	getTrackPlays,
 	getArtistExtras,
 	library,
 	formatCount,
@@ -28,10 +27,10 @@ import {
 	type MusicArtist,
 	type AlbumDetail,
 	type ArtistDetail,
-	type TrackPlays,
 } from "../libs/music-service";
 import { ContextMenu, type MenuItem } from "../components/ContextMenu";
 import { Shelf } from "../components/Shelf";
+import { PlayCount } from "../components/PlayCount";
 import { YourLibrary } from "./YourLibrary";
 import { songKey, useLastfmStore } from "../libs/lastfmState";
 import { CheckIcon, GlobeAltIcon, HeartIcon } from "@heroicons/react/24/solid";
@@ -101,8 +100,6 @@ export const DigitalLibrary = ({ query }: DigitalLibraryProps) => {
 	// Artist page UI state lives here (not in ArtistPage) so it survives re-renders.
 	const [bioExpanded, setBioExpanded] = useState(false);
 	const [topSongsExpanded, setTopSongsExpanded] = useState(false);
-	/** Play counts keyed by track id: undefined = loading, null = unknown. */
-	const [trackPlays, setTrackPlays] = useState<Record<string, TrackPlays | null>>({});
 	const [songMenu, setSongMenu] = useState<{ items: MenuItem[]; position: { x: number; y: number } } | null>(null);
 	const [extras, setExtras] = useState<ArtistExtras | null>(null);
 	const [savedArtistIds, setSavedArtistIds] = useState<Set<string> | null>(null);
@@ -143,18 +140,6 @@ export const DigitalLibrary = ({ query }: DigitalLibraryProps) => {
 			.then(r => setSavedArtistIds(new Set(r.artists.map(a => a.id))))
 			.catch(() => setSavedArtistIds(null));
 	}, [lastfmUser]);
-
-	// Fetch play counts for the artist's ranked songs; each fills in as it arrives.
-	useEffect(() => {
-		if (!artistDetail) return;
-		let cancelled = false;
-		artistDetail.tracks.slice(0, 20).forEach(t => {
-			getTrackPlays(t.title, t.artist).then(plays => {
-				if (!cancelled) setTrackPlays(prev => ({ ...prev, [t.id]: plays }));
-			});
-		});
-		return () => { cancelled = true; };
-	}, [artistDetail]);
 
 	// Radio controls
 	const [radioVariety, setRadioVariety] = useState<number>(() => Number(localStorage.getItem("fracital:radio-variety")) || 40);
@@ -258,7 +243,6 @@ export const DigitalLibrary = ({ query }: DigitalLibraryProps) => {
 		setLoading(true);
 		try {
 			const detail = await getArtist(id);
-			setTrackPlays({});
 			setExtras(null);
 			setShowMoreLinks(false);
 			setArtistDetail(detail);
@@ -418,6 +402,7 @@ export const DigitalLibrary = ({ query }: DigitalLibraryProps) => {
 					{track.album}
 				</span>
 			)}
+			<PlayCount title={track.title} artist={track.artist} className="text-xs font-medium text-(--text-secondary) w-20 text-right shrink-0 hidden sm:block" />
 			<span className="text-xs text-(--text-tertiary) w-10 text-right">{formatDuration(track.duration)}</span>
 			<button
 				className="opacity-0 group-hover:opacity-100 p-1 rounded-full hover:bg-[#ffffff20] duration-150"
@@ -500,7 +485,6 @@ export const DigitalLibrary = ({ query }: DigitalLibraryProps) => {
 
 	/** A top song as its own full-width card: artwork, title/artist, play count, and a "⋯" menu. */
 	const TopSongCard = ({ track }: { track: MusicTrack }) => {
-		const plays = trackPlays[track.id];
 		const key = songKey(track.title, track.artist);
 		const isLoved = !!lovedSongs[key];
 		const mine = myPlays[key];
@@ -525,17 +509,8 @@ export const DigitalLibrary = ({ query }: DigitalLibraryProps) => {
 						<span className="text-xs text-(--text-tertiary) leading-tight truncate">{track.artist}</span>
 					</div>
 				</div>
-				<span
-					className="text-sm font-semibold text-(--text-secondary) tabular-nums"
-					title={
-						!plays
-							? undefined
-							: plays.source === "lastfm"
-								? `${plays.plays.toLocaleString()} Last.fm scrobbles${plays.listeners ? ` from ${plays.listeners.toLocaleString()} listeners` : ""}`
-								: `${plays.plays.toLocaleString()} YouTube views`
-					}
-				>
-					{plays === undefined ? <span className={`inline-block h-3 w-20 rounded-full animate-pulse ${brightness === "dark" ? "bg-[#ffffff1a]" : "bg-[#00000012]"}`} /> : plays === null ? "" : `${formatCount(plays.plays)} plays`}
+				<span className="text-sm font-semibold text-(--text-secondary)">
+					<PlayCount title={track.title} artist={track.artist} />
 					{!!mine && <span className="block text-[11px] font-medium text-(--text-tertiary)">You: {formatCount(mine)}</span>}
 				</span>
 				<div className="flex items-center justify-end gap-0.5">

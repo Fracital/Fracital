@@ -118,13 +118,23 @@ async function youtubePlays(title: string, artist: string): Promise<TrackPlays |
 	}
 }
 
+const inflight = new Map<string, Promise<TrackPlays | null>>();
+
 /** A song's play count: Last.fm scrobbles when configured and known, otherwise YouTube views. */
 export async function trackPlays(title: string, artist: string): Promise<TrackPlays | null> {
 	const key = `${artist}|${title}`.toLowerCase();
 	const cached = playsCache.get(key);
 	if (cached && Date.now() - cached.at < TTL) return cached.value;
 
-	const value = (await lastfmTrackPlays(title, artist)) ?? (await youtubePlays(title, artist));
-	playsCache.set(key, { at: Date.now(), value });
-	return value;
+	// Many views can ask for the same song at once; share one lookup.
+	let pending = inflight.get(key);
+	if (!pending) {
+		pending = (async () => (await lastfmTrackPlays(title, artist)) ?? (await youtubePlays(title, artist)))().then(value => {
+			playsCache.set(key, { at: Date.now(), value });
+			return value;
+		});
+		pending.finally(() => inflight.delete(key)).catch(() => {});
+		inflight.set(key, pending);
+	}
+	return pending;
 }
