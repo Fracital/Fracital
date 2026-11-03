@@ -8,6 +8,7 @@ import { formatTime, next, parsePlayerMode, play, playerUrl, previous, seek, set
 import { LYRICS_CHANGED_EVENT, LYRICS_SOURCE_LABELS, loadLyrics, type Lyrics } from "../../libs/lyrics";
 import { activeLineIndex } from "../../libs/lrc";
 import { PlayCount } from "../../components/PlayCount";
+import { RadioStatus } from "../../components/RadioStatus";
 
 interface MusicPlayerProps {
 	query?: string;
@@ -268,12 +269,14 @@ const QueuePanel = () => {
 			<div className="flex h-full flex-col items-center justify-center gap-2 text-(--text-secondary)">
 				<QueueListIcon className="size-10 opacity-60" />
 				<span className="text-lg font-semibold text-(--text-primary)">Queue is empty</span>
+				<RadioStatus className="mt-2" />
 			</div>
 		);
 	}
 
 	return (
 		<div className="flex h-full flex-col gap-1 overflow-y-auto p-4">
+			<RadioStatus className="mb-2" />
 			<h2 className="px-2 pb-2 text-2xl font-bold">Up next</h2>
 			{queue.map(song => (
 				<div

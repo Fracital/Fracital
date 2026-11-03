@@ -9,7 +9,6 @@ import {
 	getAlbum,
 	getArtist,
 	getCharts,
-	getRadio,
 	warmStream,
 	formatDuration,
 	trackToFracital,
@@ -31,6 +30,7 @@ import {
 import { ContextMenu, type MenuItem } from "../components/ContextMenu";
 import { Shelf } from "../components/Shelf";
 import { PlayCount } from "../components/PlayCount";
+import { startRadio, useRadioStore } from "../libs/radio";
 import { YourLibrary } from "./YourLibrary";
 import { songKey, useLastfmStore } from "../libs/lastfmState";
 import { CheckIcon, GlobeAltIcon, HeartIcon } from "@heroicons/react/24/solid";
@@ -141,38 +141,19 @@ export const DigitalLibrary = ({ query }: DigitalLibraryProps) => {
 			.catch(() => setSavedArtistIds(null));
 	}, [lastfmUser]);
 
-	// Radio controls
-	const [radioVariety, setRadioVariety] = useState<number>(() => Number(localStorage.getItem("fracital:radio-variety")) || 40);
-	const [radioLength, setRadioLength] = useState<number>(() => Number(localStorage.getItem("fracital:radio-length")) || 25);
+	// Radio (shared with the player — re-tunes on every song change while on).
+	const radioVariety = useRadioStore(s => s.variety);
+	const radioLength = useRadioStore(s => s.length);
+	const radioLoading = useRadioStore(s => s.loading);
 	const [showRadioSettings, setShowRadioSettings] = useState(false);
-	const [radioLoading, setRadioLoading] = useState(false);
 
 	const searchRef = useRef<HTMLInputElement>(null);
 	const debounceRef = useRef<number>(0);
 	const searchAbort = useRef<AbortController | null>(null);
 
 	const saveRadioPrefs = (variety: number, length: number) => {
-		setRadioVariety(variety);
-		setRadioLength(length);
-		localStorage.setItem("fracital:radio-variety", String(variety));
-		localStorage.setItem("fracital:radio-length", String(length));
-	};
-
-	/** Builds a station from an artist (and optional seed track) and plays it. */
-	const startRadio = async (artist: string, title?: string) => {
-		if (radioLoading) return;
-		setRadioLoading(true);
-		try {
-			const mix = await getRadio({ artist, title, variety: radioVariety, limit: radioLength });
-			const playable = (mix.tracks || []).filter(t => t.streamUrl || t.previewUrl);
-			if (playable.length === 0) return;
-			playTrack({ ...trackToFracital(playable[0]), id: createId() });
-			playable.slice(1).forEach(t => addTrack({ ...trackToFracital(t), id: createId() }));
-		} catch (err) {
-			console.error("Failed to start radio:", err);
-		} finally {
-			setRadioLoading(false);
-		}
+		useRadioStore.getState().setVariety(variety);
+		useRadioStore.getState().setLength(length);
 	};
 
 	// Load charts on mount

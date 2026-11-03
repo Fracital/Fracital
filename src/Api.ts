@@ -1,5 +1,6 @@
 import { meFetch, refreshMe } from "./libs/auth";
 import { startScrobbler } from "./libs/scrobbler";
+import { initRadio } from "./libs/radio";
 import { useSettingsStore } from "./store";
 import { getLogin, SettingsPath, ThemePath, wispURL, type COM } from "./types";
 import { libcurl } from "libcurl.js";
@@ -86,6 +87,7 @@ export const Api = async () => {
 			.catch(error => console.error("Failed to load libcurl WASM:", error));
 
 		startScrobbler();
+		initRadio();
 		void (async () => {
 			// Confirm the saved login still has a live session (clears it if it expired).
 			if ((await getLogin()) !== null) await refreshMe();

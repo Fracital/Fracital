@@ -135,4 +135,6 @@ export interface Track {
 	source?: "digital-library";
 	artistId?: string;
 	albumId?: string;
+	/** Queued by radio (replaced when the station re-tunes); unset for songs the user queued. */
+	radio?: boolean;
 }

@@ -9,6 +9,7 @@ import { AudvisVisualizer } from "../components/AudvisVisualizer";
 import { openMusicPlayer, registerAudio } from "../libs/playback";
 import { openLibraryPage } from "../libs/aboutPages";
 import { PlayCount } from "../components/PlayCount";
+import { RadioStatus } from "../components/RadioStatus";
 import type { Track } from "../types";
 
 /** Digital Library tracks link their artist names to artist pages. */
@@ -613,6 +614,7 @@ export const QuickPlayer = ({ panelsOpen, className, onMouseDown }: QuickPlayerP
 								</div>
 								{queue && (
 									<div className="flex flex-col items-start">
+										<RadioStatus className="w-full mt-1.5" />
 										{queue.length > 0 && <h1 className={`ml-1.5 mt-1.5 text-2xl font-bold`}>Queue</h1>}
 										{queue.map(song => (
 											<div

@@ -91,7 +91,12 @@ export async function findDeezerArtist(name: string): Promise<DeezerArtist | nul
 	if (cached && Date.now() - cached.at < ARTIST_TTL) return cached.artist;
 	let artist: DeezerArtist | null;
 	try {
-		artist = (await dzStrict<{ data?: DeezerArtist[] }>(`/search/artist?q=${encodeURIComponent(name)}&limit=1`)).data?.[0] ?? null;
+		// Deezer often ranks same-name impostors first (e.g. a 1-fan "Flo" for FLO), so among
+		// exact-name matches take the one with the most fans; else the top result.
+		const list = (await dzStrict<{ data?: DeezerArtist[] }>(`/search/artist?q=${encodeURIComponent(name)}&limit=10`)).data ?? [];
+		const plainName = (s: string) => s.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "");
+		const exact = list.filter(a => plainName(a.name) === plainName(name));
+		artist = (exact.length ? exact : list.slice(0, 1)).reduce<DeezerArtist | null>((best, a) => (!best || (a.nb_fan ?? 0) > (best.nb_fan ?? 0) ? a : best), null);
 	} catch {
 		return null; // transient — don't cache
 	}
