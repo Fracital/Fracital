@@ -26,6 +26,32 @@
   --inset-shadow-accent: 0 0 0 2px #fb74fe;
 }
 
+/* :host matters for the cloak shadow root — when the app mounts inside the
+   closed shadow tree, :root/html/body selectors never match, so the host
+   element carries the same theme variables and base layout. Matches nothing
+   in a normal (light-DOM) page. */
+:host {
+  --primary: #1a1a1a;
+  --secondary: #232323;
+  --tertiary: #2a2a2a;
+  --quaternary: #333333;
+  --logo-primary: #fb74fe;
+  --logo-secondary: #ffe866;
+  --accent: #fb74fe;
+  --accent-opaque: #fc74fea5;
+  --text-primary: #ffffffdb;
+  --text-secondary: #ffffffa5;
+  --text-tertiary: #ffffff80;
+  --text-quaternary: #ffffff4d;
+  --shadow-primary: 0 0 2px 0px #00000040;
+  --shadow-accent: 0 0 2px 0px #fb74fe;
+  --inset-shadow-primary: 0 0 0 2px #ffffff18;
+  --inset-shadow-secondary: 0 0 0 2px #ffffff10;
+  --inset-shadow-accent: 0 0 0 2px #fb74fe;
+  height: 100%;
+  font-family: Inter;
+}
+
 @utility stroke-0.5 {
   stroke-width: 0.5;
 }

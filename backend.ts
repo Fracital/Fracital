@@ -4,15 +4,14 @@ import { Hono } from "hono";
 import { getRequestListener } from "@hono/node-server";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { cors } from "hono/cors";
-import { getCookie, setCookie } from "hono/cookie";
 import config from "dotenv";
-import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { version } from "./package.json";
 import { server as wisp } from "@mercuryworkshop/wisp-js/server";
 import { create as createYoutubeDl } from "youtube-dl-exec";
 import ytSearch from "yt-search";
+import { cloakMiddleware } from "./src/server/cloak-routing";
 import { rankAlbums, rankArtists, rankTracks } from "./src/server/music-rank";
 import { artistBanner, artistBio, artistTopTracks, buildRadio, findDeezerArtist, relatedArtists } from "./src/server/music-radio";
 import { artistStats, lastfmKey, trackPlays } from "./src/server/music-stats";
@@ -40,82 +39,6 @@ export function fsrv() {
 			credentials: true,
 		}),
 	);
-
-	const masqrCheck = process.env.MASQR && process.env.MASQR.toLowerCase() === "true";
-	if (masqrCheck) {
-		console.log("Masqr is Enabled");
-	} else {
-		console.log("Masqr is Disabled");
-	}
-
-	async function MasqFail(c: any) {
-		const host = c.req.header("host");
-		if (!host) {
-			return c.html(fs.readFileSync("fail.html", "utf8"));
-		}
-		const safeHost = host.split(":")[0].replace(/[^a-zA-Z0-9-_\.]/g, "");
-		const safeFilename = path.basename(`${safeHost}.html`);
-		const safeJoin = path.join(process.cwd(), "Masqrd", safeFilename);
-		try {
-			await fs.promises.access(safeJoin);
-			const failureFileLocal = await fs.promises.readFile(safeJoin, "utf8");
-			return c.html(failureFileLocal);
-		} catch {
-			return c.html(fs.readFileSync("fail.html", "utf8"));
-		}
-	}
-
-	if (masqrCheck) {
-		const whitelisted = (process.env.WHITELISTED_DOMAINS || "")
-			.split(",")
-			.map(s => s.trim())
-			.filter(Boolean);
-
-		app.use("*", async (c, next) => {
-			const host = c.req.header("host") ?? "";
-			if (host && whitelisted.includes(host)) {
-				await next();
-				return;
-			}
-			if (c.req.url.includes("/bare")) {
-				await next();
-				return;
-			}
-			if (getCookie(c, "authcheck")) {
-				await next();
-				return;
-			}
-			if (getCookie(c, "refreshcheck") !== "true") {
-				setCookie(c, "refreshcheck", "true", { maxAge: 10000 });
-				return await MasqFail(c);
-			}
-			const authheader = c.req.header("authorization");
-			if (!authheader) {
-				c.header("WWW-Authenticate", "Basic");
-				c.status(401);
-				return await MasqFail(c);
-			}
-			const token = authheader.split(" ")[1] ?? "";
-			let user = "";
-			let pass = "";
-			try {
-				const decoded = Buffer.from(token, "base64").toString();
-				[user, pass] = decoded.split(":");
-			} catch {
-				return await MasqFail(c);
-			}
-			const licenseResp = await fetch(`${process.env.LICENSE_SERVER_URL}${encodeURIComponent(pass)}&host=${encodeURIComponent(host)}`);
-			const licenseCheck = (await licenseResp.json())?.status;
-			console.log(`\x1b[0m${process.env.LICENSE_SERVER_URL}${pass}&host=${host} returned: ${licenseCheck}`);
-			if (licenseCheck === "License valid") {
-				setCookie(c, "authcheck", "true", {
-					expires: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
-				});
-				return c.redirect("/");
-			}
-			return await MasqFail(c);
-		});
-	}
 
 	// ============================================================
 	// Fracital Accounts (/api/auth, /api/me)
@@ -425,6 +348,17 @@ export function fsrv() {
 	});
 
 	// ============================================================
+
+	// Cloak routing: hosts with a folder in ../cloaks-fracital get their decoy
+	// site with the uncloak script injected. The real app only becomes
+	// reachable through /1.html after Ctrl+E — nothing client-side loads on a
+	// plain page load. Unknown hosts fall through to the app as normal.
+	app.use(
+		"*",
+		cloakMiddleware({
+			distDir: path.join(__dirname, "dist"),
+		}),
+	);
 
 	app.use(
 		"*",

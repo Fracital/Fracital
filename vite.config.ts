@@ -6,6 +6,7 @@ import tailwindcss from "@tailwindcss/vite";
 import { scramjetPath } from "@mercuryworkshop/scramjet/path";
 import { server as wisp } from "@mercuryworkshop/wisp-js/server";
 import { isWebOS } from "./src/types";
+import { cloakRouting } from "./src/server/cloak-routing";
 import { musicApi } from "./src/server/music-api";
 
 // https://vite.dev/config/
@@ -22,6 +23,7 @@ export default defineConfig({
 	plugins: [
 		react(),
 		tailwindcss(),
+		cloakRouting(),
 		!isWebOS
 			? viteStaticCopy({
 					targets: [
