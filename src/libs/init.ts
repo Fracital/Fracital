@@ -9,10 +9,10 @@ export const quickLinks = [
 		href: "https://github.com/NovaAppsInc/Fracital",
 	},
 	{
-		title: "Fracital",
-		icon: "/fracital.svg",
-		color: "#fb74fe",
-		href: "https://fractial.dev",
+		title: "YouTube",
+		icon: "/youtube.svg",
+		color: "#ffffff",
+		href: "https://www.youtube.com",
 	},
 	{
 		title: "Google",
@@ -178,6 +178,15 @@ export const init = async () => {
 		window.localStorage.setItem("quicklinks", JSON.stringify(quickLinks));
 	} else {
 		console.log("%cinit%c()%c -> already set: %c[%cquicklinks%c]", "color: #c7a1f2", "color: #79c0ff", "color: #ffffffbf", "color: #56d364", "color: #e2b340", "color: #56d364");
+		// Older defaults: swap the Fracital link for YouTube.
+		try {
+			const saved = JSON.parse(window.localStorage.getItem("quicklinks") || "[]") as { title?: string; href?: string }[];
+			const youtube = quickLinks.find(l => l.title === "YouTube")!;
+			const migrated = saved.map(l => (l.title === "Fracital" && /fractial\.dev/.test(l.href ?? "") ? youtube : l));
+			if (migrated.some((l, i) => l !== saved[i])) window.localStorage.setItem("quicklinks", JSON.stringify(migrated));
+		} catch {
+			/* leave custom links alone */
+		}
 	}
 
 	// Music streaming API — runs on the same server (Vite dev / production backend)

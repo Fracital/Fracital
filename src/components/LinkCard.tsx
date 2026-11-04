@@ -4,6 +4,9 @@ import { TrashIcon, PencilSquareIcon, GlobeAltIcon, GiftIcon, MusicalNoteIcon, P
 import type { linkProps } from "../views/Home";
 import { useTabsStore } from "../store";
 
+/** URLs, site-relative paths ("/google.svg") and data URIs render as images. */
+const isImageIcon = (icon: string) => /^(https?:\/\/|\/|data:image\/)/.test(icon);
+
 interface LinkCardProps {
 	title: string;
 	icon: string;
@@ -134,7 +137,7 @@ const LinkCard: React.FC<LinkCardProps> = ({ title, icon, brightness, color, hre
 								<BriefcaseIcon className="sm:size-16 size-8" />
 							) : icon === "newspapericon" ? (
 								<NewspaperIcon className="sm:size-16 size-8" />
-							) : icon.includes("https://") ? (
+							) : isImageIcon(icon) ? (
 								<img src={icon} alt={title} className="sm:size-16 size-8" />
 							) : (
 								<GlobeAltIcon className="sm:size-16 size-8" />
@@ -233,7 +236,7 @@ const LinkCard: React.FC<LinkCardProps> = ({ title, icon, brightness, color, hre
 									<BriefcaseIcon className="sm:size-16 size-8 group-hover:-translate-y-2 duration-200" />
 								) : icon === "newspapericon" ? (
 									<NewspaperIcon className="sm:size-16 size-8 group-hover:-translate-y-2 duration-200" />
-								) : icon.includes("https://") ? (
+								) : isImageIcon(icon) ? (
 									<img src={icon} alt={title} className="sm:size-16 size-8 group-hover:-translate-y-2 duration-200" />
 								) : (
 									<GlobeAltIcon className="sm:size-16 size-8 group-hover:-translate-y-2 duration-200" />
