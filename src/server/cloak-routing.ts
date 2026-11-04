@@ -4,13 +4,13 @@ import { extname, resolve, sep } from "node:path";
 import type { MiddlewareHandler } from "hono";
 import type { Plugin, UserConfig, ViteDevServer } from "vite";
 import { parseRequestUrl } from "./request-url";
+import { appPath, injectUncloakScript, uncloakScriptPath } from "./cloak-endpoints";
 
-// Innocuous name on purpose: decoy pages reference it, and it must not read as
-// an unlock mechanism in a request log.
-const UNCLOAK_SCRIPT_SRC = "/8f3c1a.js";
-const UNCLOAK_SCRIPT_TAG = `<script src="${UNCLOAK_SCRIPT_SRC}"></script>`;
+// The loader is served at a per-domain path from cloak-endpoints.ts (the decoy's
+// own "analytics" script). This file only owns finding the source on disk.
+const LEGACY_LOADER_SRC = "/8f3c1a.js";
 
-export function getUncloakScriptContent(): string {
+export function getUncloakScriptContent(hostname: string): string {
 	const candidatePaths = [
 		new URL("./uncloak-client.js", import.meta.url),
 		resolve(process.cwd(), "src/server/uncloak-client.js"),
@@ -18,7 +18,10 @@ export function getUncloakScriptContent(): string {
 	];
 	for (const candidate of candidatePaths) {
 		if (existsSync(candidate)) {
-			return readFileSync(candidate, "utf8");
+			let source = readFileSync(candidate, "utf8");
+			// The client pulls the app shell from the decoy's own per-domain asset URL.
+			source = source.replace(/__FRACITAL_APP_PATH__/g, appPath(hostname));
+			return source;
 		}
 	}
 	return "";
@@ -76,36 +79,11 @@ const directHosts = new Set(
 		.filter(Boolean),
 );
 
-export function isValidHostname(name: string): boolean {
-	if (!name || name.length > 253) return false;
-	if (name.startsWith(".") || name.endsWith(".") || name.startsWith("_")) return false;
-
-	const labels = name.split(".");
-	if (labels.length < 2) return false;
-
-	const tld = labels[labels.length - 1];
-	if (!/^[a-zA-Z]{2,}$/.test(tld) && !/^xn--[a-zA-Z0-9]+$/i.test(tld)) {
-		return false;
-	}
-
-	const labelRegex = /^[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?$/;
-	for (const label of labels) {
-		if (!labelRegex.test(label)) return false;
-	}
-
-	return true;
-}
-
-export function injectUncloakScript(html: string): string {
-	if (html.includes(UNCLOAK_SCRIPT_SRC)) return html;
-
-	if (/<\/body>/i.test(html)) {
-		return html.replace(/<\/body>/i, `${UNCLOAK_SCRIPT_TAG}</body>`);
-	}
-	if (/<\/html>/i.test(html)) {
-		return html.replace(/<\/html>/i, `${UNCLOAK_SCRIPT_TAG}</html>`);
-	}
-	return `${html}${UNCLOAK_SCRIPT_TAG}`;
+/** @deprecated use cloak-endpoints.injectUncloakScript(html, hostname) */
+export function injectUncloakScriptForHost(html: string, hostname: string): string {
+	// Legacy single-name entry, kept so old bookmarks/deep links still resolve.
+	if (html.includes(LEGACY_LOADER_SRC)) return html;
+	return injectUncloakScript(html, hostname);
 }
 
 export interface CloakSiteConfig {
@@ -190,13 +168,13 @@ export function cloakRouting(options?: { cloaksDir?: string }): Plugin {
 				const hostname = hostnameOf(((request.headers["x-forwarded-host"] || request.headers.host || "") as string) ?? "");
 
 				const scriptPathname = decodeURIComponent(parseRequestUrl(request.url, "http://localhost").pathname);
-				if (scriptPathname === UNCLOAK_SCRIPT_SRC) {
+				if (scriptPathname === uncloakScriptPath(hostname) || scriptPathname === "/8f3c1a.js") {
 					response.statusCode = 200;
 					response.setHeader("Content-Type", "text/javascript; charset=utf-8");
 
 					response.setHeader("Cache-Control", "no-store");
 					response.setHeader("CDN-Cache-Control", "no-store");
-					response.end(getUncloakScriptContent());
+					response.end(getUncloakScriptContent(hostname));
 					return;
 				}
 
@@ -213,7 +191,7 @@ export function cloakRouting(options?: { cloaksDir?: string }): Plugin {
 					return next();
 				}
 
-				if (pathname === "/1.html") {
+				if (pathname === "/1.html" || pathname === appPath(hostname)) {
 					const mainIndex = resolve(process.cwd(), "index.html");
 					const distIndex = resolve(process.cwd(), "dist", "index.html");
 					const targetIndex = server.transformIndexHtml && existsSync(mainIndex) ? mainIndex : existsSync(distIndex) ? distIndex : mainIndex;
@@ -259,7 +237,7 @@ export function cloakRouting(options?: { cloaksDir?: string }): Plugin {
 
 				if (ext === ".html") {
 					const rawContent = readFileSync(filePath, "utf8");
-					const injectedHtml = injectUncloakScript(rawContent);
+					const injectedHtml = injectUncloakScript(rawContent, hostname);
 					const finalHtml = server.transformIndexHtml ? await server.transformIndexHtml(pathname, injectedHtml) : injectedHtml;
 
 					response.statusCode = 200;
@@ -334,11 +312,11 @@ export function cloakMiddleware(options: { distDir: string; cloaksDir?: string }
 			pathname = c.req.path;
 		}
 
-		if (pathname === UNCLOAK_SCRIPT_SRC) {
+		if (pathname === uncloakScriptPath(hostname) || pathname === "/8f3c1a.js") {
 			c.header("Content-Type", "text/javascript; charset=utf-8");
 			c.header("Cache-Control", "no-store");
 			c.header("CDN-Cache-Control", "no-store");
-			return c.body(getUncloakScriptContent());
+			return c.body(getUncloakScriptContent(hostname));
 		}
 
 		if (directHosts.has(hostname)) return next();
@@ -348,7 +326,7 @@ export function cloakMiddleware(options: { distDir: string; cloaksDir?: string }
 		const hostRoot = cloakConfig.hostRoots.get(hostname);
 		if (!hostRoot) return next();
 
-		if (pathname === "/1.html") {
+		if (pathname === "/1.html" || pathname === appPath(hostname)) {
 			const distIndex = resolve(options.distDir, "index.html");
 			if (existsSync(distIndex)) {
 				c.header("Cache-Control", "no-store");
@@ -365,10 +343,30 @@ export function cloakMiddleware(options: { distDir: string; cloaksDir?: string }
 
 		if (ext === ".html") {
 			c.header("Cache-Control", "no-cache");
-			return c.html(injectUncloakScript(readFileSync(filePath, "utf8")));
+			return c.html(injectUncloakScript(readFileSync(filePath, "utf8"), hostname));
 		}
 
 		c.header("Content-Type", mime);
 		return c.body(new Uint8Array(readFileSync(filePath)));
 	};
+}
+
+export function isValidHostname(name: string): boolean {
+	if (!name || name.length > 253) return false;
+	if (name.startsWith(".") || name.endsWith(".") || name.startsWith("_")) return false;
+
+	const labels = name.split(".");
+	if (labels.length < 2) return false;
+
+	const tld = labels[labels.length - 1];
+	if (!/^[a-zA-Z]{2,}$/.test(tld) && !/^xn--[a-zA-Z0-9]+$/i.test(tld)) {
+		return false;
+	}
+
+	const labelRegex = /^[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?$/;
+	for (const label of labels) {
+		if (!labelRegex.test(label)) return false;
+	}
+
+	return true;
 }

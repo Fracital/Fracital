@@ -61,6 +61,35 @@
     } catch (_) {}
   }
 
+  let decoyChromeTimer = null
+
+  const applyDecoyChrome = (title, favicon) => {
+    const apply = () => {
+      try {
+        if (title) document.title = title
+        if (favicon) {
+          let icon = document.querySelector('link[rel~="icon"]')
+          if (!icon) {
+            icon = document.createElement('link')
+            icon.rel = 'icon'
+            document.head.appendChild(icon)
+          }
+          icon.setAttribute('href', favicon)
+        }
+      } catch (_) {}
+    }
+    apply()
+    // Re-apply briefly while the app sets its own title on mount.
+    clearInterval(decoyChromeTimer)
+    let ticks = 0
+    decoyChromeTimer = setInterval(() => {
+      apply()
+      if (++ticks > 8) clearInterval(decoyChromeTimer)
+    }, 500)
+  }
+
+  const restoreChrome = () => clearInterval(decoyChromeTimer)
+
   // Resolves once the app has actually mounted something into the shadow
   // #root, or false after timeoutMs. React may commit a frame or two after
   // the module import promise resolves, so we poll instead of checking once.
@@ -220,7 +249,7 @@
 
     pauseMedia()
     unlockOuterScroll()
-
+    restoreChrome()
     if (currentHost) {
       currentHost.style.display = 'none'
     } else {
@@ -305,8 +334,16 @@
     const status = document.querySelector('.status')
     if (status) status.textContent = 'Opening site'
 
+    // While the app is open, the tab keeps the decoy's identity so a shoulder
+    // glance sees the organization site, not "Fracital". The app may set its
+    // own title once mounted; we re-apply the decoy's shortly after.
+    const decoyTitle = document.title
+    const decoyFavicon = document.querySelector('link[rel~="icon"]')?.getAttribute('href')
+    applyDecoyChrome(decoyTitle, decoyFavicon)
+
     try {
-      const response = await fetch('/1.html', { cache: 'no-store' })
+      // __FRACITAL_APP_PATH__ is substituted per-domain server-side.
+      const response = await fetch('__FRACITAL_APP_PATH__', { cache: 'no-store' })
       if (!response.ok) throw new Error(`Unable to load page (${response.status})`)
 
       const appHtml = await response.text()
