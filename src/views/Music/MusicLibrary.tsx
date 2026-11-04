@@ -152,7 +152,9 @@ export const MusicLibrary = ({ query }: MusicLibraryProps) => {
 	const [library, setLibrary] = useState<Track[]>([]);
 
 	useEffect(() => {
-		let intervalId: number;
+		let alive = true;
+		let timer = 0;
+		let watcher: { close: () => void } | undefined;
 
 		const readLibrary = async () => {
 			try {
@@ -208,6 +210,7 @@ export const MusicLibrary = ({ query }: MusicLibraryProps) => {
 					}
 				}
 
+				if (!alive) return;
 				setLibrary(prevLibrary => {
 					const newJson = JSON.stringify(songs);
 					const prevJson = JSON.stringify(prevLibrary);
@@ -218,27 +221,40 @@ export const MusicLibrary = ({ query }: MusicLibraryProps) => {
 			}
 		};
 
-		// @ts-expect-error types
-		var watcher = window.fr.fs.watch(MusicPath, { recursive: true }, () => {
-			console.log("change");
-			readLibrary();
-			// @ts-expect-error types
-			watcher.close();
-			intervalId = window.setTimeout(() => {
-				readLibrary();
+		const watch = () => {
+			try {
 				// @ts-expect-error types
 				watcher = window.fr.fs.watch(MusicPath, { recursive: true }, () => {
-					console.log("change");
-					readLibrary();
-					// @ts-expect-error types
-					watcher.close();
+					watcher?.close();
+					watcher = undefined;
+					void readLibrary();
+					// An upload writes several files: re-read once it settles, then keep watching.
+					timer = window.setTimeout(() => {
+						if (!alive) return;
+						void readLibrary();
+						watch();
+					}, 1000);
 				});
-			}, 1000);
-		});
+			} catch (err) {
+				console.error("Failed to watch music directory:", err);
+			}
+		};
 
-		readLibrary();
+		// The virtual filesystem (window.fr) isn't there until the app finishes booting. App starts
+		// booting in its own effect, which runs after ours on first mount, so wait for it to begin too.
+		const start = async () => {
+			for (let i = 0; !window.appReady && alive && i < 200; i++) await new Promise(r => window.setTimeout(r, 50));
+			await window.appReady?.catch(() => undefined);
+			if (!alive || !window.fr?.fs) return;
+			void readLibrary();
+			watch();
+		};
+		void start();
 
 		return () => {
+			alive = false;
+			window.clearTimeout(timer);
+			watcher?.close();
 			library.forEach(song => {
 				if (song.src) URL.revokeObjectURL(song.src);
 			});
