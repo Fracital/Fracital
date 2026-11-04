@@ -62,5 +62,6 @@ jobs:
       - name: Deploy ${{ github.sha }} to terp
         run: ssh -o BatchMode=yes "root@$TERP_HOST" deploy "$GITHUB_SHA"
 
+      # terp's :80 is not reachable by IP from outside; the gate already health-checks :8080 locally.
       - name: Verify site responds
-        run: curl -fsS -m 20 -o /dev/null -w 'site %{http_code}\n' "http://$TERP_HOST/"
+        run: curl -fsS -m 20 -o /dev/null -w 'site %{http_code}\n' https://fracital.xyz/
