@@ -5,6 +5,7 @@ import { HeartIcon as HeartOutline } from "@heroicons/react/24/outline";
 import { PlayIcon } from "@heroicons/react/24/solid";
 import { useMusicStore, usePanelsStore, useSettingsStore, useTabsStore } from "../store";
 import { PlayCount } from "../components/PlayCount";
+import { appRoot } from "../libs/cloak";
 
 interface QuickPlayerProps {
 	tabsOpen: boolean;
@@ -22,7 +23,7 @@ export const QuickPlayer = ({ tabsOpen, className }: QuickPlayerProps) => {
 
 	const setPanelsOpen = usePanelsStore(state => state.setPanelsOpen);
 	const [platform, setPlatform] = useState<string>("");
-	const [mainHeight, setMainHeight] = useState<number | undefined>(document.querySelector<HTMLDivElement>("#main")?.getBoundingClientRect().height || 805);
+	const [mainHeight, setMainHeight] = useState<number | undefined>(appRoot().querySelector<HTMLDivElement>("#main")?.getBoundingClientRect().height || 805);
 
 	const musicRef = useRef<HTMLDivElement>(null);
 
@@ -46,11 +47,11 @@ export const QuickPlayer = ({ tabsOpen, className }: QuickPlayerProps) => {
 	}, []);
 
 	useEffect(() => {
-		const height = document.querySelector<HTMLDivElement>("#main")?.getBoundingClientRect().height;
+		const height = appRoot().querySelector<HTMLDivElement>("#main")?.getBoundingClientRect().height;
 		setMainHeight(height);
 
 		const handleWindowSize = () => {
-			const height = document.querySelector<HTMLDivElement>("#main")?.getBoundingClientRect().height;
+			const height = appRoot().querySelector<HTMLDivElement>("#main")?.getBoundingClientRect().height;
 			setMainHeight(height);
 		};
 		window.addEventListener("resize", handleWindowSize);

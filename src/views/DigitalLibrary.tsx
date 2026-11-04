@@ -42,6 +42,7 @@ import { songKey, useLastfmStore } from "../libs/lastfmState";
 import { CheckBadgeIcon, CheckIcon, GlobeAltIcon, HeartIcon } from "@heroicons/react/24/solid";
 import { HeartIcon as HeartOutlineIcon, SquaresPlusIcon } from "@heroicons/react/24/outline";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+import { portalTarget } from "../libs/cloak";
 import { faApple, faBandcamp, faDeezer, faFacebook, faInstagram, faSoundcloud, faSpotify, faTidal, faTiktok, faXTwitter, faYoutube, type IconDefinition } from "@fortawesome/free-brands-svg-icons";
 
 type Page = "home" | "search" | "album" | "artist";
@@ -204,7 +205,7 @@ const MediaModal = ({ title, titleFont, photos, covers, index, onIndex, onClose 
 				</div>
 			)}
 		</div>,
-		document.body,
+		portalTarget(),
 	);
 };
 

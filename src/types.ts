@@ -9,7 +9,7 @@ declare global {
 
 // For webOS Builds of Fracital
 export const ThemePath = "/themes/";
-export const StaticThemePath = "/themes/";
+export const StaticThemePath = "/themes";
 export const SettingsPath = "/settings.json";
 export const MusicPath = "/music/";
 export const GamesPath = "/games/";

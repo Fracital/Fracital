@@ -48,10 +48,15 @@ export const init = async () => {
 		console.log("%cFracital%c: %cinit%c() -> %csettings.json%c already exists", "color: #fb74fe", "color: #ff7b72", "color: #c7a1f2", "color: #79c0ff", "color: #56d364", "color: #e2b340");
 	}
 	if (!(await dirExists(ThemePath))) {
-		const defaultTheme = await fetch(`${StaticThemePath}/default.css`).then(res => res.text());
-		const amberTheme = await fetch(`${StaticThemePath}/amber.css`).then(res => res.text());
-		const lightTheme = await fetch(`${StaticThemePath}/light.css`).then(res => res.text());
-		const greyTheme = await fetch(`${StaticThemePath}/greyscale.css`).then(res => res.text());
+		const fetchTheme = async (file: string) => {
+			const res = await fetch(`${StaticThemePath}/${file}`);
+			if (!res.ok) throw new Error(`Theme ${file} returned HTTP ${res.status}`);
+			return res.text();
+		};
+		const defaultTheme = await fetchTheme("default.css");
+		const amberTheme = await fetchTheme("amber.css");
+		const lightTheme = await fetchTheme("light.css");
+		const greyTheme = await fetchTheme("greyscale.css");
 		await window.fr.fs.promises.mkdir(ThemePath);
 		await window.fr.fs.promises.mkdir(`${ThemePath}/default`);
 		await window.fr.fs.promises.writeFile(

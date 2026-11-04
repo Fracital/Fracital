@@ -55,7 +55,8 @@ export const ContextMenu = ({ items, position, onClose }: MenuProps) => {
 
 	useEffect(() => {
 		const handleClickOutside = (e: MouseEvent) => {
-			if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+			// composedPath: inside the cloak shadow root, e.target is retargeted to the host.
+			if (menuRef.current && !e.composedPath().includes(menuRef.current)) {
 				menuRef.current.classList.add("translate-y-2", "opacity-0", "duration-150");
 				itemsRef.current?.classList.add("translate-y-4", "opacity-0");
 				setTimeout(() => {

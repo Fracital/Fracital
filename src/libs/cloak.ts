@@ -18,3 +18,9 @@ export function getCloakShadowRoot(): ShadowRoot | undefined {
 	}
 	return capturedShadowRoot;
 }
+
+/** Where the app's DOM lives: the cloak shadow root on decoy hosts, otherwise the document. */
+export const appRoot = (): Document | ShadowRoot => getCloakShadowRoot() ?? document;
+
+/** Portal container that stays inside the app's styles (and above the decoy). */
+export const portalTarget = (): HTMLElement => getCloakShadowRoot()?.getElementById("root") ?? document.body;

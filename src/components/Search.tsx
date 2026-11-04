@@ -6,6 +6,7 @@ import { navigationEvent } from "../libs/eventBus";
 import { useNavigate } from "react-router-dom";
 import { createId } from "@paralleldrive/cuid2";
 import XOR from "../libs/XOR";
+import { appRoot } from "../libs/cloak";
 
 interface SearchProps {
 	tab?: TabProps;
@@ -128,7 +129,7 @@ export const Search = ({ tab }: SearchProps) => {
             `
 				}
 				onMouseDown={() => {
-					if (document.activeElement !== inputRef.current) {
+					if (appRoot().activeElement !== inputRef.current) {
 						setSearchFocused(true);
 						if (inputRef.current) {
 							inputRef.current.focus();

@@ -3,6 +3,7 @@ import { useSettingsStore, useTabsStore } from "../store";
 import { Tab } from "./Tab";
 import { useState } from "react";
 import { ContextMenu, type MenuItem } from "./ContextMenu";
+import { appRoot } from "../libs/cloak";
 
 interface TabGroupProps {
 	id: string;
@@ -52,7 +53,7 @@ const TabGroup = ({ id, name, icon }: TabGroupProps) => {
 		const draggedId = e.dataTransfer.getData("text/tab-id");
 		if (!draggedId) return;
 
-		const el = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null;
+		const el = appRoot().elementFromPoint(e.clientX, e.clientY) as HTMLElement | null;
 		if (!el) {
 			updateTab(draggedId, { groupId: undefined });
 			return;

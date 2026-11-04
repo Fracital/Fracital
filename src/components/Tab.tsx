@@ -2,6 +2,7 @@ import { XMarkIcon, GlobeAltIcon } from "@heroicons/react/24/solid";
 import { useSettingsStore, useTabsStore } from "../store";
 import { useEffect, useRef, useState } from "react";
 import { handleImg } from "../libs/imgHandler";
+import { appRoot } from "../libs/cloak";
 
 export interface TabProps {
 	title: string;
@@ -96,7 +97,7 @@ export const Tab = ({ title, url, id, icon }: TabProps) => {
 				if (latestCurrentTab?.id !== id) {
 					setCurrentTab(id);
 
-					const input = document.querySelector<HTMLInputElement>("#input");
+					const input = appRoot().querySelector<HTMLInputElement>("#input");
 					if (input && latestCurrentTab) {
 						input.value = latestCurrentTab.displayUrl || latestCurrentTab.url || "about:newtab";
 					}

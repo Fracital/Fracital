@@ -15,6 +15,7 @@
   // values so close() can restore them rather than assuming they were empty.
   let savedHtmlOverflow = null
   let savedBodyOverflow = null
+  let savedHtmlFontSize = null
   let scrollLocked = false
 
   const lockOuterScroll = () => {
@@ -24,8 +25,11 @@
       const bd = document.body
       savedHtmlOverflow = de ? de.style.overflow : null
       savedBodyOverflow = bd ? bd.style.overflow : null
+      savedHtmlFontSize = de ? de.style.getPropertyValue('font-size') : null
       if (de) de.style.overflow = 'hidden'
       if (bd) bd.style.overflow = 'hidden'
+      // The app's rem units resolve against the decoy's <html>; pin it to the browser default.
+      if (de) de.style.setProperty('font-size', 'medium', 'important')
       scrollLocked = true
     } catch (_) {}
   }
@@ -37,10 +41,56 @@
       const bd = document.body
       if (de) de.style.overflow = savedHtmlOverflow == null ? '' : savedHtmlOverflow
       if (bd) bd.style.overflow = savedBodyOverflow == null ? '' : savedBodyOverflow
+      if (de) {
+        if (savedHtmlFontSize) de.style.setProperty('font-size', savedHtmlFontSize)
+        else de.style.removeProperty('font-size')
+      }
     } catch (_) {}
     savedHtmlOverflow = null
     savedBodyOverflow = null
+    savedHtmlFontSize = null
     scrollLocked = false
+  }
+
+  // @property and @font-face are ignored inside shadow trees, so Tailwind's
+  // shadows, borders and transforms only work once registered on the document.
+  let globalRulesStyle = null
+  const hoistedRules = new Set()
+
+  const collectGlobalRules = (rules, out) => {
+    for (const rule of Array.from(rules)) {
+      if (
+        rule instanceof CSSFontFaceRule ||
+        (typeof CSSPropertyRule !== 'undefined' && rule instanceof CSSPropertyRule)
+      ) {
+        out.push(rule.cssText)
+      } else if (rule.cssRules) {
+        collectGlobalRules(rule.cssRules, out)
+      }
+    }
+    return out
+  }
+
+  const hoistSheetRules = (node) => {
+    const run = () => {
+      let rules = null
+      try {
+        rules = node.sheet && node.sheet.cssRules
+      } catch (_) {
+        return
+      }
+      if (!rules) return
+      const fresh = collectGlobalRules(rules, []).filter((text) => !hoistedRules.has(text))
+      if (!fresh.length) return
+      fresh.forEach((text) => hoistedRules.add(text))
+      if (!globalRulesStyle) {
+        globalRulesStyle = document.createElement('style')
+        ;(document.head || document.documentElement).appendChild(globalRulesStyle)
+      }
+      globalRulesStyle.textContent += `${fresh.join('\n')}\n`
+    }
+    if (node.tagName.toLowerCase() === 'link') node.addEventListener('load', run, { once: true })
+    run()
   }
 
   const canAutoRetry = () => {
@@ -116,38 +166,22 @@
 
   const isUncloaked = () => {
     try {
-      if (
-        localStorage.getItem(UNCLOAK_STORAGE_KEY) === '1' ||
-        sessionStorage.getItem(UNCLOAK_STORAGE_KEY) === '1' ||
-        sessionStorage.getItem(SPLASH_SEEN_KEY) === '1' ||
-        localStorage.getItem(SPLASH_SEEN_KEY) === '1'
-      ) {
-        return true
-      }
-    } catch {}
-    try {
-      if (document.cookie && document.cookie.includes(`${COOKIE_NAME}=1`)) {
-        return true
-      }
-    } catch {}
-    return false
+      return sessionStorage.getItem(UNCLOAK_STORAGE_KEY) === '1'
+    } catch {
+      return false
+    }
   }
 
+  // Unlock lasts for the tab session only, like CloakGate on direct hosts; the
+  // other keys are from the old persistent unlock and are cleared here.
   const setUncloaked = (val) => {
     try {
-      if (val) {
-        localStorage.setItem(UNCLOAK_STORAGE_KEY, '1')
-        sessionStorage.setItem(UNCLOAK_STORAGE_KEY, '1')
-        sessionStorage.setItem(SPLASH_SEEN_KEY, '1')
-        localStorage.setItem(SPLASH_SEEN_KEY, '1')
-        document.cookie = `${COOKIE_NAME}=1; path=/; max-age=31536000; SameSite=Lax`
-      } else {
-        localStorage.removeItem(UNCLOAK_STORAGE_KEY)
-        sessionStorage.removeItem(UNCLOAK_STORAGE_KEY)
-        sessionStorage.removeItem(SPLASH_SEEN_KEY)
-        localStorage.removeItem(SPLASH_SEEN_KEY)
-        document.cookie = `${COOKIE_NAME}=; path=/; max-age=0; SameSite=Lax`
-      }
+      if (val) sessionStorage.setItem(UNCLOAK_STORAGE_KEY, '1')
+      else sessionStorage.removeItem(UNCLOAK_STORAGE_KEY)
+      sessionStorage.removeItem(SPLASH_SEEN_KEY)
+      localStorage.removeItem(UNCLOAK_STORAGE_KEY)
+      localStorage.removeItem(SPLASH_SEEN_KEY)
+      document.cookie = `${COOKIE_NAME}=; path=/; max-age=0; SameSite=Lax`
     } catch {}
   }
 
@@ -203,6 +237,15 @@
     try {
       window.__FRACITAL_SHADOW_ROOT__ = currentShadow
     } catch (_) {}
+
+    new MutationObserver((records) => {
+      for (const record of records) {
+        record.addedNodes.forEach((node) => {
+          const tag = node.tagName && node.tagName.toLowerCase()
+          if (tag === 'link' || tag === 'style') hoistSheetRules(node)
+        })
+      }
+    }).observe(currentShadow, { childList: true })
 
     installDomHooks()
     currentHost = host
@@ -393,12 +436,6 @@
         #root {
           width: 100% !important;
           height: 100% !important;
-          /* The shadow root has no document-level scroll, so #root is the
-             single scroll container: app content taller than the viewport
-             scrolls here. :host stays overflow:hidden so there is no second
-             scrollbar, and the outer page is locked by lockOuterScroll(). */
-          overflow: auto !important;
-          -webkit-overflow-scrolling: touch;
         }
       `
       currentShadow.appendChild(hostStyle)
@@ -527,40 +564,41 @@
       isOpen = true
       isLoaded = true
       opening = false
-      removeEventListener('keydown', onKeyDown)
     } catch (error) {
       console.error(error)
       // Keep a retry path instead of a permanent blank: restore outer scroll,
-      // hide the (unloaded) overlay, clear transient flags and re-arm Ctrl+E so
-      // the splash is interactive again.
+      // hide the (unloaded) overlay and clear transient flags so Ctrl+E works again.
       unlockOuterScroll()
       opening = false
       isOpen = false
       if (currentHost && !isLoaded) {
         currentHost.style.display = 'none'
       }
-      if (!isLoaded) addEventListener('keydown', onKeyDown)
       if (status) status.textContent = 'Could not open site. Try again.'
     }
   }
 
+  // Ctrl+E toggles both ways, matching CloakGate: open the app, or drop back to the decoy and pause media.
   const onKeyDown = (event) => {
-    if (isOpen || opening || isLoaded) return
+    if (opening) return
     const isE = event.key?.toLowerCase() === 'e' || event.code === 'KeyE'
     if (!isE) return
     if ((!event.ctrlKey && !event.metaKey) || event.altKey || event.shiftKey) return
 
-    const target = event.target
-    if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
-      return
+    if (!isOpen) {
+      const target = (event.composedPath && event.composedPath()[0]) || event.target
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
+        return
+      }
     }
 
     event.preventDefault()
-    removeEventListener('keydown', onKeyDown)
-    void open()
+    event.stopPropagation()
+    if (isOpen) close()
+    else void open()
   }
 
-  addEventListener('keydown', onKeyDown)
+  addEventListener('keydown', onKeyDown, true)
 
   // bfcache restore: the page (and this IIFE's in-memory flags) can come back
   // frozen mid-open. If the overlay isn't actually visible, clear the transient
@@ -575,7 +613,6 @@
     }
     opening = false
     isOpen = false
-    addEventListener('keydown', onKeyDown)
     if (isUncloaked()) {
       void open()
     }
