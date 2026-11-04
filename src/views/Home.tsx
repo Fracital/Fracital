@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import LinkCard from "../components/LinkCard";
+import { AdBanner } from "../components/AdBanner";
 import { isColorBright } from "../libs/colorBright";
 import { quickLinks } from "../libs/init";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
@@ -51,7 +52,8 @@ const Home = ({ className }: HomeProps) => {
 		<div className={"flex flex-col items-center justify-center size-full p-2" + " " + className}>
 			<div className="flex flex-col h-full items-center justify-center gap-4 mt-35">
 				<span className="text-7xl font-black text-center text-accent text-stroke">FRACITAL</span>
-				<div className="grid grid-cols-3 gap-4 h-95 overflow-auto">{links.length > 0 && links.map((link, index) => <LinkCard key={index} title={link.title} icon={link.icon} color={link.color} href={link.href} edit={false} brightness={isColorBright(link.color)} />)}</div>
+				<div className="grid grid-cols-3 gap-4 max-h-95 overflow-auto">{links.length > 0 && links.map((link, index) => <LinkCard key={index} title={link.title} icon={link.icon} color={link.color} href={link.href} edit={false} brightness={isColorBright(link.color)} />)}</div>
+				<AdBanner className="mt-2" />
 			</div>
 			<div className="flex items-center w-full overflow-hidden">
 				<Link
