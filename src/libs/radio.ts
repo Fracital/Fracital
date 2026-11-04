@@ -1,8 +1,10 @@
 /**
- * Live radio. While radio is on, every song change — skip, back, picking a song,
- * or the next track starting — re-tunes the station around the song now playing:
- * the upcoming radio songs are replaced with a fresh mix seeded by it. Songs the
- * user queued themselves stay put, and recently played songs aren't repeated.
+ * Autoplay radio (on by default). Every track change — skip, back, picking a song
+ * anywhere, or the next track starting — refreshes what's coming up from the new
+ * song and its artist: the upcoming radio songs are replaced with a fresh mix seeded
+ * by it. Songs the user queued themselves stay first, recently played songs aren't
+ * repeated, and the station keeps going when the queue runs out. Turning it off
+ * (the "Off" button) stops re-tuning until it's turned back on or radio is started.
  */
 import { createId } from "@paralleldrive/cuid2";
 import { create } from "zustand";
@@ -13,6 +15,7 @@ import { getRadio, trackToFracital } from "./music-service";
 const PREFS_KEY = "fracital:radio";
 
 interface RadioPrefs {
+	/** Autoplay radio on/off (persisted, defaults to on). */
 	active: boolean;
 	/** What the station is currently built around. */
 	seed: { artist: string; title?: string } | null;
@@ -31,14 +34,14 @@ const loadPrefs = (): RadioPrefs => {
 	try {
 		const saved = JSON.parse(localStorage.getItem(PREFS_KEY) || "{}") as Partial<RadioPrefs>;
 		return {
-			active: !!saved.active,
-			seed: saved.seed ?? null,
+			active: (saved as { autoplay?: boolean }).autoplay ?? true,
+			seed: null,
 			// Older builds stored these separately.
 			variety: saved.variety ?? (Number(localStorage.getItem("fracital:radio-variety")) || 40),
 			length: saved.length ?? (Number(localStorage.getItem("fracital:radio-length")) || 25),
 		};
 	} catch {
-		return { active: false, seed: null, variety: 40, length: 25 };
+		return { active: true, seed: null, variety: 40, length: 25 };
 	}
 };
 
@@ -51,8 +54,8 @@ export const useRadioStore = create<RadioState>(set => ({
 }));
 
 useRadioStore.subscribe(s => {
-	const { active, seed, variety, length } = s;
-	localStorage.setItem(PREFS_KEY, JSON.stringify({ active, seed, variety, length }));
+	const { active, variety, length } = s;
+	localStorage.setItem(PREFS_KEY, JSON.stringify({ autoplay: active, variety, length }));
 });
 
 const primaryArtist = (t: Track) => (Array.isArray(t.artists) ? t.artists[0] : t.artists) || "";
@@ -104,7 +107,8 @@ export async function startRadio(artist: string, title?: string): Promise<void> 
 /** Re-tunes around what's playing now, keeping it playing and replacing only radio-queued songs. */
 async function retune(track: Track): Promise<void> {
 	const artist = primaryArtist(track);
-	if (!artist || !track.title) return;
+	// Untagged local files have nothing to build a station from.
+	if (!artist || !track.title || /^unknown/i.test(artist)) return;
 	const gen = ++generation;
 	useRadioStore.setState({ loading: true, error: null, seed: { artist, title: track.title } });
 	try {
@@ -122,7 +126,14 @@ async function retune(track: Track): Promise<void> {
 	}
 }
 
-/** Turns radio off: its queued songs are removed; the current song and user-queued songs stay. */
+/** Turns autoplay radio back on and re-tunes around what's playing right now. */
+export function enableRadio(): void {
+	useRadioStore.setState({ active: true, error: null });
+	const now = useMusicStore.getState().currentTrack;
+	if (now) void retune(now);
+}
+
+/** Turns autoplay radio off: its queued songs are removed; the current song and user-queued songs stay. */
 export function stopRadio(): void {
 	generation++;
 	window.clearTimeout(retuneTimer);
@@ -137,8 +148,6 @@ let started = false;
 export function initRadio(): void {
 	if (started) return;
 	started = true;
-	// Saved "on" state is meaningless if nothing came back after a reload.
-	if (useRadioStore.getState().active && !useMusicStore.getState().currentTrack) useRadioStore.setState({ active: false, seed: null });
 	useMusicStore.subscribe((music, prev) => {
 		if (!useRadioStore.getState().active) return;
 		const now = music.currentTrack;
