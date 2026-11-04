@@ -32,6 +32,7 @@
 		"audvis": "^0.2.4",
 		"better-auth": "^1.7.15",
 		"browser-id3-writer": "^6.4.0",
+		"compressorjs": "^1.4.0",
 		"dotenv": "^17.4.2",
 		"hono": "^4.13.16",
 		"is-valid-domain": "^0.1.6",

@@ -4,6 +4,7 @@
  */
 import { createAuthClient } from "better-auth/client";
 import { saveLogin, clearLogin } from "../types";
+import { compressImage, IMAGE_PRESETS } from "./compressImage";
 
 export const authClient = createAuthClient({
 	baseURL: typeof window !== "undefined" ? window.location.origin : undefined,
@@ -125,7 +126,9 @@ export async function updateProfile(change: { name?: string; username?: string |
 }
 
 /** Uploads a new profile picture and makes it the account's avatar. */
-export async function uploadAvatar(file: File): Promise<Me | null> {
+/** Uploads a new profile picture (compressed in the browser first, so any size works). */
+export async function uploadAvatar(input: File): Promise<Me | null> {
+	const file = await compressImage(input, IMAGE_PRESETS.avatar);
 	const res = await fetch("/api/me/avatar", { method: "POST", credentials: "include", body: file, headers: { "Content-Type": file.type || "application/octet-stream" } });
 	const data = (await res.json().catch(() => ({}))) as { error?: string };
 	if (!res.ok) throw new Error(data.error || "Upload failed");

@@ -17,6 +17,7 @@ import {
 	type PageRole,
 	type ProfileEdit,
 } from "../libs/artistPanel";
+import { IMAGE_PRESETS } from "../libs/compressImage";
 import { artworkHighRes, formatCount, getArtist, searchTracks, type ArtistDetail, type ArtistLinkKind, type MusicArtist } from "../libs/music-service";
 import { useSettingsStore, useTabsStore } from "../store";
 
@@ -533,7 +534,25 @@ const PageEditor = ({ artistId, initialTab }: { artistId: string; initialTab: Ta
 
 // --- Profile ---
 
-const ImagePicker = ({ artistId, label, hint, value, onChange, onError, shape = "wide" }: { artistId: string; label: string; hint?: string; value: string; onChange: (url: string) => void; onError: (e: string) => void; shape?: "wide" | "square" | "logo" }) => {
+const ImagePicker = ({
+	artistId,
+	label,
+	hint,
+	value,
+	onChange,
+	onError,
+	shape = "wide",
+	preset,
+}: {
+	artistId: string;
+	label: string;
+	hint?: string;
+	value: string;
+	onChange: (url: string) => void;
+	onError: (e: string) => void;
+	shape?: "wide" | "square" | "logo";
+	preset?: keyof typeof IMAGE_PRESETS;
+}) => {
 	const dark = useDark();
 	const input = useRef<HTMLInputElement>(null);
 	const [busy, setBusy] = useState(false);
@@ -542,7 +561,7 @@ const ImagePicker = ({ artistId, label, hint, value, onChange, onError, shape = 
 		setBusy(true);
 		onError("");
 		try {
-			onChange(await panel.upload(artistId, file, "image"));
+			onChange(await panel.upload(artistId, file, "image", preset ?? (shape === "wide" ? "banner" : shape === "logo" ? "logo" : "photo")));
 		} catch (e) {
 			onError(e instanceof Error ? e.message : "Upload failed");
 		} finally {
@@ -558,7 +577,7 @@ const ImagePicker = ({ artistId, label, hint, value, onChange, onError, shape = 
 				{value ? <img src={value} alt="" className={`size-full ${shape === "logo" ? "object-contain p-2" : "object-cover"}`} /> : <span className="text-xs text-(--text-tertiary)">No image</span>}
 				<div className="absolute bottom-2 right-2 flex gap-1.5">
 					<button className="flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-black/60 text-white hover:bg-black/80 cursor-pointer" onClick={() => input.current?.click()} disabled={busy}>
-						<ArrowUpTrayIcon className="size-3.5" /> {busy ? "Uploading…" : "Upload"}
+						<ArrowUpTrayIcon className="size-3.5" /> {busy ? "Processing…" : "Upload"}
 					</button>
 					{value && (
 						<button className="p-1.5 rounded-full bg-black/60 text-white hover:bg-black/80 cursor-pointer" title="Remove" onClick={() => onChange("")}>
@@ -567,7 +586,7 @@ const ImagePicker = ({ artistId, label, hint, value, onChange, onError, shape = 
 					)}
 				</div>
 			</div>
-			<input ref={input} type="file" accept="image/png,image/jpeg,image/webp,image/gif" className="hidden" onChange={e => upload(e.target.files?.[0])} />
+			<input ref={input} type="file" accept="image/*" className="hidden" onChange={e => upload(e.target.files?.[0])} />
 			{hint && <span className="text-xs text-(--text-tertiary)">{hint}</span>}
 		</div>
 	);

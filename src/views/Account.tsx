@@ -272,7 +272,7 @@ export const ProfileEditor = ({ me, onChange }: { me: Me; onChange: (me: Me | nu
 					<span className="absolute inset-0 hidden group-hover:flex items-center justify-center rounded-full bg-black/50 text-white text-xs font-semibold">Change</span>
 				</button>
 				<div className="flex flex-col gap-1.5 text-xs text-(--text-tertiary)">
-					<span>PNG, JPEG, WebP or GIF, up to 3MB.</span>
+					<span>Any image size works; it's resized automatically.</span>
 					{me.user.image && (
 						<button className="w-max font-semibold hover:text-(--text-primary) cursor-pointer" onClick={() => run(() => updateProfile({ image: null }))} disabled={busy}>
 							Remove picture
@@ -282,7 +282,7 @@ export const ProfileEditor = ({ me, onChange }: { me: Me; onChange: (me: Me | nu
 				<input
 					ref={fileRef}
 					type="file"
-					accept="image/png,image/jpeg,image/webp,image/gif"
+					accept="image/*"
 					className="hidden"
 					onChange={e => {
 						const file = e.target.files?.[0];

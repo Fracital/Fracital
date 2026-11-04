@@ -1,5 +1,6 @@
 /** Client for Fracital for Artists (artist panel) and the admin dashboard. */
 import { meFetch } from "./auth";
+import { compressImage, IMAGE_PRESETS } from "./compressImage";
 import type { ArtistLinkKind } from "./music-service";
 
 export type PageRole = "owner" | "admin" | "editor";
@@ -147,7 +148,9 @@ export const panel = {
 			profileCache.delete(artistId);
 			return r;
 		}),
-	upload: async (artistId: string, file: File, kind: "image" | "font") => {
+	/** Images are compressed in the browser first (any size works); fonts upload as-is. */
+	upload: async (artistId: string, input: File, kind: "image" | "font", preset: keyof typeof IMAGE_PRESETS = "photo") => {
+		const file = kind === "image" ? await compressImage(input, IMAGE_PRESETS[preset]) : input;
 		const res = await fetch(`/api/me/artist-panel/${encodeURIComponent(artistId)}/media?kind=${kind}`, { method: "POST", credentials: "include", body: file, headers: { "Content-Type": file.type || "application/octet-stream" } });
 		const data = (await res.json().catch(() => ({}))) as { url?: string; error?: string };
 		if (!res.ok || !data.url) throw new Error(data.error || "Upload failed");
