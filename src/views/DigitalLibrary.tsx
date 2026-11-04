@@ -92,10 +92,11 @@ const FitTitle = ({ children, className = "", style, max, min }: { children: Rea
 		const el = ref.current;
 		if (!el) return;
 		const fit = () => {
+			if (!el.clientWidth) return; // hidden tab — wait for a real layout
 			let s = max;
 			el.style.fontSize = `${s}px`;
-			while (s > min && el.scrollWidth > el.clientWidth + 1) {
-				s -= 2;
+			while (s > min && el.scrollWidth > el.clientWidth) {
+				s -= 1;
 				el.style.fontSize = `${s}px`;
 			}
 			setSize(s);
@@ -103,7 +104,8 @@ const FitTitle = ({ children, className = "", style, max, min }: { children: Rea
 		fit();
 		const ro = new ResizeObserver(fit);
 		if (el.parentElement) ro.observe(el.parentElement);
-		// Re-fit once a custom font finishes loading (it changes the text width).
+		// Re-fit when this exact font finishes loading (a swapped-in custom font changes the width).
+		if (style?.fontFamily) void document.fonts.load(`${max}px ${style.fontFamily}`, String(children)).then(fit, () => {});
 		void document.fonts.ready.then(fit);
 		document.fonts.addEventListener?.("loadingdone", fit);
 		return () => {

@@ -111,10 +111,13 @@ export function loadArtistFont(font: ArtistFont | null | undefined) {
 		link.href = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(font.family).replace(/%20/g, "+")}:wght@400;700;900&display=swap`;
 		document.head.appendChild(link);
 	} else if (font.url) {
-		new FontFace(font.family, `url(${font.url})`)
-			.load()
-			.then(face => document.fonts.add(face))
-			.catch(() => loadedFonts.delete(font.family));
+		// Add before loading so document.fonts tracks it (fires "loadingdone" for anything sized to it).
+		const face = new FontFace(font.family, `url(${font.url})`);
+		document.fonts.add(face);
+		face.load().catch(() => {
+			document.fonts.delete(face);
+			loadedFonts.delete(font.family);
+		});
 	}
 }
 
