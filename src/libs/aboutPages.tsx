@@ -20,6 +20,8 @@ export interface AboutPage {
 	component: React.ComponentType<any>;
 	icon?: ReactNode;
 	title?: string;
+	/** Tab title for a given query, when it depends on the section shown. */
+	titleFor?: (query: string | undefined) => string;
 	queryFields?: string[];
 	hasQuery?: boolean;
 }
@@ -62,7 +64,9 @@ export const aboutPages: Record<string, AboutPage> = {
 		name: "music",
 		component: MusicLibrary,
 		icon: <MusicalNoteIcon className="size-5" />,
-		title: "Music Library",
+		title: "Music",
+		// The Digital Library is the default section (about:music, about:music?digilib&…).
+		titleFor: query => (/^(library|upload)(&|$)/.test(query ?? "") ? "Music" : "Digital Library"),
 		hasQuery: true,
 	},
 	player: {
@@ -115,6 +119,7 @@ export const aboutPages: Record<string, AboutPage> = {
 		title: "Admin Dashboard",
 		hasQuery: true,
 	},
+	// Legacy: about:library URLs are rewritten to about:music?digilib (see aboutAlias.ts).
 	library: {
 		name: "library",
 		component: DigitalLibrary,
@@ -124,17 +129,18 @@ export const aboutPages: Record<string, AboutPage> = {
 	},
 };
 
-/** Focuses the existing Digital Library tab (navigating it to `query`) or opens a new one. */
+/** Focuses the existing Music tab on its Digital Library section (navigating it to `query`) or opens a new one. */
 export const openLibraryPage = (query: string, title?: string) => {
 	const { tabs, setCurrentTab, newTab } = useTabsStore.getState();
-	const existing = tabs.find(t => getPageFromUrl(t.url) === "library");
+	const full = query ? `digilib&${query}` : "digilib";
+	const existing = tabs.find(t => t.current && getPageFromUrl(t.url) === "music") ?? tabs.find(t => getPageFromUrl(t.url) === "music");
 	if (existing) {
 		setCurrentTab(existing.id);
-		updatePageTab(existing.id, "library", { query, title });
+		updatePageTab(existing.id, "music", { query: full, title: title || "Digital Library" });
 		return;
 	}
-	const url = `about:library?${query}`;
-	newTab({ id: createId(), title: title || aboutPages.library.title || "Digital Library", icon: aboutPages.library.icon, url, displayUrl: url });
+	const url = `about:music?${full}`;
+	newTab({ id: createId(), title: title || "Digital Library", icon: aboutPages.music.icon, url, displayUrl: url });
 };
 
 export const getPageFromUrl = (url: string): string | null => {

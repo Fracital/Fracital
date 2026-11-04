@@ -2,7 +2,7 @@ import { useEffect, useState, useRef } from "react";
 import { createPortal } from "react-dom";
 import { ChevronLeftIcon, ChevronRightIcon, XMarkIcon } from "@heroicons/react/24/solid";
 import { useMusicStore, useSettingsStore, useTabsStore } from "../store";
-import { updatePageTab } from "../libs/aboutPages";
+import { getPageFromUrl, updatePageTab } from "../libs/aboutPages";
 import { MagnifyingGlassIcon, PlayIcon, PlusIcon, MusicalNoteIcon, ChartBarIcon, RadioIcon, AdjustmentsHorizontalIcon, EllipsisHorizontalIcon, UserIcon } from "@heroicons/react/24/solid";
 import { FireIcon } from "@heroicons/react/24/outline";
 import { createId } from "@paralleldrive/cuid2";
@@ -210,9 +210,13 @@ const MediaModal = ({ title, titleFont, photos, covers, index, onIndex, onClose 
 
 interface DigitalLibraryProps {
 	query: string | undefined;
+	/** The about: page hosting this view and the query key in front of its own params
+	 * (about:music uses `digilib`, giving about:music?digilib&artist=…). */
+	urlPage?: string;
+	urlPrefix?: string;
 }
 
-export const DigitalLibrary = ({ query }: DigitalLibraryProps) => {
+export const DigitalLibrary = ({ query, urlPage = "library", urlPrefix }: DigitalLibraryProps) => {
 	const settings = useSettingsStore(state => state.settings);
 	const brightness = settings.brightness as string;
 	const playTrack = useMusicStore(state => state.playTrack);
@@ -333,10 +337,11 @@ export const DigitalLibrary = ({ query }: DigitalLibraryProps) => {
 
 	/** Reflects the current view in the tab URL so refreshes and back/forward restore it. */
 	const syncUrl = (params?: string, title?: string) => {
-		const tab = useTabsStore.getState().tabs.find(t => t.current && t.url.includes("about:library"));
+		const tab = useTabsStore.getState().tabs.find(t => t.current && getPageFromUrl(t.url) === urlPage);
 		if (!tab) return;
 		lastSyncedQuery.current = params;
-		updatePageTab(tab.id, "library", params ? { query: params, title: title || "Digital Library" } : undefined);
+		const full = urlPrefix ? [urlPrefix, params].filter(Boolean).join("&") : params;
+		updatePageTab(tab.id, urlPage, full ? { query: full, title: (params && title) || "Digital Library" } : undefined);
 	};
 
 	const doSearch = async (q: string, sync = true) => {

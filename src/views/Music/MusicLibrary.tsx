@@ -11,6 +11,20 @@ import { TRACK_INFO_SOURCE_LABELS, audioDuration, fetchCoverDataUrl, findTrackIn
 import { lyricFormatOf } from "../../libs/lrc";
 import { splitArtistCredit } from "../../libs/artistCredit";
 import { PlayCount } from "../../components/PlayCount";
+import { DigitalLibrary } from "../DigitalLibrary";
+import { getPageFromUrl, updatePageTab } from "../../libs/aboutPages";
+import { useTabsStore } from "../../store";
+import { SignalIcon } from "@heroicons/react/24/solid";
+
+type MusicSection = "digilib" | "library" | "upload";
+const SECTIONS: MusicSection[] = ["digilib", "library", "upload"];
+
+/** `about:music?digilib&artist=1` → section "digilib" + the Digital Library's own params. */
+function parseMusicQuery(query: string | undefined): { section: MusicSection; sub: string | undefined } {
+	const [key, ...rest] = (query ?? "").split("&");
+	if (SECTIONS.includes(key as MusicSection)) return { section: key as MusicSection, sub: rest.join("&") || undefined };
+	return { section: "digilib", sub: query || undefined };
+}
 
 interface MusicLibraryProps {
 	query: string | undefined;
@@ -115,7 +129,27 @@ export const MusicLibrary = ({ query }: MusicLibraryProps) => {
 	const playNext = useMusicStore(state => state.playNext);
 
 	const currentTrack = useMusicStore(state => state.currentTrack);
-	const [page, setpage] = useState<string | "library" | "upload" | "saves">(query ? query : "library");
+	const initial = parseMusicQuery(query);
+	const [page, setPageState] = useState<MusicSection>(initial.section);
+	/** The Digital Library's own params; kept while other sections are open so it doesn't reset. */
+	const [digiQuery, setDigiQuery] = useState(initial.section === "digilib" ? initial.sub : undefined);
+	// Follow the tab URL (back/forward, links from the player and artist pages).
+	const [prevQuery, setPrevQuery] = useState(query);
+	if (query !== prevQuery) {
+		setPrevQuery(query);
+		const next = parseMusicQuery(query);
+		setPageState(next.section);
+		if (next.section === "digilib") setDigiQuery(next.sub);
+	}
+	/** Switches section and reflects it in the tab URL. */
+	const setpage = (section: string) => {
+		const key = section as MusicSection;
+		setPageState(key);
+		const tab = useTabsStore.getState().tabs.find(t => t.current && getPageFromUrl(t.url) === "music");
+		if (!tab) return;
+		const q = key === "digilib" ? ["digilib", digiQuery].filter(Boolean).join("&") : key;
+		updatePageTab(tab.id, "music", { query: q, title: key === "digilib" ? "Digital Library" : "Music" });
+	};
 	const [contextMenu, setContextMenu] = useState<null | { x: number; y: number; visible: boolean; items: MenuItem[] }>(null);
 
 	const [filename, setFileName] = useState<string>("");
@@ -367,9 +401,10 @@ export const MusicLibrary = ({ query }: MusicLibraryProps) => {
 	};
 
 	const pages = {
+		digilib: <DigitalLibrary query={digiQuery} urlPage="music" urlPrefix="digilib" />,
 		library: (
 			<div className="flex flex-col gap-2">
-				<h1 className="text-3xl font-bold">Library</h1>
+				<h1 className="text-3xl font-bold">My Music</h1>
 				<div className="flex flex-wrap gap-2">
 					{library.length === 0 ? (
 						<span className="text-lg text-text-tertiary">No songs found.</span>
@@ -904,7 +939,8 @@ export const MusicLibrary = ({ query }: MusicLibraryProps) => {
                 `
 					}
 				>
-					<TabItem currentPage={page} setPage={setpage} icon={<RectangleGroupIcon className="size-6 text-current duration-150" />} name="Library" pageKey="library" />
+					<TabItem currentPage={page} setPage={setpage} icon={<SignalIcon className="size-6 text-current duration-150" />} name="Digital Library" pageKey="digilib" />
+					<TabItem currentPage={page} setPage={setpage} icon={<RectangleGroupIcon className="size-6 text-current duration-150" />} name="My Music" pageKey="library" />
 					<TabItem currentPage={page} setPage={setpage} icon={<ArrowUpOnSquareIcon className="size-6 text-current duration-150" />} name="Upload" pageKey="upload" />
 				</div>
 			</div>
@@ -913,7 +949,7 @@ export const MusicLibrary = ({ query }: MusicLibraryProps) => {
 					<div
 						key={index}
 						className={
-							"inset-0 flex flex-col gap-2 p-3.5 rounded-lg duration-150 h-full w-full" +
+							`inset-0 flex flex-col gap-2 ${key === "digilib" ? "" : "p-3.5"} rounded-lg duration-150 h-full w-full` +
 							" " +
 							`
                             ${page === key ? "" : "absolute -translate-y-2.5 opacity-0 pointer-events-none"}
