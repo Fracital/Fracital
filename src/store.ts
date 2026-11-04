@@ -3,6 +3,7 @@ import { normalizePath } from "./views/Files/pathUtils";
 import type { TabProps } from "./components/Tab";
 import type { Track } from "./types";
 import { createId } from "@paralleldrive/cuid2";
+import { normalizeAboutUrl } from "./libs/aboutAlias";
 
 export const usePanelsStore = create<{
 	panelsOpen: boolean;
@@ -60,7 +61,8 @@ export const useTabsStore = create<{
 			};
 		}),
 	tabsOpen: false,
-	newTab: (props: TabProps) => {
+	newTab: (rawProps: TabProps) => {
+		const props = { ...rawProps, url: normalizeAboutUrl(rawProps.url), displayUrl: normalizeAboutUrl(rawProps.displayUrl) };
 		const id = props.id ?? createId();
 		const initialHistory = [
 			{
@@ -90,10 +92,14 @@ export const useTabsStore = create<{
 			};
 		});
 	},
-	updateTab: (id: string, changes: Partial<TabProps>) =>
+	updateTab: (id: string, rawChanges: Partial<TabProps>) => {
+		const changes = { ...rawChanges };
+		if ("url" in changes) changes.url = normalizeAboutUrl(changes.url);
+		if ("displayUrl" in changes) changes.displayUrl = normalizeAboutUrl(changes.displayUrl);
 		set(state => ({
 			tabs: state.tabs.map(tab => (tab.id === id ? { ...tab, ...changes } : tab)),
-		})),
+		}));
+	},
 	refreshTab: (id: string) =>
 		set(state => ({
 			tabs: state.tabs.map(tab => (tab.id === id ? { ...tab, refreshKey: (tab.refreshKey ?? 0) + 1 } : tab)),
@@ -123,6 +129,7 @@ export const useTabsStore = create<{
 		const currentHistory = (tab as any)?.history ?? [];
 		const currentIndex = (tab as any)?.historyIndex ?? 0;
 
+		entry = { ...entry, url: normalizeAboutUrl(entry.url), displayUrl: normalizeAboutUrl(entry.displayUrl) };
 		const newHistory = [...currentHistory.slice(0, currentIndex + 1), entry];
 		const newIndex = newHistory.length - 1;
 
@@ -440,7 +447,11 @@ if (typeof window !== "undefined") {
 	if (persistOn()) {
 		try {
 			const savedTabs = JSON.parse(localStorage.getItem(PERSIST_TABS_KEY) || "null");
-			if (savedTabs?.tabs?.length) useTabsStore.setState({ tabs: savedTabs.tabs, groups: savedTabs.groups ?? [] });
+			if (savedTabs?.tabs?.length)
+				useTabsStore.setState({
+					tabs: savedTabs.tabs.map((t: TabProps) => ({ ...t, url: normalizeAboutUrl(t.url), displayUrl: normalizeAboutUrl(t.displayUrl) })),
+					groups: savedTabs.groups ?? [],
+				});
 		} catch {
 			/* corrupted snapshot — start fresh */
 		}

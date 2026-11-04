@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import type { TabProps } from "../components/Tab";
 import { useTabsStore } from "../store";
-import { aboutPages, getPageFromUrl } from "../libs/aboutPages";
+import { aboutPages, getPageFromUrl, getQueryFromUrl } from "../libs/aboutPages";
 
 interface ViewProps {
 	children: React.ReactNode;
@@ -26,10 +26,11 @@ export const View = ({ children, id }: ViewProps) => {
 		if (!pageName || !aboutPages[pageName]) return;
 
 		const pageConfig = aboutPages[pageName];
+		const title = pageConfig.titleFor?.(getQueryFromUrl(tab.url)) ?? pageConfig.title ?? pageName;
 
-		if (tab.title !== pageConfig.title || !tab.icon) {
+		if (tab.title !== title || !tab.icon) {
 			updateTab(id, {
-				title: pageConfig.title || pageName,
+				title,
 				icon: pageConfig.icon,
 			});
 		}
