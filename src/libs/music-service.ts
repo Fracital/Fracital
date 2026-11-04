@@ -266,6 +266,9 @@ export const library = {
 	savedArtists: () => meJson<{ artists: { id: string; name: string; picture: string }[] }>("/api/me/artists"),
 	saveArtist: (id: string, name: string, picture: string, saved: boolean) =>
 		meJson<{ saved: boolean }>(`/api/me/artists/${encodeURIComponent(id)}`, saved ? { method: "PUT", body: JSON.stringify({ name, picture }) } : { method: "DELETE" }),
+	saved: () => meJson<{ tracks: MusicTrack[]; albums: MusicAlbum[] }>("/api/me/saved").then(r => ({ ...r, tracks: r.tracks.map(resolveTrackUrls) })),
+	saveItem: (kind: "track" | "album", item: MusicTrack | MusicAlbum, saved: boolean) =>
+		meJson<{ saved: boolean }>(`/api/me/saved/${kind}/${encodeURIComponent(item.id)}`, saved ? { method: "PUT", body: JSON.stringify({ data: item }) } : { method: "DELETE" }),
 	/** The user's own plays + loved state per song, keyed by the caller's keys. */
 	trackStats: (tracks: { key: string; title: string; artist: string }[]) =>
 		meJson<Record<string, { userPlays: number; loved: boolean }>>("/api/me/stats/tracks", { method: "POST", body: JSON.stringify({ tracks }) }),
@@ -348,6 +351,7 @@ export function trackToFracital(track: MusicTrack): Track {
 		source: "digital-library",
 		artistId: track.artistId,
 		albumId: track.albumId,
+		libraryId: track.id,
 		id: `ms-${track.id}`,
 		title: track.title,
 		// An array lets the player render collab credits individually.

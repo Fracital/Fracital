@@ -9,6 +9,7 @@ import { connectLastfm, getMe, type Me } from "../libs/auth";
 import { songKey, useLastfmStore } from "../libs/lastfmState";
 import { formatCount, library, type LastfmPeriod, type LibraryAlbum, type LibraryArtist, type LibraryTrack } from "../libs/music-service";
 import { useTabsStore } from "../store";
+import { ensureSavedLoaded, useSavedStore } from "../libs/savedLibrary";
 
 const PERIODS: { id: LastfmPeriod; label: string }[] = [
 	{ id: "1month", label: "4 weeks" },
@@ -43,7 +44,6 @@ interface Data {
 	topArtists?: LibraryArtist[];
 	topAlbums?: LibraryAlbum[];
 	recs?: { artists: LibraryArtist[]; tracks: LibraryTrack[] };
-	saved?: { id: string; name: string; picture: string }[];
 }
 
 /** "Your Library" on the Digital Library home: the user's Last.fm listening, made playable. */
@@ -57,12 +57,16 @@ export const YourLibrary = ({ dark, onPlayList, onOpenArtist, onOpenAlbum, onSon
 	const [connecting, setConnecting] = useState(false);
 	const [error, setError] = useState("");
 	const newTab = useTabsStore(s => s.newTab);
+	const savedTracks = useSavedStore(s => s.tracks);
+	const savedAlbums = useSavedStore(s => s.albums);
+	const followed = useSavedStore(s => s.artists);
 
 	useEffect(() => {
 		void useLastfmStore.getState().refresh();
 		const load = () => void getMe().then(setMe);
 		load();
 		window.addEventListener("account-upd", load);
+		ensureSavedLoaded();
 		return () => window.removeEventListener("account-upd", load);
 	}, []);
 
@@ -71,7 +75,10 @@ export const YourLibrary = ({ dark, onPlayList, onOpenArtist, onOpenAlbum, onSon
 		if (!username) return;
 		let alive = true;
 		const put = (patch: Data) => alive && setData(d => ({ ...d, ...patch }));
-		library.recent().then(r => put({ recent: r.tracks })).catch(() => {});
+		library
+			.recent()
+			.then(r => put({ recent: r.tracks }))
+			.catch(() => {});
 		library
 			.loved()
 			.then(r => {
@@ -79,8 +86,10 @@ export const YourLibrary = ({ dark, onPlayList, onOpenArtist, onOpenAlbum, onSon
 				markLoved(r.tracks.map(t => songKey(t.title, t.artist)));
 			})
 			.catch(() => {});
-		library.recommendations().then(r => put({ recs: r })).catch(() => {});
-		library.savedArtists().then(r => put({ saved: r.artists })).catch(() => {});
+		library
+			.recommendations()
+			.then(r => put({ recs: r }))
+			.catch(() => {});
 		return () => {
 			alive = false;
 		};
@@ -90,9 +99,18 @@ export const YourLibrary = ({ dark, onPlayList, onOpenArtist, onOpenAlbum, onSon
 		if (!username) return;
 		let alive = true;
 		const put = (patch: Data) => alive && setData(d => ({ ...d, ...patch }));
-		library.topTracks(period).then(r => put({ topTracks: r.tracks })).catch(() => {});
-		library.topArtists(period).then(r => put({ topArtists: r.artists })).catch(() => {});
-		library.topAlbums(period).then(r => put({ topAlbums: r.albums })).catch(() => {});
+		library
+			.topTracks(period)
+			.then(r => put({ topTracks: r.tracks }))
+			.catch(() => {});
+		library
+			.topArtists(period)
+			.then(r => put({ topArtists: r.artists }))
+			.catch(() => {});
+		library
+			.topAlbums(period)
+			.then(r => put({ topAlbums: r.albums }))
+			.catch(() => {});
 		return () => {
 			alive = false;
 		};
@@ -104,6 +122,7 @@ export const YourLibrary = ({ dark, onPlayList, onOpenArtist, onOpenAlbum, onSon
 	if (username === undefined || me === undefined) return null;
 
 	// Not connected: invite the user to sign in / connect.
+	let connectCard: React.ReactNode = null;
 	if (!username) {
 		const connect = async () => {
 			setError("");
@@ -120,7 +139,7 @@ export const YourLibrary = ({ dark, onPlayList, onOpenArtist, onOpenAlbum, onSon
 				setConnecting(false);
 			}
 		};
-		return (
+		connectCard = (
 			<div className={`flex items-center gap-4 p-4 rounded-2xl ${dark ? "bg-[#ffffff0d]" : "bg-[#00000008]"}`}>
 				<div className="flex items-center justify-center size-12 shrink-0 rounded-full text-white bg-[#d51007]">
 					<FontAwesomeIcon icon={faLastfm} className="size-6" />
@@ -194,6 +213,52 @@ export const YourLibrary = ({ dark, onPlayList, onOpenArtist, onOpenAlbum, onSon
 
 	const top = data.topTracks ?? [];
 
+	const albumTile = (a: { title: string; artist: string; artwork: string; userPlays?: number }, key: string) => (
+		<div key={key} className={`flex flex-col gap-1.5 w-32 shrink-0 p-1.5 rounded-lg cursor-pointer duration-150 ${hover}`} onClick={() => onOpenAlbum(a.title, a.artist)}>
+			{a.artwork ? <img src={a.artwork} alt="" className="w-full aspect-square rounded-md object-cover bg-(--tertiary)" loading="lazy" /> : <div className="w-full aspect-square rounded-md bg-(--tertiary)" />}
+			<div className="flex flex-col min-w-0 leading-tight">
+				<span title={a.title} className="text-xs font-semibold line-clamp-2">
+					{a.title}
+				</span>
+				<span className="text-[11px] text-(--text-tertiary) truncate">{a.artist}</span>
+				{!!a.userPlays && <span className="text-[10px] text-(--text-tertiary)">{formatCount(a.userPlays)} plays</span>}
+			</div>
+		</div>
+	);
+
+	// Songs, albums and artists saved with the "add to library" / Follow buttons (Fracital account).
+	const savedShelves = (
+		<>
+			<Shelf title="Saved Songs" count={savedTracks.length || undefined} dark={dark}>
+				{savedTracks.map((t, i, list) => (
+					<TrackTile key={t.id} track={t} list={list} index={i} />
+				))}
+			</Shelf>
+			<Shelf title="Saved Albums & Singles" count={savedAlbums.length || undefined} dark={dark}>
+				{savedAlbums.map(a => albumTile({ title: a.title.replace(/\s*-\s*(Single|EP)\s*$/i, ""), artist: a.artist, artwork: a.artwork }, a.id))}
+			</Shelf>
+			<Shelf title="Following" count={followed.length || undefined} dark={dark} gridMin={112}>
+				{followed.map(a => (
+					<ArtistTile key={a.id} artist={{ name: a.name, picture: a.picture }} />
+				))}
+			</Shelf>
+		</>
+	);
+
+	if (!username) {
+		return (
+			<div className="flex flex-col gap-4">
+				{connectCard}
+				{me && (savedTracks.length > 0 || savedAlbums.length > 0 || followed.length > 0) && (
+					<>
+						<h2 className="text-xl font-bold px-1">Your Library</h2>
+						{savedShelves}
+					</>
+				)}
+			</div>
+		);
+	}
+
 	return (
 		<div className="flex flex-col gap-4">
 			<div className="flex flex-wrap items-center justify-between gap-2 px-1">
@@ -218,6 +283,8 @@ export const YourLibrary = ({ dark, onPlayList, onOpenArtist, onOpenAlbum, onSon
 					))}
 				</div>
 			</div>
+
+			{savedShelves}
 
 			<Shelf title="Recently Played" dark={dark}>
 				{(data.recent ?? []).map((t, i, list) => (
@@ -273,24 +340,7 @@ export const YourLibrary = ({ dark, onPlayList, onOpenArtist, onOpenAlbum, onSon
 			</Shelf>
 
 			<Shelf title="Your Top Albums" dark={dark}>
-				{(data.topAlbums ?? []).map(a => (
-					<div key={`${a.artist}|${a.title}`} className={`flex flex-col gap-1.5 w-32 shrink-0 p-1.5 rounded-lg cursor-pointer duration-150 ${hover}`} onClick={() => onOpenAlbum(a.title, a.artist)}>
-						{a.artwork ? <img src={a.artwork} alt="" className="w-full aspect-square rounded-md object-cover bg-(--tertiary)" loading="lazy" /> : <div className="w-full aspect-square rounded-md bg-(--tertiary)" />}
-						<div className="flex flex-col min-w-0 leading-tight">
-							<span title={a.title} className="text-xs font-semibold line-clamp-2">
-								{a.title}
-							</span>
-							<span className="text-[11px] text-(--text-tertiary) truncate">{a.artist}</span>
-							{!!a.userPlays && <span className="text-[10px] text-(--text-tertiary)">{formatCount(a.userPlays)} plays</span>}
-						</div>
-					</div>
-				))}
-			</Shelf>
-
-			<Shelf title="Saved Artists" count={data.saved?.length} dark={dark} gridMin={112}>
-				{(data.saved ?? []).map(a => (
-					<ArtistTile key={a.id} artist={{ name: a.name, picture: a.picture }} />
-				))}
+				{(data.topAlbums ?? []).map(a => albumTile(a, `${a.artist}|${a.title}`))}
 			</Shelf>
 
 			<Shelf title="Artists For You" dark={dark} gridMin={112}>

@@ -742,9 +742,26 @@ export default App;
 /** Left-side 160×600 ad; the ad refreshes every 5–10 minutes (random). */
 function SideAd() {
 	const show = useShowAds();
-	if (!show) return null;
+	const [closed, setClosed] = useState(false);
+
+	// A closed ad comes back with a fresh one at the next 5–10 minute refresh.
+	useEffect(() => {
+		if (!closed) return;
+		const t = window.setTimeout(() => setClosed(false), (5 + Math.random() * 5) * 60_000);
+		return () => window.clearTimeout(t);
+	}, [closed]);
+
+	if (!show || closed) return null;
 	return (
-		<div className="hidden lg:flex flex-col items-center justify-center shrink-0 p-2 rounded-2xl bg-(--secondary) inset-shadow-(--inset-shadow-primary)">
+		<div className="hidden lg:flex flex-col items-center justify-center gap-1.5 shrink-0 p-2 rounded-2xl bg-(--secondary) inset-shadow-(--inset-shadow-primary)">
+			<button
+				className="flex items-center gap-1.5 self-stretch justify-center px-2 py-1 rounded-lg text-xs font-medium text-(--text-secondary) hover:text-(--text-primary) hover:bg-[#ffffff14] duration-150"
+				title="Close ad"
+				onClick={() => setClosed(true)}
+			>
+				<XMarkIcon className="size-3.5" />
+				Close
+			</button>
 			<AdBanner unit={AD_UNITS.side} refreshMinutes={[5, 10]} className="rounded-lg" />
 		</div>
 	);

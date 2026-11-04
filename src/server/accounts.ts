@@ -40,17 +40,13 @@ interface LastfmUserInfo {
 const lastfmPlugin = (): BetterAuthPlugin => ({
 	id: "lastfm",
 	endpoints: {
-		lastfmStart: createAuthEndpoint(
-			"/lastfm/start",
-			{ method: "GET", query: z.object({ mode: z.enum(["signin", "link"]).default("signin") }) },
-			async ctx => {
-				if (!lastfmKey() || !lastfmSecret()) throw ctx.redirect(donePath("error", "Last.fm isn't configured on this server"));
-				const nonce = createHash("sha256").update(`${Math.random()}${Date.now()}`).digest("hex").slice(0, 24);
-				await ctx.setSignedCookie(STATE_COOKIE, JSON.stringify({ mode: ctx.query.mode, nonce }), ctx.context.secret, { maxAge: 600, httpOnly: true, sameSite: "lax", path: "/" });
-				const cb = `${ctx.context.baseURL}/lastfm/callback`;
-				throw ctx.redirect(`https://www.last.fm/api/auth/?api_key=${encodeURIComponent(lastfmKey())}&cb=${encodeURIComponent(cb)}`);
-			},
-		),
+		lastfmStart: createAuthEndpoint("/lastfm/start", { method: "GET", query: z.object({ mode: z.enum(["signin", "link"]).default("signin") }) }, async ctx => {
+			if (!lastfmKey() || !lastfmSecret()) throw ctx.redirect(donePath("error", "Last.fm isn't configured on this server"));
+			const nonce = createHash("sha256").update(`${Math.random()}${Date.now()}`).digest("hex").slice(0, 24);
+			await ctx.setSignedCookie(STATE_COOKIE, JSON.stringify({ mode: ctx.query.mode, nonce }), ctx.context.secret, { maxAge: 600, httpOnly: true, sameSite: "lax", path: "/" });
+			const cb = `${ctx.context.baseURL}/lastfm/callback`;
+			throw ctx.redirect(`https://www.last.fm/api/auth/?api_key=${encodeURIComponent(lastfmKey())}&cb=${encodeURIComponent(cb)}`);
+		}),
 		lastfmCallback: createAuthEndpoint("/lastfm/callback", { method: "GET", query: z.object({ token: z.string().optional() }) }, async ctx => {
 			const raw = await ctx.getSignedCookie(STATE_COOKIE, ctx.context.secret);
 			ctx.setCookie(STATE_COOKIE, "", { maxAge: 0, path: "/" });
@@ -191,6 +187,14 @@ function init() {
 				picture text not null default '',
 				created_at timestamptz not null default now(),
 				primary key (user_id, artist_id)
+			)`);
+			await pool.query(`create table if not exists fracital_saved_items (
+				user_id text not null references "user"(id) on delete cascade,
+				kind text not null,
+				item_id text not null,
+				data jsonb not null,
+				created_at timestamptz not null default now(),
+				primary key (user_id, kind, item_id)
 			)`);
 			await migrateArtistTables(pool);
 			console.log("Fracital Accounts ready");
@@ -376,37 +380,52 @@ else setTimeout(() => location.replace("/"), 1500);
 	app.put("/api/me/settings", async c => {
 		const body = (await c.req.json().catch(() => null)) as { value?: unknown } | null;
 		if (typeof body?.value !== "string" || body.value.length > 512_000) return c.json({ error: "value must be a string under 500KB" }, 400);
-		await c
-			.get("pool")
-			.query("insert into fracital_settings (user_id, value, updated_at) values ($1, $2, now()) on conflict (user_id) do update set value = excluded.value, updated_at = now()", [c.get("user").id, body.value]);
+		await c.get("pool").query("insert into fracital_settings (user_id, value, updated_at) values ($1, $2, now()) on conflict (user_id) do update set value = excluded.value, updated_at = now()", [c.get("user").id, body.value]);
 		return c.json({ ok: true });
 	});
 
 	// --- Saved artists (the artist page's "add to library" button) ---
 
 	app.get("/api/me/artists", async c => {
-		const { rows } = await c
-			.get("pool")
-			.query<{ artist_id: string; name: string; picture: string }>("select artist_id, name, picture from fracital_saved_artists where user_id = $1 order by created_at desc", [c.get("user").id]);
+		const { rows } = await c.get("pool").query<{ artist_id: string; name: string; picture: string }>("select artist_id, name, picture from fracital_saved_artists where user_id = $1 order by created_at desc", [c.get("user").id]);
 		return c.json({ artists: rows.map(r => ({ id: r.artist_id, name: r.name, picture: r.picture })) });
 	});
 
 	app.put("/api/me/artists/:id", async c => {
 		const body = z.object({ name: z.string().min(1).max(300), picture: z.string().max(2000).optional() }).safeParse(await c.req.json().catch(() => null));
 		if (!body.success) return c.json({ error: "Invalid request" }, 400);
-		await c
-			.get("pool")
-			.query("insert into fracital_saved_artists (user_id, artist_id, name, picture) values ($1, $2, $3, $4) on conflict (user_id, artist_id) do update set name = excluded.name, picture = excluded.picture", [
-				c.get("user").id,
-				c.req.param("id"),
-				body.data.name,
-				body.data.picture ?? "",
-			]);
+		await c.get("pool").query("insert into fracital_saved_artists (user_id, artist_id, name, picture) values ($1, $2, $3, $4) on conflict (user_id, artist_id) do update set name = excluded.name, picture = excluded.picture", [c.get("user").id, c.req.param("id"), body.data.name, body.data.picture ?? ""]);
 		return c.json({ ok: true, saved: true });
 	});
 
 	app.delete("/api/me/artists/:id", async c => {
 		await c.get("pool").query("delete from fracital_saved_artists where user_id = $1 and artist_id = $2", [c.get("user").id, c.req.param("id")]);
+		return c.json({ ok: true, saved: false });
+	});
+
+	// --- Saved songs & albums ("add to library" buttons) ---
+
+	const savedKind = z.enum(["track", "album"]);
+
+	app.get("/api/me/saved", async c => {
+		const { rows } = await c.get("pool").query<{ kind: string; data: unknown }>("select kind, data from fracital_saved_items where user_id = $1 order by created_at desc limit 2000", [c.get("user").id]);
+		return c.json({ tracks: rows.filter(r => r.kind === "track").map(r => r.data), albums: rows.filter(r => r.kind === "album").map(r => r.data) });
+	});
+
+	app.put("/api/me/saved/:kind/:id", async c => {
+		const kind = savedKind.safeParse(c.req.param("kind"));
+		const body = z.object({ data: z.object({ id: z.string().min(1).max(200), title: z.string().min(1).max(500), artist: z.string().max(500) }).passthrough() }).safeParse(await c.req.json().catch(() => null));
+		if (!kind.success || !body.success || body.data.data.id !== c.req.param("id")) return c.json({ error: "Invalid request" }, 400);
+		const data = JSON.stringify(body.data.data);
+		if (data.length > 8000) return c.json({ error: "Item too large" }, 400);
+		await c.get("pool").query("insert into fracital_saved_items (user_id, kind, item_id, data) values ($1, $2, $3, $4) on conflict (user_id, kind, item_id) do update set data = excluded.data", [c.get("user").id, kind.data, c.req.param("id"), data]);
+		return c.json({ ok: true, saved: true });
+	});
+
+	app.delete("/api/me/saved/:kind/:id", async c => {
+		const kind = savedKind.safeParse(c.req.param("kind"));
+		if (!kind.success) return c.json({ error: "Invalid request" }, 400);
+		await c.get("pool").query("delete from fracital_saved_items where user_id = $1 and kind = $2 and item_id = $3", [c.get("user").id, kind.data, c.req.param("id")]);
 		return c.json({ ok: true, saved: false });
 	});
 
@@ -461,7 +480,11 @@ else setTimeout(() => location.replace("/"), 1500);
 				return c.json(
 					await cached(`${userId}:top-artists:${period}:${limit}`, 10 * 60_000, async () => {
 						const res = await lastfmCall<{ topartists?: { artist?: { name?: string; playcount?: string } | { name?: string; playcount?: string }[] } }>({ method: "user.getTopArtists", user, period, limit });
-						const artists = await Promise.all(asArray(res?.topartists?.artist).filter(a => a.name).map(a => artistCard(a.name!, { userPlays: toCount(a.playcount) })));
+						const artists = await Promise.all(
+							asArray(res?.topartists?.artist)
+								.filter(a => a.name)
+								.map(a => artistCard(a.name!, { userPlays: toCount(a.playcount) })),
+						);
 						return { period, artists };
 					}),
 				);
@@ -493,7 +516,9 @@ else setTimeout(() => location.replace("/"), 1500);
 					lastfmCall<{ topartists?: { artist?: Named | Named[] } }>({ method: "user.getTopArtists", user, period: "3month", limit: "50" }),
 					lastfmCall<{ toptracks?: { track?: LastfmTrack | LastfmTrack[] } }>({ method: "user.getTopTracks", user, period: "1month", limit: "8" }),
 				]);
-				const topArtists = asArray(topArtistsRes?.topartists?.artist).map(a => a.name || "").filter(Boolean);
+				const topArtists = asArray(topArtistsRes?.topartists?.artist)
+					.map(a => a.name || "")
+					.filter(Boolean);
 				const known = new Set(topArtists.map(n => n.toLowerCase()));
 
 				// Score similar artists across the user's top 6, so overlapping taste ranks higher.
@@ -539,9 +564,7 @@ else setTimeout(() => location.replace("/"), 1500);
 		const tracks = (body?.tracks ?? []).filter(t => t.key && t.title && t.artist).slice(0, 25);
 		const entries = await Promise.all(
 			tracks.map(async t => {
-				const info = await cached(`${c.get("user").id}:stat:${t.artist}|${t.title}`.toLowerCase(), 5 * 60_000, () =>
-					lastfmCall<{ track?: { userplaycount?: string; userloved?: string } }>({ method: "track.getInfo", artist: t.artist!, track: t.title!, username: link.username, autocorrect: "1" }),
-				);
+				const info = await cached(`${c.get("user").id}:stat:${t.artist}|${t.title}`.toLowerCase(), 5 * 60_000, () => lastfmCall<{ track?: { userplaycount?: string; userloved?: string } }>({ method: "track.getInfo", artist: t.artist!, track: t.title!, username: link.username, autocorrect: "1" }));
 				return [t.key!, { userPlays: toCount(info?.track?.userplaycount), loved: info?.track?.userloved === "1" }] as const;
 			}),
 		);
@@ -552,9 +575,7 @@ else setTimeout(() => location.replace("/"), 1500);
 		const link = await requireLink(c);
 		const name = c.req.query("name")?.trim();
 		if (!link || !name) return c.json({ userPlays: null });
-		const info = await cached(`${c.get("user").id}:artist:${name}`.toLowerCase(), 10 * 60_000, () =>
-			lastfmCall<{ artist?: { stats?: { userplaycount?: string } } }>({ method: "artist.getInfo", artist: name, username: link.username }),
-		);
+		const info = await cached(`${c.get("user").id}:artist:${name}`.toLowerCase(), 10 * 60_000, () => lastfmCall<{ artist?: { stats?: { userplaycount?: string } } }>({ method: "artist.getInfo", artist: name, username: link.username }));
 		return c.json({ userPlays: toCount(info?.artist?.stats?.userplaycount) });
 	});
 

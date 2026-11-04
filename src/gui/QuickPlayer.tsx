@@ -11,6 +11,8 @@ import { openLibraryPage } from "../libs/aboutPages";
 import { PlayCount } from "../components/PlayCount";
 import { RadioStatus } from "../components/RadioStatus";
 import type { Track } from "../types";
+import { ensureSavedLoaded, libraryTrackFromPlayer, useSavedStore } from "../libs/savedLibrary";
+import { CheckCircleIcon, PlusCircleIcon } from "@heroicons/react/24/outline";
 
 /** Digital Library tracks link their artist names to artist pages. */
 const openTrackArtist = (track: Track, name: string) => {
@@ -37,6 +39,11 @@ interface QuickPlayerProps {
 export const QuickPlayer = ({ panelsOpen, className, onMouseDown }: QuickPlayerProps) => {
 	const settings = useSettingsStore(state => state.settings);
 	const currentTrack = useMusicStore(state => state.currentTrack);
+	const currentLibraryTrack = currentTrack ? libraryTrackFromPlayer(currentTrack) : null;
+	const currentSaved = useSavedStore(s => !!currentLibraryTrack && s.tracks.some(t => t.id === currentLibraryTrack.id));
+	useEffect(() => {
+		ensureSavedLoaded();
+	}, []);
 	const queue = useMusicStore(state => state.queue);
 	const setCurrentTrack = useMusicStore(state => state.setCurrentTrack);
 	const addTrack = useMusicStore(state => state.addTrack);
@@ -550,8 +557,20 @@ export const QuickPlayer = ({ panelsOpen, className, onMouseDown }: QuickPlayerP
 													<PlayCount title={currentTrack.title} artist={currentTrack.artists} skeleton={false} className="text-[11px] leading-none opacity-60" />
 												</div>
 											</div>
+											{currentLibraryTrack && (
+												<button
+													className="ml-auto flex items-center justify-center shrink-0 p-1 rounded-full hover:bg-[#ffffff14] duration-150"
+													title={currentSaved ? "Remove from Library" : "Add to Library"}
+													onClick={e => {
+														e.stopPropagation();
+														useSavedStore.getState().toggleTrack(currentLibraryTrack);
+													}}
+												>
+													{currentSaved ? <CheckCircleIcon className="size-6 text-[#3d91ff]" /> : <PlusCircleIcon className="size-6" />}
+												</button>
+											)}
 											<EllipsisHorizontalIcon
-												className={`size-6 mr-2 stroke-current stroke-1.5 cursor-pointer duration-150`}
+												className={`size-6 mr-2 shrink-0 stroke-current stroke-1.5 cursor-pointer duration-150`}
 												onClick={e => {
 													e.preventDefault();
 													e.stopPropagation();
@@ -1071,6 +1090,18 @@ export const QuickPlayer = ({ panelsOpen, className, onMouseDown }: QuickPlayerP
 										</div>
 									</div>
 									<div className="relative flex gap-2 items-center justify-center">
+										{currentLibraryTrack && (
+											<button
+												title={currentSaved ? "Remove from Library" : "Add to Library"}
+												className={`${currentSaved ? "opacity-100" : "opacity-50 hover:opacity-100"} cursor-pointer duration-150`}
+												onClick={e => {
+													e.stopPropagation();
+													useSavedStore.getState().toggleTrack(currentLibraryTrack);
+												}}
+											>
+												{currentSaved ? <CheckCircleIcon className="size-5 text-[#3d91ff]" /> : <PlusCircleIcon className="size-5" />}
+											</button>
+										)}
 										<button
 											title="Options"
 											className={`opacity-50 hover:opacity-100 cursor-pointer duration-150`}

@@ -1,4 +1,6 @@
 import { useEffect, useState, useRef } from "react";
+import { createPortal } from "react-dom";
+import { ChevronLeftIcon, ChevronRightIcon, XMarkIcon } from "@heroicons/react/24/solid";
 import { useMusicStore, useSettingsStore, useTabsStore } from "../store";
 import { updatePageTab } from "../libs/aboutPages";
 import { MagnifyingGlassIcon, PlayIcon, PlusIcon, MusicalNoteIcon, ChartBarIcon, RadioIcon, AdjustmentsHorizontalIcon, EllipsisHorizontalIcon, UserIcon } from "@heroicons/react/24/solid";
@@ -34,6 +36,8 @@ import { startRadio, useRadioStore } from "../libs/radio";
 import { FONT_STACK, TEXT_STACK, getArtistProfile, loadArtistFont, loadTextFont, panel, type ArtistPick, type ArtistProfile } from "../libs/artistPanel";
 import { getMe } from "../libs/auth";
 import { YourLibrary } from "./YourLibrary";
+import { ensureSavedLoaded, useSavedStore } from "../libs/savedLibrary";
+import { CheckCircleIcon, PlusCircleIcon, UserPlusIcon } from "@heroicons/react/24/outline";
 import { songKey, useLastfmStore } from "../libs/lastfmState";
 import { CheckBadgeIcon, CheckIcon, GlobeAltIcon, HeartIcon } from "@heroicons/react/24/solid";
 import { HeartIcon as HeartOutlineIcon, SquaresPlusIcon } from "@heroicons/react/24/outline";
@@ -114,6 +118,94 @@ const FitTitle = ({ children, className = "", style, max, min }: { children: Rea
 	);
 };
 
+type MediaItem = { src: string; label: string };
+
+/**
+ * Full-screen gallery of an artist's photos and release covers. Click a tile to enlarge;
+ * ←/→ to step through, Esc to go back/close. Portaled to <body> so tab containers can't clip it.
+ */
+const MediaModal = ({ title, titleFont, photos, covers, index, onIndex, onClose }: { title: string; titleFont?: string; photos: MediaItem[]; covers: MediaItem[]; index: number | null; onIndex: (i: number | null) => void; onClose: () => void }) => {
+	const all = [...photos, ...covers];
+	const current = index !== null ? all[index] : null;
+
+	useEffect(() => {
+		const onKey = (e: KeyboardEvent) => {
+			if (e.key === "Escape") {
+				e.stopPropagation();
+				if (index !== null) onIndex(null);
+				else onClose();
+			} else if (index !== null && e.key === "ArrowRight") onIndex((index + 1) % all.length);
+			else if (index !== null && e.key === "ArrowLeft") onIndex((index - 1 + all.length) % all.length);
+		};
+		window.addEventListener("keydown", onKey, true);
+		return () => window.removeEventListener("keydown", onKey, true);
+	}, [index, all.length, onIndex, onClose]);
+
+	const tile = (item: MediaItem, i: number) => (
+		<button key={item.src} className="group relative aspect-square overflow-hidden rounded-xl bg-[#ffffff10] cursor-zoom-in" onClick={() => onIndex(i)} title={item.label || undefined}>
+			<img src={item.src} alt={item.label} loading="lazy" className="size-full object-cover duration-300 group-hover:scale-105" />
+			{item.label && <span className="absolute inset-x-0 bottom-0 p-2 pt-6 text-left text-xs font-semibold text-white truncate bg-linear-to-t from-black/80 to-transparent">{item.label}</span>}
+		</button>
+	);
+
+	return createPortal(
+		<div className="fixed inset-0 z-[1000] flex flex-col bg-black/85 backdrop-blur-sm text-white" onMouseDown={e => e.target === e.currentTarget && (index !== null ? onIndex(null) : onClose())}>
+			<div className="flex items-center gap-3 px-5 py-4 shrink-0">
+				{current && (
+					<button className="p-2 rounded-full hover:bg-white/10 cursor-pointer" title="Back to all media" onClick={() => onIndex(null)}>
+						<ChevronLeftIcon className="size-5" />
+					</button>
+				)}
+				<div className="flex flex-col min-w-0">
+					<span className="text-2xl leading-tight truncate" style={{ fontFamily: titleFont }}>
+						{title}
+					</span>
+					<span className="text-xs text-white/60">
+						{current ? `${index! + 1} of ${all.length}${current.label ? ` · ${current.label}` : ""}` : `${photos.length} photo${photos.length === 1 ? "" : "s"} · ${covers.length} release${covers.length === 1 ? "" : "s"}`}
+					</span>
+				</div>
+				<button className="ml-auto p-2 rounded-full hover:bg-white/10 cursor-pointer" title="Close (Esc)" onClick={onClose}>
+					<XMarkIcon className="size-6" />
+				</button>
+			</div>
+
+			{current ? (
+				<div className="relative flex-1 min-h-0 flex items-center justify-center px-16 pb-6" onMouseDown={e => e.target === e.currentTarget && onIndex(null)}>
+					<img src={current.src} alt={current.label} className="max-w-full max-h-full object-contain rounded-lg shadow-2xl" />
+					{all.length > 1 && (
+						<>
+							<button className="absolute left-4 top-1/2 -translate-y-1/2 p-3 rounded-full bg-white/10 hover:bg-white/20 cursor-pointer" title="Previous (←)" onClick={() => onIndex((index! - 1 + all.length) % all.length)}>
+								<ChevronLeftIcon className="size-6" />
+							</button>
+							<button className="absolute right-4 top-1/2 -translate-y-1/2 p-3 rounded-full bg-white/10 hover:bg-white/20 cursor-pointer" title="Next (→)" onClick={() => onIndex((index! + 1) % all.length)}>
+								<ChevronRightIcon className="size-6" />
+							</button>
+						</>
+					)}
+				</div>
+			) : (
+				<div className="flex-1 min-h-0 overflow-y-auto px-5 pb-8">
+					<div className="flex flex-col gap-6 max-w-6xl mx-auto">
+						{photos.length > 0 && (
+							<section className="flex flex-col gap-2.5">
+								<h3 className="font-bold">Photos</h3>
+								<div className="grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-2.5">{photos.map((p, i) => tile(p, i))}</div>
+							</section>
+						)}
+						{covers.length > 0 && (
+							<section className="flex flex-col gap-2.5">
+								<h3 className="font-bold">Releases</h3>
+								<div className="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-2.5">{covers.map((c, i) => tile(c, photos.length + i))}</div>
+							</section>
+						)}
+					</div>
+				</div>
+			)}
+		</div>,
+		document.body,
+	);
+};
+
 interface DigitalLibraryProps {
 	query: string | undefined;
 }
@@ -144,8 +236,16 @@ export const DigitalLibrary = ({ query }: DigitalLibraryProps) => {
 	/** The artist's own customizations from Fracital for Artists (null when unclaimed). */
 	const [artistProfile, setArtistProfile] = useState<ArtistProfile | null>(null);
 	const [canManage, setCanManage] = useState(false);
-	const [savedArtistIds, setSavedArtistIds] = useState<Set<string> | null>(null);
+	// Saved songs / albums / followed artists (Fracital account).
+	const savedTracks = useSavedStore(s => s.tracks);
+	const savedAlbums = useSavedStore(s => s.albums);
+	const savedArtists = useSavedStore(s => s.artists);
+	const { toggleTrack, toggleAlbum, toggleArtist } = useSavedStore.getState();
+	const isTrackSaved = (id: string) => savedTracks.some(t => t.id === id);
 	const [showMoreLinks, setShowMoreLinks] = useState(false);
+	/** Artist media modal: open/closed, and which item is enlarged (null = grid). */
+	const [mediaOpen, setMediaOpen] = useState(false);
+	const [mediaIndex, setMediaIndex] = useState<number | null>(null);
 
 	// The user's Last.fm (loved songs + personal play counts) — empty when not connected.
 	const lastfmUser = useLastfmStore(s => s.username);
@@ -195,13 +295,9 @@ export const DigitalLibrary = ({ query }: DigitalLibraryProps) => {
 		};
 	}, [artistDetail]);
 
-	// Which artists the signed-in user has saved (null when signed out).
 	useEffect(() => {
-		library
-			.savedArtists()
-			.then(r => setSavedArtistIds(new Set(r.artists.map(a => a.id))))
-			.catch(() => setSavedArtistIds(null));
-	}, [lastfmUser]);
+		ensureSavedLoaded();
+	}, []);
 
 	// Radio (shared with the player — re-tunes on every song change while on).
 	const radioVariety = useRadioStore(s => s.variety);
@@ -290,6 +386,8 @@ export const DigitalLibrary = ({ query }: DigitalLibraryProps) => {
 			setArtistProfile(null);
 			setCanManage(false);
 			setShowMoreLinks(false);
+			setMediaOpen(false);
+			setMediaIndex(null);
 			setArtistDetail(detail);
 			setBioExpanded(false);
 			setTopSongsExpanded(false);
@@ -450,6 +548,13 @@ export const DigitalLibrary = ({ query }: DigitalLibraryProps) => {
 			<PlayCount title={track.title} artist={track.artist} className="text-xs font-medium text-(--text-secondary) w-20 text-right shrink-0 hidden sm:block" />
 			<span className="text-xs text-(--text-tertiary) w-10 text-right">{formatDuration(track.duration)}</span>
 			<button
+				className={`${isTrackSaved(track.id) ? "" : "opacity-0 group-hover:opacity-100"} p-1 rounded-full hover:bg-[#ffffff20] duration-150`}
+				title={isTrackSaved(track.id) ? "Remove from Library" : "Add to Library"}
+				onClick={e => { e.stopPropagation(); toggleTrack(track); }}
+			>
+				{isTrackSaved(track.id) ? <CheckCircleIcon className="size-4 text-[#3d91ff]" /> : <PlusCircleIcon className="size-4 text-(--text-secondary)" />}
+			</button>
+			<button
 				className="opacity-0 group-hover:opacity-100 p-1 rounded-full hover:bg-[#ffffff20] duration-150"
 				title="Start radio from this song"
 				onClick={e => { e.stopPropagation(); startRadio(track.artist, track.title); }}
@@ -510,6 +615,9 @@ export const DigitalLibrary = ({ query }: DigitalLibraryProps) => {
 		const items: MenuItem[] = [
 			{ title: "Play", onClick: () => handlePlay(track), icon: <PlayIcon className="size-5" /> },
 			{ title: "Add to queue", onClick: () => handleQueue(track), icon: <PlusIcon className="size-5" /> },
+			isTrackSaved(track.id)
+				? { title: "Remove from Library", onClick: () => toggleTrack(track), icon: <CheckCircleIcon className="size-5" /> }
+				: { title: "Add to Library", onClick: () => toggleTrack(track), icon: <PlusCircleIcon className="size-5" /> },
 			...(lastfmUser ? [{ title: isLoved ? "Remove from Liked Songs" : "Add to Liked Songs", onClick: () => void toggleLove(track.title, track.artist), icon: isLoved ? <HeartIcon className="size-5 text-[#ff3b5c]" /> : <HeartOutlineIcon className="size-5" /> }] : []),
 			{ title: "Start radio", onClick: () => startRadio(track.artist, track.title), icon: <RadioIcon className="size-5" /> },
 			{
@@ -533,9 +641,10 @@ export const DigitalLibrary = ({ query }: DigitalLibraryProps) => {
 		const key = songKey(track.title, track.artist);
 		const isLoved = !!lovedSongs[key];
 		const mine = myPlays[key];
+		const inLibrary = isTrackSaved(track.id);
 		return (
 			<div
-				className={`group grid ${lastfmUser ? "grid-cols-[minmax(0,1.7fr)_minmax(6rem,1fr)_4.25rem]" : "grid-cols-[minmax(0,1.7fr)_minmax(6rem,1fr)_2rem]"} items-center gap-3 h-15 px-4 rounded-xl cursor-pointer duration-150 ${brightness === "dark" ? "bg-[#ffffff14] hover:bg-[#ffffff21]" : "bg-[#0000000a] hover:bg-[#00000014]"}`}
+				className={`group grid ${lastfmUser ? "grid-cols-[minmax(0,1.7fr)_minmax(6rem,1fr)_6.5rem]" : "grid-cols-[minmax(0,1.7fr)_minmax(6rem,1fr)_4.25rem]"} items-center gap-3 h-15 px-4 rounded-xl cursor-pointer duration-150 ${brightness === "dark" ? "bg-[#ffffff14] hover:bg-[#ffffff21]" : "bg-[#0000000a] hover:bg-[#00000014]"}`}
 				onClick={() => handlePlay(track)}
 				onContextMenu={e => { e.preventDefault(); openSongMenu(e, track); }}
 			>
@@ -559,6 +668,16 @@ export const DigitalLibrary = ({ query }: DigitalLibraryProps) => {
 					{!!mine && <span className="block text-[11px] font-medium text-(--text-tertiary)">You: {formatCount(mine)}</span>}
 				</span>
 				<div className="flex items-center justify-end gap-0.5">
+					<button
+						className={`flex items-center justify-center size-8 rounded-full duration-150 ${inLibrary ? "" : "opacity-0 group-hover:opacity-100"} ${brightness === "dark" ? "hover:bg-[#ffffff1f]" : "hover:bg-[#00000012]"}`}
+						title={inLibrary ? "Remove from Library" : "Add to Library"}
+						onClick={e => {
+							e.stopPropagation();
+							toggleTrack(track);
+						}}
+					>
+						{inLibrary ? <CheckCircleIcon className="size-5 text-[#3d91ff]" /> : <PlusCircleIcon className="size-5" />}
+					</button>
 					{lastfmUser && (
 						<button
 							className={`flex items-center justify-center size-8 rounded-full duration-150 ${isLoved ? "" : "opacity-0 group-hover:opacity-100"} ${brightness === "dark" ? "hover:bg-[#ffffff1f]" : "hover:bg-[#00000012]"}`}
@@ -689,6 +808,7 @@ export const DigitalLibrary = ({ query }: DigitalLibraryProps) => {
 	const AlbumPage = () => {
 		if (!albumDetail) return null;
 		const albumTracks = albumDetail.tracks || [];
+		const albumSaved = savedAlbums.some(a => a.id === albumDetail.album.id);
 		return (
 			<div className="flex flex-col gap-4">
 				<div className="flex gap-4 items-end">
@@ -714,12 +834,22 @@ export const DigitalLibrary = ({ query }: DigitalLibraryProps) => {
 				</div>
 				{albumTracks.length > 0 && (
 					<>
-						<button
-							className={`w-max flex items-center gap-1.5 px-4 py-2 rounded-lg font-medium text-sm duration-150 ${brightness === "dark" ? "bg-white text-black hover:bg-[#ffffffdd]" : "bg-black text-white hover:bg-[#000000dd]"}`}
-							onClick={() => handlePlayAll(albumTracks)}
-						>
-							<PlayIcon className="size-4" /> Play
-						</button>
+						<div className="flex items-center gap-2">
+							<button
+								className={`w-max flex items-center gap-1.5 px-4 py-2 rounded-lg font-medium text-sm duration-150 ${brightness === "dark" ? "bg-white text-black hover:bg-[#ffffffdd]" : "bg-black text-white hover:bg-[#000000dd]"}`}
+								onClick={() => handlePlayAll(albumTracks)}
+							>
+								<PlayIcon className="size-4" /> Play
+							</button>
+							<button
+								className={`w-max flex items-center gap-1.5 px-4 py-2 rounded-lg font-medium text-sm duration-150 ${albumSaved ? "bg-[#3d91ff] text-white hover:brightness-110" : brightness === "dark" ? "bg-[#ffffff1f] hover:bg-[#ffffff33]" : "bg-[#00000012] hover:bg-[#00000022]"}`}
+								onClick={() => toggleAlbum(albumDetail.album)}
+								title={albumSaved ? "Remove from Your Library" : `Add this ${albumDetail.album.type === "single" ? "single" : albumDetail.album.type === "ep" ? "EP" : "album"} to Your Library`}
+							>
+								{albumSaved ? <CheckIcon className="size-4" /> : <PlusIcon className="size-4" />}
+								{albumSaved ? "In Library" : "Add to Library"}
+							</button>
+						</div>
 						<div className="flex flex-col">{albumTracks.map((t, i) => <TrackRow key={t.id} track={t} index={i} />)}</div>
 					</>
 				)}
@@ -769,35 +899,31 @@ export const DigitalLibrary = ({ query }: DigitalLibraryProps) => {
 		const myArtistPlays = myPlays[`artist:${artist.name.toLowerCase()}`];
 
 		// Collage photos: extra artist photos first, then album covers to fill any gaps.
+		// Everything for the "all photos" modal: artist photos first, then release covers.
+		const mediaPhotos = [...new Set([...(custom?.photos ?? []), banner, ...(extras?.images ?? [])].filter((u): u is string => !!u && !u.includes("/images/artist//")))].map(src => ({ src, label: "" }));
+		const mediaCovers = [...albumsAndEps, ...singles]
+			.filter(a => a.artwork)
+			.map(a => ({ src: artworkHighRes(a.artwork), label: cleanAlbumTitle(a.title) }))
+			.filter((m, i, all) => all.findIndex(x => x.src === m.src) === i && !mediaPhotos.some(p => p.src === m.src));
+		const media = [...mediaPhotos, ...mediaCovers];
 		const gallery = [...new Set([...(custom?.photos ?? []), ...(extras?.images ?? []).filter(u => u !== banner), ...albumsAndEps.map(a => artworkHighRes(a.artwork)), ...singles.map(a => artworkHighRes(a.artwork))])].slice(0, 4);
 
-		const savedHere = !!savedArtistIds?.has(artist.id);
-		const toggleSaveArtist = () => {
-			if (!savedArtistIds) {
-				useTabsStore.getState().newTab({ id: createId(), url: "about:account", displayUrl: "about:account", title: "Fracital Account", icon: null, current: true });
-				return;
-			}
-			const next = !savedHere;
-			setSavedArtistIds(prev => {
-				const s = new Set(prev);
-				if (next) s.add(artist.id);
-				else s.delete(artist.id);
-				return s;
-			});
-			library.saveArtist(artist.id, artist.name, artist.picture, next).catch(() => setSavedArtistIds(prev => {
-				const s = new Set(prev);
-				if (next) s.delete(artist.id);
-				else s.add(artist.id);
-				return s;
-			}));
-		};
+		const following = savedArtists.some(a => a.id === artist.id);
 
 		const openLink = (url: string, title: string) => useTabsStore.getState().newTab({ id: createId(), url, displayUrl: url, title, icon: null, current: true });
 
 		const radioControls = () => (
 			<div className="relative flex items-center gap-2">
 				<button
-					className="flex items-center gap-1.5 px-3.5 py-2 rounded-full font-semibold text-sm bg-white text-black hover:bg-white/90 duration-150 disabled:opacity-60"
+					className={`flex items-center gap-1.5 whitespace-nowrap shrink-0 px-3.5 py-2 rounded-full font-semibold text-sm duration-150 ${following ? "bg-[#3d91ff] text-white hover:brightness-110" : "bg-white/15 text-white ring-1 ring-white/40 hover:bg-white/25 backdrop-blur"}`}
+					onClick={() => toggleArtist({ id: artist.id, name: artist.name, picture: artist.picture })}
+					title={following ? "Unfollow — remove from Your Library" : "Follow — add to Your Library"}
+				>
+					{following ? <CheckIcon className="size-4" /> : <UserPlusIcon className="size-4" />}
+					{following ? "Following" : "Follow"}
+				</button>
+				<button
+					className="flex items-center gap-1.5 whitespace-nowrap shrink-0 px-3.5 py-2 rounded-full font-semibold text-sm bg-white text-black hover:bg-white/90 duration-150 disabled:opacity-60"
 					disabled={radioLoading}
 					onClick={() => startRadio(artist.name)}
 					title="Start a station seeded by this artist"
@@ -932,15 +1058,20 @@ export const DigitalLibrary = ({ query }: DigitalLibraryProps) => {
 							<div className="absolute bottom-3 right-3">{radioControls()}</div>
 						</div>
 
-						{/* Add to Your Library */}
-						<div className="flex items-center justify-center w-11 shrink-0">
+						{/* All photos & media */}
+						<div className="flex flex-col items-center justify-center gap-1 w-11 shrink-0">
 							<button
-								className={`flex items-center justify-center size-10 rounded-full duration-150 ${savedHere ? (dark ? "bg-white text-black" : "bg-black text-white") : dark ? "bg-[#ffffff1f] hover:bg-[#ffffff33]" : "bg-[#00000012] hover:bg-[#00000022]"}`}
-								title={savedArtistIds ? (savedHere ? "Saved to Your Library" : "Add to Your Library") : "Sign in to save artists"}
-								onClick={toggleSaveArtist}
+								className={`flex items-center justify-center size-10 rounded-full duration-150 disabled:opacity-40 ${dark ? "bg-[#ffffff1f] hover:bg-[#ffffff33]" : "bg-[#00000012] hover:bg-[#00000022]"}`}
+								title={`See all photos & media (${media.length})`}
+								disabled={!media.length}
+								onClick={() => {
+									setMediaIndex(null);
+									setMediaOpen(true);
+								}}
 							>
-								{savedHere ? <CheckIcon className="size-5" /> : <SquaresPlusIcon className="size-5.5" />}
+								<SquaresPlusIcon className="size-5.5" />
 							</button>
+							{media.length > 4 && <span className="text-[10px] font-semibold text-(--text-tertiary)">+{media.length - 4}</span>}
 						</div>
 					</div>
 				</div>
@@ -1032,6 +1163,21 @@ export const DigitalLibrary = ({ query }: DigitalLibraryProps) => {
 						)
 					)}
 				</div>
+
+				{mediaOpen && (
+					<MediaModal
+						title={artist.name}
+						titleFont={artistFont}
+						photos={mediaPhotos}
+						covers={mediaCovers}
+						index={mediaIndex}
+						onIndex={setMediaIndex}
+						onClose={() => {
+							setMediaOpen(false);
+							setMediaIndex(null);
+						}}
+					/>
+				)}
 			</div>
 		);
 	};

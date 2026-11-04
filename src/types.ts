@@ -135,6 +135,8 @@ export interface Track {
 	source?: "digital-library";
 	artistId?: string;
 	albumId?: string;
+	/** The Digital Library track id (stable; `id` is re-generated per queue entry). */
+	libraryId?: string;
 	/** Queued by radio (replaced when the station re-tunes); unset for songs the user queued. */
 	radio?: boolean;
 }
