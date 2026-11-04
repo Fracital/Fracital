@@ -1,9 +1,8 @@
-import { createId } from "@paralleldrive/cuid2";
 import { useEffect, useRef, useState } from "react";
 import { QueueListIcon, MusicalNoteIcon, PlusIcon, MinusIcon, ArrowUturnLeftIcon, BackwardIcon, ForwardIcon, RectangleGroupIcon, ArrowPathRoundedSquareIcon, SpeakerWaveIcon, SpeakerXMarkIcon, BarsArrowUpIcon, BackspaceIcon, AdjustmentsHorizontalIcon } from "@heroicons/react/24/solid";
 import { PlayIcon, PauseIcon, EllipsisHorizontalIcon } from "@heroicons/react/24/solid";
 import { ArrowsPointingOutIcon, ChatBubbleBottomCenterTextIcon } from "@heroicons/react/24/solid";
-import { useMusicStore, usePlaybackStore, useSettingsStore, useTabsStore } from "../store";
+import { useMusicStore, usePlaybackStore, useSettingsStore } from "../store";
 import { ContextMenu, type MenuItem } from "../components/ContextMenu";
 import { AudvisVisualizer } from "../components/AudvisVisualizer";
 import { openMusicPlayer, registerAudio } from "../libs/playback";
@@ -51,7 +50,6 @@ export const QuickPlayer = ({ panelsOpen, className, onMouseDown }: QuickPlayerP
 	const playNext = useMusicStore(state => state.playNext);
 	const playPrev = useMusicStore(state => state.playPrev);
 	const reorderQueue = useMusicStore(state => state.reorderQueue);
-	const newTab = useTabsStore(state => state.newTab);
 	const playerView = useMusicStore(state => state.playerView);
 	const changeView = useMusicStore(state => state.changeView);
 
@@ -486,17 +484,9 @@ export const QuickPlayer = ({ panelsOpen, className, onMouseDown }: QuickPlayerP
 										<>
 											<h1 className={`ml-1.5 mt-1.5 text-2xl font-bold`}>Nothing playing</h1>
 											<button className="flex items-center justify-center gap-2 px-4 py-2 bg-(--tertiary) text-(--text-primary) rounded-md hover:bg-(--accent) duration-150"
-												onClick={() => {
-													newTab({
-														id: createId(),
-														title: "Music Library",
-														icon: <MusicalNoteIcon className="size-5" />,
-														url: "about:music",
-														displayUrl: "about:music",
-													});
-												}}
+												onClick={() => openLibraryPage("")}
 											>
-												<span className="text-xs w-max">Open Library</span>
+												<span className="text-xs w-max">Browse Music</span>
 												<MusicalNoteIcon className="size-3" />
 											</button>
 										</>

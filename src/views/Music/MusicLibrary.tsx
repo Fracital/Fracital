@@ -15,11 +15,14 @@ import { DigitalLibrary } from "../DigitalLibrary";
 import { getPageFromUrl, updatePageTab } from "../../libs/aboutPages";
 import { useTabsStore } from "../../store";
 import { SignalIcon } from "@heroicons/react/24/solid";
+import { MusicPlayer } from "./MusicPlayer";
+import { Shelf } from "../../components/Shelf";
 
-type MusicSection = "digilib" | "library" | "upload";
-const SECTIONS: MusicSection[] = ["digilib", "library", "upload"];
+type MusicSection = "digilib" | "library" | "upload" | "player";
+const SECTIONS: MusicSection[] = ["digilib", "library", "upload", "player"];
+const SECTION_TITLES: Record<MusicSection, string> = { digilib: "Music", library: "My Music", upload: "Upload Music", player: "Now Playing" };
 
-/** `about:music?digilib&artist=1` → section "digilib" + the Digital Library's own params. */
+/** `about:music?digilib&artist=1` → section "digilib" + that section's own params (player: its mode). */
 function parseMusicQuery(query: string | undefined): { section: MusicSection; sub: string | undefined } {
 	const [key, ...rest] = (query ?? "").split("&");
 	if (SECTIONS.includes(key as MusicSection)) return { section: key as MusicSection, sub: rest.join("&") || undefined };
@@ -29,32 +32,6 @@ function parseMusicQuery(query: string | undefined): { section: MusicSection; su
 interface MusicLibraryProps {
 	query: string | undefined;
 }
-
-interface TabItemProps {
-	currentPage: string;
-	setPage: (page: string) => void;
-	icon: React.ReactNode;
-	name: string;
-	pageKey: string;
-}
-
-const TabItem = ({ currentPage, setPage, icon, name, pageKey }: TabItemProps) => {
-	return (
-		<div
-			className={
-				"flex items-center gap-1.5 *:pointer-events-none cursor-pointer duration-150" +
-				" " +
-				`
-            ${currentPage === pageKey ? "text-(--text-primary)" : "text-(--text-tertiary) hover:text-(--text-primary)"}
-        `
-			}
-			onClick={() => setPage(pageKey)}
-		>
-			{icon}
-			<span className="leading-none text-xl font-[650] text-current">{name}</span>
-		</div>
-	);
-};
 
 export interface AudioTags {
 	title: string;
@@ -133,6 +110,7 @@ export const MusicLibrary = ({ query }: MusicLibraryProps) => {
 	const [page, setPageState] = useState<MusicSection>(initial.section);
 	/** The Digital Library's own params; kept while other sections are open so it doesn't reset. */
 	const [digiQuery, setDigiQuery] = useState(initial.section === "digilib" ? initial.sub : undefined);
+	const [playerMode, setPlayerMode] = useState(initial.section === "player" ? initial.sub : undefined);
 	// Follow the tab URL (back/forward, links from the player and artist pages).
 	const [prevQuery, setPrevQuery] = useState(query);
 	if (query !== prevQuery) {
@@ -140,6 +118,7 @@ export const MusicLibrary = ({ query }: MusicLibraryProps) => {
 		const next = parseMusicQuery(query);
 		setPageState(next.section);
 		if (next.section === "digilib") setDigiQuery(next.sub);
+		if (next.section === "player") setPlayerMode(next.sub);
 	}
 	/** Switches section and reflects it in the tab URL. */
 	const setpage = (section: string) => {
@@ -148,7 +127,7 @@ export const MusicLibrary = ({ query }: MusicLibraryProps) => {
 		const tab = useTabsStore.getState().tabs.find(t => t.current && getPageFromUrl(t.url) === "music");
 		if (!tab) return;
 		const q = key === "digilib" ? ["digilib", digiQuery].filter(Boolean).join("&") : key;
-		updatePageTab(tab.id, "music", { query: q, title: key === "digilib" ? "Digital Library" : "Music" });
+		updatePageTab(tab.id, "music", { query: q, title: SECTION_TITLES[key] });
 	};
 	const [contextMenu, setContextMenu] = useState<null | { x: number; y: number; visible: boolean; items: MenuItem[] }>(null);
 
@@ -173,7 +152,9 @@ export const MusicLibrary = ({ query }: MusicLibraryProps) => {
 	const [library, setLibrary] = useState<Track[]>([]);
 
 	useEffect(() => {
-		let intervalId: number;
+		let alive = true;
+		let timer = 0;
+		let watcher: { close: () => void } | undefined;
 
 		const readLibrary = async () => {
 			try {
@@ -229,6 +210,7 @@ export const MusicLibrary = ({ query }: MusicLibraryProps) => {
 					}
 				}
 
+				if (!alive) return;
 				setLibrary(prevLibrary => {
 					const newJson = JSON.stringify(songs);
 					const prevJson = JSON.stringify(prevLibrary);
@@ -239,27 +221,40 @@ export const MusicLibrary = ({ query }: MusicLibraryProps) => {
 			}
 		};
 
-		// @ts-expect-error types
-		var watcher = window.fr.fs.watch(MusicPath, { recursive: true }, () => {
-			console.log("change");
-			readLibrary();
-			// @ts-expect-error types
-			watcher.close();
-			intervalId = window.setTimeout(() => {
-				readLibrary();
+		const watch = () => {
+			try {
 				// @ts-expect-error types
 				watcher = window.fr.fs.watch(MusicPath, { recursive: true }, () => {
-					console.log("change");
-					readLibrary();
-					// @ts-expect-error types
-					watcher.close();
+					watcher?.close();
+					watcher = undefined;
+					void readLibrary();
+					// An upload writes several files: re-read once it settles, then keep watching.
+					timer = window.setTimeout(() => {
+						if (!alive) return;
+						void readLibrary();
+						watch();
+					}, 1000);
 				});
-			}, 1000);
-		});
+			} catch (err) {
+				console.error("Failed to watch music directory:", err);
+			}
+		};
 
-		readLibrary();
+		// The virtual filesystem (window.fr) isn't there until the app finishes booting. App starts
+		// booting in its own effect, which runs after ours on first mount, so wait for it to begin too.
+		const start = async () => {
+			for (let i = 0; !window.appReady && alive && i < 200; i++) await new Promise(r => window.setTimeout(r, 50));
+			await window.appReady?.catch(() => undefined);
+			if (!alive || !window.fr?.fs) return;
+			void readLibrary();
+			watch();
+		};
+		void start();
 
 		return () => {
+			alive = false;
+			window.clearTimeout(timer);
+			watcher?.close();
 			library.forEach(song => {
 				if (song.src) URL.revokeObjectURL(song.src);
 			});
@@ -401,10 +396,9 @@ export const MusicLibrary = ({ query }: MusicLibraryProps) => {
 	};
 
 	const pages = {
-		digilib: <DigitalLibrary query={digiQuery} urlPage="music" urlPrefix="digilib" />,
 		library: (
 			<div className="flex flex-col gap-2">
-				<h1 className="text-3xl font-bold">My Music</h1>
+				<h1 className="text-2xl font-bold">My Music</h1>
 				<div className="flex flex-wrap gap-2">
 					{library.length === 0 ? (
 						<span className="text-lg text-text-tertiary">No songs found.</span>
@@ -927,39 +921,95 @@ export const MusicLibrary = ({ query }: MusicLibraryProps) => {
 		),
 	};
 
-	return (
-		<div className="flex size-full gap-2 p-2">
-			<div className="flex flex-col gap-2">
-				<div
-					className={
-						"flex flex-col w-max py-2.5 pb-3 px-3.5 gap-2 inset-shadow-[0_0_0_1.5px_#ffffff10] rounded-lg" +
-						" " +
-						`
-                    ${settings.brightness === "dark" ? "bg-[#ffffff10]" : "bg-[#00000025]"}
-                `
-					}
-				>
-					<TabItem currentPage={page} setPage={setpage} icon={<SignalIcon className="size-6 text-current duration-150" />} name="Digital Library" pageKey="digilib" />
-					<TabItem currentPage={page} setPage={setpage} icon={<RectangleGroupIcon className="size-6 text-current duration-150" />} name="My Music" pageKey="library" />
-					<TabItem currentPage={page} setPage={setpage} icon={<ArrowUpOnSquareIcon className="size-6 text-current duration-150" />} name="Upload" pageKey="upload" />
-				</div>
-			</div>
-			<div className="relative overflow-y-auto sm:h-full h-[calc(100%-10rem)] w-full">
-				{Object.entries(pages).map(([key, pageComponent], index) => (
+	const dark = settings.brightness === "dark";
+	const pill = (active: boolean) =>
+		`flex items-center gap-1.5 shrink-0 px-3 py-1.5 rounded-full text-sm font-semibold duration-150 cursor-pointer ${active ? (dark ? "bg-white text-black" : "bg-black text-white") : dark ? "text-(--text-secondary) hover:text-(--text-primary) hover:bg-[#ffffff14]" : "text-(--text-secondary) hover:text-(--text-primary) hover:bg-[#00000010]"}`;
+
+	// One header for every section: section pills + the shared search box.
+	const nav = (
+		<nav className="flex items-center gap-1 overflow-x-auto [scrollbar-width:none]" aria-label="Music sections">
+			<button className={pill(page === "digilib")} onClick={() => setpage("digilib")}>
+				<SignalIcon className="size-4" />
+				Browse
+			</button>
+			<button className={pill(page === "library")} onClick={() => setpage("library")}>
+				<RectangleGroupIcon className="size-4" />
+				My Music
+			</button>
+			<button className={pill(page === "upload")} onClick={() => setpage("upload")}>
+				<ArrowUpOnSquareIcon className="size-4" />
+				Upload
+			</button>
+			<button className={pill(page === "player")} onClick={() => setpage("player")} title={currentTrack ? `${currentTrack.title}` : "Nothing playing"}>
+				{currentTrack?.cover ? <img src={currentTrack.cover} alt="" className="size-4 rounded-sm object-cover" /> : <MusicalNoteIcon className="size-4" />}
+				Now Playing
+			</button>
+		</nav>
+	);
+
+	// The user's uploads, on the Browse home (manage them under My Music).
+	const uploadsShelf =
+		library.length > 0 ? (
+			<Shelf
+				title="Your Uploads"
+				count={library.length}
+				dark={dark}
+				action={
+					<button className={`text-[11px] font-semibold px-2.5 py-1 rounded-full duration-150 ${dark ? "bg-[#ffffff1f] hover:bg-[#ffffff33]" : "bg-[#00000012] hover:bg-[#00000022]"}`} onClick={() => setpage("library")}>
+						Manage
+					</button>
+				}
+			>
+				{library.map((song, i) => (
 					<div
-						key={index}
-						className={
-							`inset-0 flex flex-col gap-2 ${key === "digilib" ? "" : "p-3.5"} rounded-lg duration-150 h-full w-full` +
-							" " +
-							`
-                            ${page === key ? "" : "absolute -translate-y-2.5 opacity-0 pointer-events-none"}
-                        `
-						}
+						key={`${song.id}-${i}`}
+						className={`group flex flex-col gap-1.5 w-32 shrink-0 p-1.5 rounded-lg cursor-pointer duration-150 ${dark ? "hover:bg-[#ffffff10]" : "hover:bg-[#00000008]"}`}
+						onClick={() => currentTrack !== song && setCurrentTrack(song)}
 					>
-						{pageComponent}
+						<div className="relative">
+							{song.cover ? (
+								<img src={song.cover} alt="" className="w-full aspect-square rounded-md object-cover bg-(--tertiary)" loading="lazy" />
+							) : (
+								<div className="flex items-center justify-center w-full aspect-square rounded-md bg-(--tertiary) text-(--text-tertiary)">
+									<MusicalNoteIcon className="size-8" />
+								</div>
+							)}
+							<div className="absolute inset-0 hidden group-hover:flex items-center justify-center rounded-md bg-black/40">
+								<PlayIcon className="size-7 text-white" />
+							</div>
+						</div>
+						<div className="flex flex-col min-w-0 leading-tight">
+							<span title={song.title} className="text-xs font-semibold truncate">
+								{song.title}
+							</span>
+							<span className="text-[11px] text-(--text-tertiary) truncate">{Array.isArray(song.artists) ? song.artists.join(", ") : song.artists}</span>
+						</div>
 					</div>
 				))}
-			</div>
+			</Shelf>
+		) : null;
+
+	// Other sections render under the shared header. My Music/Upload stay mounted so a half-filled upload survives switching.
+	const sections = (
+		<>
+			<div className={page === "library" ? "h-full overflow-y-auto" : "hidden"}>{pages.library}</div>
+			<div className={page === "upload" ? "h-full overflow-y-auto" : "hidden"}>{pages.upload}</div>
+			{page === "player" && <MusicPlayer query={playerMode} className="relative h-full w-full rounded-2xl" onClose={() => setpage("digilib")} />}
+		</>
+	);
+
+	return (
+		<div className="size-full">
+			<DigitalLibrary
+				query={digiQuery}
+				urlPage="music"
+				urlPrefix="digilib"
+				nav={nav}
+				override={sections}
+				showOverride={page !== "digilib"}
+				onBrowse={() => page !== "digilib" && setpage("digilib")}
+				homeExtra={uploadsShelf}
+			/>
 			{contextMenu?.visible && <ContextMenu items={contextMenu.items} position={{ x: contextMenu.x, y: contextMenu.y }} onClose={() => setContextMenu(null)} />}
 		</div>
 	);

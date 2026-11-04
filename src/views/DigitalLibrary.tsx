@@ -215,9 +215,19 @@ interface DigitalLibraryProps {
 	 * (about:music uses `digilib`, giving about:music?digilib&artist=…). */
 	urlPage?: string;
 	urlPrefix?: string;
+	/** Embedded in about:music: section pills shown in place of the title. */
+	nav?: React.ReactNode;
+	/** Another section's content, shown under the shared header instead of the library (kept mounted). */
+	override?: React.ReactNode;
+	showOverride?: boolean;
+	/** Called when the user starts searching, so the host can switch back to this section. */
+	onBrowse?: () => void;
+	/** Extra content at the top of the home page (e.g. the user's uploads). */
+	homeExtra?: React.ReactNode;
 }
 
-export const DigitalLibrary = ({ query, urlPage = "library", urlPrefix }: DigitalLibraryProps) => {
+export const DigitalLibrary = ({ query, urlPage = "library", urlPrefix, nav, override, showOverride = false, onBrowse, homeExtra }: DigitalLibraryProps) => {
+	const overrideShown = !!override && showOverride;
 	const settings = useSettingsStore(state => state.settings);
 	const brightness = settings.brightness as string;
 	const playTrack = useMusicStore(state => state.playTrack);
@@ -367,6 +377,7 @@ export const DigitalLibrary = ({ query, urlPage = "library", urlPrefix }: Digita
 	};
 
 	const handleSearchInput = (value: string) => {
+		onBrowse?.();
 		setSearchQuery(value);
 		window.clearTimeout(debounceRef.current);
 		debounceRef.current = window.setTimeout(() => doSearch(value), 400);
@@ -742,6 +753,7 @@ export const DigitalLibrary = ({ query, urlPage = "library", urlPrefix }: Digita
 
 	const HomePage = () => (
 		<div className="flex flex-col gap-6">
+			{homeExtra}
 			<YourLibrary dark={brightness === "dark"} onPlayList={playListFrom} onOpenArtist={openArtistByName} onOpenAlbum={openAlbumByName} onSongMenu={openSongMenu} />
 			{chartAlbums.length > 0 && (
 				<div className="flex flex-col gap-2">
@@ -1193,9 +1205,9 @@ export const DigitalLibrary = ({ query, urlPage = "library", urlPrefix }: Digita
 	return (
 		<div className="flex flex-col h-full w-full overflow-hidden">
 			{/* Header */}
-			<div className="flex items-center gap-3 p-4 pb-2">
-				<div className="flex items-center gap-2">
-					{page !== "home" && (
+			<div className="flex flex-wrap items-center gap-3 p-4 pb-2">
+				<div className="flex items-center gap-2 min-w-0">
+					{page !== "home" && !overrideShown && (
 						<button
 							className={`p-1.5 rounded-lg duration-150 ${brightness === "dark" ? "hover:bg-[#ffffff15]" : "hover:bg-[#00000010]"}`}
 							onClick={() => { setPage("home"); setAlbumDetail(null); setArtistDetail(null); syncUrl(); }}
@@ -1203,9 +1215,9 @@ export const DigitalLibrary = ({ query, urlPage = "library", urlPrefix }: Digita
 							<ChartBarIcon className="size-5 text-(--text-secondary)" />
 						</button>
 					)}
-					<h1 className="text-xl font-bold">Digital Library</h1>
+					{nav ?? <h1 className="text-xl font-bold">Digital Library</h1>}
 				</div>
-				<div className={`flex items-center gap-2 flex-1 max-w-md px-3 py-2 rounded-xl duration-150 ${brightness === "dark" ? "bg-[#ffffff12] focus-within:bg-[#ffffff18]" : "bg-[#00000008] focus-within:bg-[#00000012]"}`}>
+				<div className={`flex items-center gap-2 flex-1 min-w-48 max-w-md px-3 py-2 rounded-xl duration-150 ${brightness === "dark" ? "bg-[#ffffff12] focus-within:bg-[#ffffff18]" : "bg-[#00000008] focus-within:bg-[#00000012]"}`}>
 					<MagnifyingGlassIcon className="size-4 text-(--text-tertiary) shrink-0" />
 					<input
 						ref={searchRef}
@@ -1214,7 +1226,7 @@ export const DigitalLibrary = ({ query, urlPage = "library", urlPrefix }: Digita
 						className="flex-1 bg-transparent outline-none text-sm text-(--text-primary) placeholder:text-(--text-tertiary)"
 						value={searchQuery}
 						onChange={e => handleSearchInput(e.target.value)}
-						onKeyDown={e => { if (e.key === "Enter") doSearch(searchQuery); }}
+						onKeyDown={e => { if (e.key === "Enter") { onBrowse?.(); doSearch(searchQuery); } }}
 					/>
 					{searchQuery && (
 						<button className="text-(--text-tertiary) hover:text-(--text-primary) duration-150" onClick={() => { setSearchQuery(""); setTracks([]); setAlbums([]); setArtists([]); setPage("home"); searchRef.current?.focus(); }}>✕</button>
@@ -1223,7 +1235,7 @@ export const DigitalLibrary = ({ query, urlPage = "library", urlPrefix }: Digita
 			</div>
 
 			{/* Content */}
-			<div className="flex-1 overflow-auto px-4 pb-4">
+			<div className={`flex-1 overflow-auto px-4 pb-4 ${overrideShown ? "hidden" : ""}`}>
 				{/* Called (not <HomePage />) so Your Library keeps its state across re-renders. */}
 				{page === "home" && HomePage()}
 				{page === "search" && <SearchPage />}
@@ -1231,6 +1243,7 @@ export const DigitalLibrary = ({ query, urlPage = "library", urlPrefix }: Digita
 				{/* Called, not mounted as <ArtistPage />: a fresh component identity each render would remount it as play counts stream in. */}
 				{page === "artist" && ArtistPage()}
 			</div>
+			{override && <div className={`flex-1 min-h-0 px-4 pb-4 ${overrideShown ? "" : "hidden"}`}>{override}</div>}
 			{songMenu && <ContextMenu items={songMenu.items} position={songMenu.position} onClose={() => setSongMenu(null)} />}
 		</div>
 	);
