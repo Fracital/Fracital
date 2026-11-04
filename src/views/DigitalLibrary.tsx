@@ -77,6 +77,43 @@ const LinkIcon = ({ kind, small }: { kind: ArtistLinkKind; small?: boolean }) =>
 	return icon ? <FontAwesomeIcon icon={icon} className={size} /> : <GlobeAltIcon className={size} />;
 };
 
+/**
+ * A one-line heading that shrinks its font size (max → min px) to fit its container, so wide
+ * custom fonts and long names show in full; only truncates if it still overflows at min.
+ */
+const FitTitle = ({ children, className = "", style, max, min }: { children: React.ReactNode; className?: string; style?: React.CSSProperties; max: number; min: number }) => {
+	const ref = useRef<HTMLHeadingElement>(null);
+	const [size, setSize] = useState(max);
+	useEffect(() => {
+		const el = ref.current;
+		if (!el) return;
+		const fit = () => {
+			let s = max;
+			el.style.fontSize = `${s}px`;
+			while (s > min && el.scrollWidth > el.clientWidth + 1) {
+				s -= 2;
+				el.style.fontSize = `${s}px`;
+			}
+			setSize(s);
+		};
+		fit();
+		const ro = new ResizeObserver(fit);
+		if (el.parentElement) ro.observe(el.parentElement);
+		// Re-fit once a custom font finishes loading (it changes the text width).
+		void document.fonts.ready.then(fit);
+		document.fonts.addEventListener?.("loadingdone", fit);
+		return () => {
+			ro.disconnect();
+			document.fonts.removeEventListener?.("loadingdone", fit);
+		};
+	}, [children, max, min, style?.fontFamily]);
+	return (
+		<h1 ref={ref} className={`min-w-0 truncate ${className}`} style={{ ...style, fontSize: size }}>
+			{children}
+		</h1>
+	);
+};
+
 interface DigitalLibraryProps {
 	query: string | undefined;
 }
@@ -809,12 +846,9 @@ export const DigitalLibrary = ({ query }: DigitalLibraryProps) => {
 								{/* The name always shows, in the artist's own font; their logo sits beside it. */}
 								<div className="flex items-center gap-2.5 min-w-0">
 									{custom?.logo && <img src={custom.logo} alt="" className="h-11 @3xl:h-13 w-auto max-w-32 shrink-0 object-contain drop-shadow" />}
-									<h1
-										className={`text-4xl @3xl:text-5xl tracking-tight leading-none text-white/90 truncate ${custom?.font ? "font-normal" : "font-extrabold"}`}
-										style={{ fontFamily: artistFont }}
-									>
+									<FitTitle className={`tracking-tight leading-none text-white/90 ${custom?.font ? "font-normal" : "font-extrabold"}`} style={{ fontFamily: artistFont }} max={48} min={22}>
 										{artist.name}
-									</h1>
+									</FitTitle>
 									{custom?.verified && (
 										<span title="Verified artist" className="shrink-0">
 											<CheckBadgeIcon className="size-7 text-[#3d91ff] drop-shadow" />
