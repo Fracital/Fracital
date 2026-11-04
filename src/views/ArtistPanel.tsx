@@ -487,14 +487,13 @@ const PageEditor = ({ artistId, initialTab }: { artistId: string; initialTab: Ta
 						<button className="flex items-center gap-1 text-xs text-white/70 hover:text-white w-max cursor-pointer" onClick={() => setTabUrl(undefined)}>
 							<ArrowLeftIcon className="size-3.5" /> Your pages
 						</button>
-						{draft.logo ? (
-							<img src={draft.logo} alt={name} className="max-h-14 max-w-72 object-contain object-left" />
-						) : (
-							<h1 className="text-4xl font-black text-white truncate flex items-center gap-2" style={{ fontFamily: FONT_STACK(draft.font) }}>
+						<div className="flex items-center gap-2.5 min-w-0">
+							{draft.logo && <img src={draft.logo} alt="" className="h-12 w-auto max-w-32 shrink-0 object-contain" />}
+							<h1 className={`text-4xl text-white truncate ${draft.font ? "font-normal" : "font-black"}`} style={{ fontFamily: FONT_STACK(draft.font) }}>
 								{name}
-								{data?.profile?.verified && <CheckBadgeIcon className="size-7 shrink-0 text-[#3d91ff]" />}
 							</h1>
-						)}
+							{data?.profile?.verified && <CheckBadgeIcon className="size-7 shrink-0 text-[#3d91ff]" />}
+						</div>
 						<span className="text-xs text-white/60">{data ? `You're ${roleLabel[data.role].toLowerCase()} of this page` : "Loading…"}</span>
 					</div>
 					<div className="flex items-center gap-2">
@@ -608,7 +607,7 @@ const ProfileTab = ({ artistId, name, draft, set, catalog, onError }: { artistId
 			</Card>
 			<Card className="flex flex-col gap-4">
 				<ImagePicker artistId={artistId} label="Banner" hint="The main image behind your name. Wide images work best (at least 1500px)." value={draft.banner ?? ""} onChange={banner => set({ banner })} onError={onError} />
-				<ImagePicker artistId={artistId} label="Logo" hint="Replaces your name in text on the page. Use a transparent PNG." shape="logo" value={draft.logo ?? ""} onChange={logo => set({ logo })} onError={onError} />
+				<ImagePicker artistId={artistId} label="Logo" hint="Shown next to your name on the page. Use a transparent PNG." shape="logo" value={draft.logo ?? ""} onChange={logo => set({ logo })} onError={onError} />
 				<div className="flex flex-col gap-1.5">
 					<span className="text-sm font-semibold">Photos</span>
 					<div className="grid grid-cols-4 gap-2">
@@ -688,7 +687,7 @@ const FontPicker = ({ artistId, name, font, onChange, onError }: { artistId: str
 			)}
 			<input ref={input} type="file" accept=".woff2,.woff,.ttf,.otf" className="hidden" onChange={e => upload(e.target.files?.[0])} />
 			<div className={`mt-1 p-3 rounded-xl ${dark ? "bg-black/30" : "bg-white"}`} style={{ fontFamily: FONT_STACK(font) }}>
-				<div className="text-3xl font-black leading-tight">{name}</div>
+				<div className={`text-3xl leading-tight ${font ? "font-normal" : "font-black"}`}>{name}</div>
 				<div className="text-sm opacity-75">Used for your name, bio and announcement.</div>
 			</div>
 			<span className="text-xs text-(--text-tertiary)">{busy ? "Uploading font…" : "Pick a Google Font or upload your own (.woff2/.woff/.ttf/.otf, 2MB max)."}</span>

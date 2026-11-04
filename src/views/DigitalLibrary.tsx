@@ -806,14 +806,15 @@ export const DigitalLibrary = ({ query }: DigitalLibraryProps) => {
 							{banner && <img src={banner} alt="" className="absolute inset-0 w-full h-full object-cover object-[center_25%] rounded-2xl" />}
 							<div className={`absolute inset-0 rounded-2xl duration-300 ${bioExpanded ? "bg-black/75" : "bg-linear-to-b from-black/75 via-black/30 to-black/60"}`} />
 							<div className="relative flex flex-col gap-1 p-4 pb-0 min-h-0">
-								<div className="flex items-center gap-2 min-w-0">
-									{custom?.logo ? (
-										<img src={custom.logo} alt={artist.name} title={artist.name} className="max-h-12 @3xl:max-h-14 max-w-full object-contain object-left drop-shadow" />
-									) : (
-										<h1 className="text-4xl @3xl:text-5xl font-extrabold tracking-tight leading-none text-white/90 truncate" style={{ fontFamily: artistFont }}>
-											{artist.name}
-										</h1>
-									)}
+								{/* The name always shows, in the artist's own font; their logo sits beside it. */}
+								<div className="flex items-center gap-2.5 min-w-0">
+									{custom?.logo && <img src={custom.logo} alt="" className="h-11 @3xl:h-13 w-auto max-w-32 shrink-0 object-contain drop-shadow" />}
+									<h1
+										className={`text-4xl @3xl:text-5xl tracking-tight leading-none text-white/90 truncate ${custom?.font ? "font-normal" : "font-extrabold"}`}
+										style={{ fontFamily: artistFont }}
+									>
+										{artist.name}
+									</h1>
 									{custom?.verified && (
 										<span title="Verified artist" className="shrink-0">
 											<CheckBadgeIcon className="size-7 text-[#3d91ff] drop-shadow" />
