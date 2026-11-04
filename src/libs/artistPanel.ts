@@ -86,6 +86,19 @@ export function getArtistProfile(artistId: string, fresh = false): Promise<Artis
 
 export const FONT_STACK = (font: ArtistFont | null | undefined) => (font ? `"${font.family}", system-ui, sans-serif` : undefined);
 
+/** Body text on artist pages (bio, announcement, notes): readable, while the artist's own font is kept for their name. */
+export const TEXT_STACK = '"Instrument Sans", system-ui, sans-serif';
+
+let textFontLoaded = false;
+export function loadTextFont() {
+	if (textFontLoaded) return;
+	textFontLoaded = true;
+	const link = document.createElement("link");
+	link.rel = "stylesheet";
+	link.href = "https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&display=swap";
+	document.head.appendChild(link);
+}
+
 const loadedFonts = new Set<string>();
 
 /** Loads an artist's font (Google Fonts or an uploaded file) so it can be used by family name. */

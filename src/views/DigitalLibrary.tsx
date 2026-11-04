@@ -31,7 +31,7 @@ import { ContextMenu, type MenuItem } from "../components/ContextMenu";
 import { Shelf } from "../components/Shelf";
 import { PlayCount } from "../components/PlayCount";
 import { startRadio, useRadioStore } from "../libs/radio";
-import { FONT_STACK, getArtistProfile, loadArtistFont, panel, type ArtistPick, type ArtistProfile } from "../libs/artistPanel";
+import { FONT_STACK, TEXT_STACK, getArtistProfile, loadArtistFont, loadTextFont, panel, type ArtistPick, type ArtistProfile } from "../libs/artistPanel";
 import { getMe } from "../libs/auth";
 import { YourLibrary } from "./YourLibrary";
 import { songKey, useLastfmStore } from "../libs/lastfmState";
@@ -170,6 +170,7 @@ export const DigitalLibrary = ({ query }: DigitalLibraryProps) => {
 		if (!artistDetail) return;
 		let alive = true;
 		const id = artistDetail.artist.id;
+		loadTextFont();
 		getArtistProfile(id, true).then(p => {
 			if (!alive) return;
 			setArtistProfile(p);
@@ -856,12 +857,12 @@ export const DigitalLibrary = ({ query }: DigitalLibraryProps) => {
 									)}
 								</div>
 								{custom?.announcement && (
-									<p className="text-sm font-bold text-white leading-snug line-clamp-2" style={{ fontFamily: artistFont }}>
+									<p className="text-sm font-bold text-white leading-snug line-clamp-2" style={{ fontFamily: TEXT_STACK }}>
 										{custom.announcement}
 									</p>
 								)}
 								{artist.bio && (
-									<p className={`text-sm font-semibold text-white/75 leading-snug ${bioExpanded ? "max-h-28 overflow-y-auto pr-1" : custom?.announcement ? "line-clamp-1" : "line-clamp-2"}`} style={{ fontFamily: artistFont }}>
+									<p className={`text-sm font-semibold text-white/75 leading-snug ${bioExpanded ? "max-h-28 overflow-y-auto pr-1" : custom?.announcement ? "line-clamp-1" : "line-clamp-2"}`} style={{ fontFamily: TEXT_STACK }}>
 										{artist.bio}
 									</p>
 								)}
@@ -961,7 +962,7 @@ export const DigitalLibrary = ({ query }: DigitalLibraryProps) => {
 							</span>
 							<span className="font-bold truncate">{custom.pick.title}</span>
 							{custom.pick.note && (
-								<span className="text-sm text-(--text-secondary) line-clamp-1" style={{ fontFamily: artistFont }}>
+								<span className="text-sm text-(--text-secondary) line-clamp-1" style={{ fontFamily: TEXT_STACK }}>
 									{custom.pick.note}
 								</span>
 							)}

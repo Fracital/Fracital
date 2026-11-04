@@ -6,7 +6,9 @@ import { ProfileEditor, SignIn } from "./Account";
 import {
 	FONT_STACK,
 	GOOGLE_FONTS,
+	TEXT_STACK,
 	loadArtistFont,
+	loadTextFont,
 	panel,
 	type ArtistFont,
 	type ArtistPick,
@@ -439,6 +441,7 @@ const PageEditor = ({ artistId, initialTab }: { artistId: string; initialTab: Ta
 	}, [artistId]);
 
 	useEffect(() => loadArtistFont(draft.font), [draft.font]);
+	useEffect(() => loadTextFont(), []);
 
 	const name = data?.profile?.name || catalog?.artist.name || "Artist";
 	const dirty = JSON.stringify(draft) !== savedJson;
@@ -688,7 +691,9 @@ const FontPicker = ({ artistId, name, font, onChange, onError }: { artistId: str
 			<input ref={input} type="file" accept=".woff2,.woff,.ttf,.otf" className="hidden" onChange={e => upload(e.target.files?.[0])} />
 			<div className={`mt-1 p-3 rounded-xl ${dark ? "bg-black/30" : "bg-white"}`} style={{ fontFamily: FONT_STACK(font) }}>
 				<div className={`text-3xl leading-tight ${font ? "font-normal" : "font-black"}`}>{name}</div>
-				<div className="text-sm opacity-75">Used for your name, bio and announcement.</div>
+				<div className="text-sm opacity-75" style={{ fontFamily: TEXT_STACK }}>
+					Used for your name. Your bio and announcement use Instrument Sans so they stay easy to read.
+				</div>
 			</div>
 			<span className="text-xs text-(--text-tertiary)">{busy ? "Uploading font…" : "Pick a Google Font or upload your own (.woff2/.woff/.ttf/.otf, 2MB max)."}</span>
 		</div>
