@@ -3,11 +3,15 @@
  * tab store can use it without an import cycle.
  */
 
-/** The Digital Library is a section of about:music: `about:library?x` → `about:music?digilib&x`. */
+/** The Digital Library and full player are sections of about:music: `about:library?x` → `about:music?digilib&x`. */
 export function normalizeAboutUrl(url: string): string;
 export function normalizeAboutUrl(url: string | undefined): string | undefined;
 export function normalizeAboutUrl(url: string | undefined): string | undefined {
-	const m = url ? /^about:library(?:\?(.*))?$/.exec(url) : null;
-	if (!m) return url;
-	return `about:music?digilib${m[1] ? `&${m[1]}` : ""}`;
+	if (!url) return url;
+	const lib = /^about:library(?:\?(.*))?$/.exec(url);
+	if (lib) return `about:music?digilib${lib[1] ? `&${lib[1]}` : ""}`;
+	// The full player is the "Now Playing" section: about:player?lyrics → about:music?player&lyrics.
+	const player = /^about:player(?:\?(.*))?$/.exec(url);
+	if (player) return `about:music?player${player[1] ? `&${player[1]}` : ""}`;
+	return url;
 }

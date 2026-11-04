@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from "react";
-import { createId } from "@paralleldrive/cuid2";
 import { ArrowPathRoundedSquareIcon, ArrowsPointingInIcon, BackspaceIcon, BackwardIcon, ChatBubbleBottomCenterTextIcon, ForwardIcon, MusicalNoteIcon, PauseIcon, PhotoIcon, PlayIcon, QueueListIcon, SpeakerWaveIcon, SpeakerXMarkIcon } from "@heroicons/react/24/solid";
 import { useMusicStore, usePlaybackStore, useSettingsStore, useTabsStore } from "../../store";
 import type { Track } from "../../types";
@@ -13,6 +12,8 @@ import { RadioStatus } from "../../components/RadioStatus";
 interface MusicPlayerProps {
 	query?: string;
 	className?: string;
+	/** Embedded in about:music: closing returns to browsing instead of closing the tab. */
+	onClose?: () => void;
 }
 
 const artistText = (track: Track | null) => (track ? (Array.isArray(track.artists) ? track.artists.join(", ") : track.artists) : "");
@@ -313,7 +314,7 @@ const QueuePanel = () => {
 	);
 };
 
-export const MusicPlayer = ({ query, className }: MusicPlayerProps) => {
+export const MusicPlayer = ({ query, className, onClose }: MusicPlayerProps) => {
 	const settings = useSettingsStore(state => state.settings);
 	const currentTrack = useMusicStore(state => state.currentTrack);
 	const isPlaying = usePlaybackStore(state => state.isPlaying);
@@ -337,6 +338,7 @@ export const MusicPlayer = ({ query, className }: MusicPlayerProps) => {
 	};
 
 	const closePlayer = () => {
+		if (onClose) return onClose();
 		const { tabs, closeTab } = useTabsStore.getState();
 		const tab = tabs.find(t => t.current);
 		if (tab) closeTab(tab.id);
@@ -363,7 +365,7 @@ export const MusicPlayer = ({ query, className }: MusicPlayerProps) => {
 					<button title="Cover only" className={toggledButton(mode === "cover")} onClick={() => changeMode("cover")}>
 						<PhotoIcon className="size-5" />
 					</button>
-					<button title="Close player (back to side panel)" className={iconButton} onClick={closePlayer}>
+					<button title={onClose ? "Back to browsing (side panel player)" : "Close player (back to side panel)"} className={iconButton} onClick={closePlayer}>
 						<ArrowsPointingInIcon className="size-5" />
 					</button>
 				</div>
@@ -374,25 +376,18 @@ export const MusicPlayer = ({ query, className }: MusicPlayerProps) => {
 						<span className="text-2xl font-bold text-(--text-primary)">Nothing playing</span>
 						<button
 							className="flex items-center gap-2 px-4 py-2 rounded-md bg-(--tertiary) text-(--text-primary) hover:bg-(--accent) duration-150"
-							onClick={() =>
-								useTabsStore.getState().newTab({
-									id: createId(),
-									title: "Music Library",
-									icon: <MusicalNoteIcon className="size-5" />,
-									url: "about:music",
-									displayUrl: "about:music",
-								})
-							}
+							// Lazy: aboutPages registers this component, so a static import would be circular.
+							onClick={() => (onClose ? onClose() : void import("../../libs/aboutPages").then(m => m.openLibraryPage("")))}
 						>
-							Open Library
+							Browse music
 							<MusicalNoteIcon className="size-4" />
 						</button>
 					</div>
 				) : (
-					<div className={`flex flex-1 min-h-0 gap-8 px-8 pb-8 ${sidePanel ? "flex-col md:flex-row" : "flex-col"}`}>
+					<div className={`flex flex-1 min-h-0 overflow-y-auto gap-8 px-8 ${onClose ? "pb-5" : "pb-8"} ${sidePanel ? "flex-col md:flex-row" : "flex-col"}`}>
 						<div className={`flex min-h-0 flex-col items-center justify-center gap-6 ${sidePanel ? "md:w-[42%] shrink-0" : "flex-1"}`}>
 							<div className="relative w-full flex justify-center items-center">
-								<Cover track={currentTrack} className={`rounded-2xl shadow-[0_10px_40px_0px_#00000090] duration-300 ${isPlaying ? "scale-100" : "scale-95"} ${sidePanel ? "w-full max-w-[min(100%,48vh)]" : "w-[min(70%,56vh)]"}`} />
+								<Cover track={currentTrack} className={`rounded-2xl shadow-[0_10px_40px_0px_#00000090] duration-300 ${isPlaying ? "scale-100" : "scale-95"} ${sidePanel ? (onClose ? "w-full max-w-[min(100%,40vh)]" : "w-full max-w-[min(100%,48vh)]") : onClose ? "w-[min(60%,44vh)]" : "w-[min(70%,56vh)]"}`} />
 								{showVisualizer && (
 									<div className="absolute bottom-4 left-1/2 -translate-x-1/2 pointer-events-none drop-shadow-xl">
 										<AudvisVisualizer analyser={analyser} isPlaying={isPlaying} width={220} height={40} color={dark ? "#FFFFFF" : "#000000"} opacity={0.85} />

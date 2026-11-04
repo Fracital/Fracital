@@ -69,21 +69,23 @@ export type PlayerMode = "cover" | "lyrics" | "queue";
 
 export const PLAYER_PAGE = "player";
 
-export const isPlayerUrl = (url: string | undefined) => !!url && /^about:player(\?|$)/.test(url);
+/** The player is the "Now Playing" section of about:music (legacy about:player URLs redirect there). */
+export const isPlayerUrl = (url: string | undefined) => !!url && /^about:(player(\?|$)|music\?player(&|$))/.test(url);
 
-export const playerUrl = (mode: PlayerMode) => (mode === "cover" ? `about:${PLAYER_PAGE}` : `about:${PLAYER_PAGE}?${mode}`);
+export const playerUrl = (mode: PlayerMode) => (mode === "cover" ? "about:music?player" : `about:music?player&${mode}`);
 
 export const parsePlayerMode = (query: string | undefined): PlayerMode => (query === "lyrics" || query === "queue" ? query : "cover");
 
-/** Focuses the existing music player tab (switching it to `mode`) or opens a new one. */
+/** Shows Now Playing in the open Music tab (switching it to `mode`) or opens a new one. */
 export const openMusicPlayer = (mode: PlayerMode = "cover") => {
 	const { tabs, setCurrentTab, updateTab, newTab } = useTabsStore.getState();
 	const url = playerUrl(mode);
-	const existing = tabs.find(tab => isPlayerUrl(tab.url));
+	const isMusic = (u: string) => /^about:music(\?|$)/.test(u);
+	const existing = tabs.find(tab => tab.current && isMusic(tab.url)) ?? tabs.find(tab => isPlayerUrl(tab.url)) ?? tabs.find(tab => isMusic(tab.url));
 	if (existing) {
-		updateTab(existing.id, { url, displayUrl: url });
+		updateTab(existing.id, { url, displayUrl: url, title: "Now Playing" });
 		setCurrentTab(existing.id);
 		return;
 	}
-	newTab({ id: createId(), title: "Music Player", url, displayUrl: url });
+	newTab({ id: createId(), title: "Now Playing", url, displayUrl: url });
 };

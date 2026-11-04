@@ -1,3 +1,4 @@
+import { openLibraryPage } from "../libs/aboutPages";
 import {
 	Cog6ToothIcon,
 	ArrowsPointingOutIcon,
@@ -645,16 +646,7 @@ const Shell = () => {
 							},
 							{
 								title: "Music",
-								onClick: () => {
-									newTab({
-										id: createId(),
-										title: "Music Library",
-										url: "about:music",
-										current: true,
-										displayUrl: "about:music",
-										icon: <MusicalNoteIcon className="size-4.5" />,
-									});
-								},
+								onClick: () => openLibraryPage(""),
 								icon: <MusicalNoteIcon className="size-4.5" />,
 							},
 						];

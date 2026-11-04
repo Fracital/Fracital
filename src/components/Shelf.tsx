@@ -5,7 +5,7 @@ import { ChevronLeftIcon, ChevronRightIcon } from "@heroicons/react/24/solid";
  * A titled, horizontally scrollable shelf with chevron paging and a "Show All" grid toggle.
  * Lives at module scope so its expanded state and scroll position survive parent re-renders.
  */
-export const Shelf = ({ title, count, dark, gridMin = 128, children }: { title: string; count?: number | string; dark: boolean; gridMin?: number; children: React.ReactNode[] }) => {
+export const Shelf = ({ title, count, dark, gridMin = 128, action, children }: { title: string; count?: number | string; dark: boolean; gridMin?: number; action?: React.ReactNode; children: React.ReactNode[] }) => {
 	const [expanded, setExpanded] = useState(false);
 	const scrollRef = useRef<HTMLDivElement>(null);
 	if (children.length === 0) return null;
@@ -22,6 +22,7 @@ export const Shelf = ({ title, count, dark, gridMin = 128, children }: { title: 
 					{count !== undefined && <span className="text-xs text-(--text-tertiary)">{count}</span>}
 				</div>
 				<div className="flex items-center gap-1.5">
+					{action}
 					<button className={`text-[11px] font-semibold px-2.5 py-1 rounded-full duration-150 ${chip}`} onClick={() => setExpanded(e => !e)}>
 						{expanded ? "Show Less" : "Show All"}
 					</button>

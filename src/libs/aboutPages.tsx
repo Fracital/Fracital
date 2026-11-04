@@ -66,7 +66,10 @@ export const aboutPages: Record<string, AboutPage> = {
 		icon: <MusicalNoteIcon className="size-5" />,
 		title: "Music",
 		// The Digital Library is the default section (about:music, about:music?digilib&…).
-		titleFor: query => (/^(library|upload)(&|$)/.test(query ?? "") ? "Music" : "Digital Library"),
+		titleFor: query => {
+			const section = (query ?? "").split("&")[0];
+			return section === "player" ? "Now Playing" : section === "library" ? "My Music" : section === "upload" ? "Upload Music" : "Music";
+		},
 		hasQuery: true,
 	},
 	player: {
@@ -133,14 +136,15 @@ export const aboutPages: Record<string, AboutPage> = {
 export const openLibraryPage = (query: string, title?: string) => {
 	const { tabs, setCurrentTab, newTab } = useTabsStore.getState();
 	const full = query ? `digilib&${query}` : "digilib";
+	title = query ? title : undefined;
 	const existing = tabs.find(t => t.current && getPageFromUrl(t.url) === "music") ?? tabs.find(t => getPageFromUrl(t.url) === "music");
 	if (existing) {
 		setCurrentTab(existing.id);
-		updatePageTab(existing.id, "music", { query: full, title: title || "Digital Library" });
+		updatePageTab(existing.id, "music", { query: full, title: title || "Music" });
 		return;
 	}
 	const url = `about:music?${full}`;
-	newTab({ id: createId(), title: title || "Digital Library", icon: aboutPages.music.icon, url, displayUrl: url });
+	newTab({ id: createId(), title: title || "Music", icon: aboutPages.music.icon, url, displayUrl: url });
 };
 
 export const getPageFromUrl = (url: string): string | null => {
