@@ -31,9 +31,11 @@ import { ContextMenu, type MenuItem } from "../components/ContextMenu";
 import { Shelf } from "../components/Shelf";
 import { PlayCount } from "../components/PlayCount";
 import { startRadio, useRadioStore } from "../libs/radio";
+import { FONT_STACK, getArtistProfile, loadArtistFont, panel, type ArtistPick, type ArtistProfile } from "../libs/artistPanel";
+import { getMe } from "../libs/auth";
 import { YourLibrary } from "./YourLibrary";
 import { songKey, useLastfmStore } from "../libs/lastfmState";
-import { CheckIcon, GlobeAltIcon, HeartIcon } from "@heroicons/react/24/solid";
+import { CheckBadgeIcon, CheckIcon, GlobeAltIcon, HeartIcon } from "@heroicons/react/24/solid";
 import { HeartIcon as HeartOutlineIcon, SquaresPlusIcon } from "@heroicons/react/24/outline";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faApple, faBandcamp, faDeezer, faFacebook, faInstagram, faSoundcloud, faSpotify, faTidal, faTiktok, faXTwitter, faYoutube, type IconDefinition } from "@fortawesome/free-brands-svg-icons";
@@ -102,6 +104,9 @@ export const DigitalLibrary = ({ query }: DigitalLibraryProps) => {
 	const [topSongsExpanded, setTopSongsExpanded] = useState(false);
 	const [songMenu, setSongMenu] = useState<{ items: MenuItem[]; position: { x: number; y: number } } | null>(null);
 	const [extras, setExtras] = useState<ArtistExtras | null>(null);
+	/** The artist's own customizations from Fracital for Artists (null when unclaimed). */
+	const [artistProfile, setArtistProfile] = useState<ArtistProfile | null>(null);
+	const [canManage, setCanManage] = useState(false);
 	const [savedArtistIds, setSavedArtistIds] = useState<Set<string> | null>(null);
 	const [showMoreLinks, setShowMoreLinks] = useState(false);
 
@@ -122,6 +127,25 @@ export const DigitalLibrary = ({ query }: DigitalLibraryProps) => {
 			.then(r => r.userPlays && useLastfmStore.setState(s => ({ userPlays: { ...s.userPlays, [`artist:${name.toLowerCase()}`]: r.userPlays! } })))
 			.catch(() => {});
 	}, [artistDetail, lastfmUser]);
+
+	// Artist customizations, and whether the signed-in user manages this page.
+	useEffect(() => {
+		if (!artistDetail) return;
+		let alive = true;
+		const id = artistDetail.artist.id;
+		getArtistProfile(id, true).then(p => {
+			if (!alive) return;
+			setArtistProfile(p);
+			loadArtistFont(p?.font);
+		});
+		getMe()
+			.then(me => (me ? panel.page(id) : Promise.reject(new Error("signed out"))))
+			.then(() => alive && setCanManage(true))
+			.catch(() => alive && setCanManage(false));
+		return () => {
+			alive = false;
+		};
+	}, [artistDetail]);
 
 	// Social links + gallery photos for the artist hero.
 	useEffect(() => {
@@ -225,6 +249,8 @@ export const DigitalLibrary = ({ query }: DigitalLibraryProps) => {
 		try {
 			const detail = await getArtist(id);
 			setExtras(null);
+			setArtistProfile(null);
+			setCanManage(false);
 			setShowMoreLinks(false);
 			setArtistDetail(detail);
 			setBioExpanded(false);
@@ -663,11 +689,27 @@ export const DigitalLibrary = ({ query }: DigitalLibraryProps) => {
 		);
 	};
 
+	const openTab = (url: string, title: string) => useTabsStore.getState().newTab({ id: createId(), url, displayUrl: url, title, icon: null, current: true });
+
+	/** Plays the Artist Pick: from the loaded top songs if it's there, else via search. */
+	const playPick = async (pick: ArtistPick) => {
+		const norm = (x: string) => x.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "");
+		const local = artistDetail?.tracks.find(t => (pick.trackId && t.id === pick.trackId) || norm(t.title) === norm(pick.title));
+		if (local) return handlePlay(local);
+		const res = await searchTracks(`${pick.artist} ${pick.title}`, 5).catch(() => null);
+		const hit = res?.tracks.find(t => norm(t.title) === norm(pick.title)) ?? res?.tracks[0];
+		if (hit) handlePlay(hit);
+	};
+
 	const ArtistPage = () => {
 		if (!artistDetail) return null;
-		const { artist, albums: artistAlbums, tracks: artistTracks, similar } = artistDetail;
+		const { albums: artistAlbums, tracks: artistTracks, similar } = artistDetail;
+		const custom = artistProfile;
+		const artist = { ...artistDetail.artist, bio: custom?.bio || artistDetail.artist.bio };
 		const dark = brightness === "dark";
-		const banner = artist.banner || artist.picture;
+		const banner = custom?.banner || artist.banner || artist.picture;
+		const artistFont = FONT_STACK(custom?.font);
+		const links = custom?.links?.length ? custom.links : (extras?.links ?? []);
 		const chip = `text-[11px] font-semibold px-2.5 py-1 rounded-full duration-150 ${dark ? "bg-[#ffffff1f] hover:bg-[#ffffff33]" : "bg-[#00000012] hover:bg-[#00000022]"}`;
 		const TOP_SONGS_MIN = 10;
 		const TOP_SONGS_MAX = 20;
@@ -689,7 +731,7 @@ export const DigitalLibrary = ({ query }: DigitalLibraryProps) => {
 		const myArtistPlays = myPlays[`artist:${artist.name.toLowerCase()}`];
 
 		// Collage photos: extra artist photos first, then album covers to fill any gaps.
-		const gallery = [...new Set([...(extras?.images ?? []).filter(u => u !== banner), ...albumsAndEps.map(a => artworkHighRes(a.artwork)), ...singles.map(a => artworkHighRes(a.artwork))])].slice(0, 4);
+		const gallery = [...new Set([...(custom?.photos ?? []), ...(extras?.images ?? []).filter(u => u !== banner), ...albumsAndEps.map(a => artworkHighRes(a.artwork)), ...singles.map(a => artworkHighRes(a.artwork))])].slice(0, 4);
 
 		const savedHere = !!savedArtistIds?.has(artist.id);
 		const toggleSaveArtist = () => {
@@ -764,8 +806,30 @@ export const DigitalLibrary = ({ query }: DigitalLibraryProps) => {
 							{banner && <img src={banner} alt="" className="absolute inset-0 w-full h-full object-cover object-[center_25%] rounded-2xl" />}
 							<div className={`absolute inset-0 rounded-2xl duration-300 ${bioExpanded ? "bg-black/75" : "bg-linear-to-b from-black/75 via-black/30 to-black/60"}`} />
 							<div className="relative flex flex-col gap-1 p-4 pb-0 min-h-0">
-								<h1 className="text-4xl @3xl:text-5xl font-extrabold tracking-tight leading-none text-white/90 truncate">{artist.name}</h1>
-								{artist.bio && <p className={`text-sm font-semibold text-white/75 leading-snug ${bioExpanded ? "max-h-28 overflow-y-auto pr-1" : "line-clamp-2"}`}>{artist.bio}</p>}
+								<div className="flex items-center gap-2 min-w-0">
+									{custom?.logo ? (
+										<img src={custom.logo} alt={artist.name} title={artist.name} className="max-h-12 @3xl:max-h-14 max-w-full object-contain object-left drop-shadow" />
+									) : (
+										<h1 className="text-4xl @3xl:text-5xl font-extrabold tracking-tight leading-none text-white/90 truncate" style={{ fontFamily: artistFont }}>
+											{artist.name}
+										</h1>
+									)}
+									{custom?.verified && (
+										<span title="Verified artist" className="shrink-0">
+											<CheckBadgeIcon className="size-7 text-[#3d91ff] drop-shadow" />
+										</span>
+									)}
+								</div>
+								{custom?.announcement && (
+									<p className="text-sm font-bold text-white leading-snug line-clamp-2" style={{ fontFamily: artistFont }}>
+										{custom.announcement}
+									</p>
+								)}
+								{artist.bio && (
+									<p className={`text-sm font-semibold text-white/75 leading-snug ${bioExpanded ? "max-h-28 overflow-y-auto pr-1" : custom?.announcement ? "line-clamp-1" : "line-clamp-2"}`} style={{ fontFamily: artistFont }}>
+										{artist.bio}
+									</p>
+								)}
 								<div className="flex items-center justify-between gap-2">
 									{artist.listeners ? (
 										<span className="text-xs font-medium text-white/60" title="Last.fm listeners">
@@ -785,19 +849,19 @@ export const DigitalLibrary = ({ query }: DigitalLibraryProps) => {
 							<div className="relative mt-auto flex items-end justify-between gap-2 p-3">
 								{/* Official links: the first four as icons, the rest behind "+" */}
 								<div className="relative flex items-center gap-2.5">
-									{(extras?.links ?? []).slice(0, 4).map(l => (
+									{links.slice(0, 4).map(l => (
 										<button key={l.kind} className="text-white/90 hover:text-white hover:scale-110 duration-150" title={LINK_LABELS[l.kind]} onClick={() => openLink(l.url, LINK_LABELS[l.kind])}>
 											<LinkIcon kind={l.kind} />
 										</button>
 									))}
-									{(extras?.links.length ?? 0) > 4 && (
+									{links.length > 4 && (
 										<button className="text-white/90 hover:text-white hover:scale-110 duration-150" title="More links" onClick={() => setShowMoreLinks(s => !s)}>
 											<PlusIcon className="size-6" />
 										</button>
 									)}
 									{showMoreLinks && (
 										<div className={`absolute left-0 bottom-9 z-20 flex flex-col p-1.5 min-w-44 rounded-xl shadow-xl ${dark ? "bg-[#222227]" : "bg-white"}`}>
-											{(extras?.links ?? []).slice(4).map(l => (
+											{links.slice(4).map(l => (
 												<button
 													key={l.kind}
 													className={`flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm font-medium text-left duration-150 ${dark ? "hover:bg-[#ffffff12]" : "hover:bg-[#00000010]"}`}
@@ -845,6 +909,31 @@ export const DigitalLibrary = ({ query }: DigitalLibraryProps) => {
 					</div>
 				</div>
 
+				{custom?.pick && (
+					<button
+						className={`group flex items-center gap-4 p-3 rounded-2xl text-left cursor-pointer duration-150 ${dark ? "bg-[#3d91ff14] hover:bg-[#3d91ff22] ring-1 ring-[#3d91ff33]" : "bg-[#3d91ff10] hover:bg-[#3d91ff1c]"}`}
+						onClick={() => playPick(custom.pick!)}
+					>
+						<div className="relative shrink-0">
+							{custom.pick.artwork ? <img src={custom.pick.artwork} alt="" className="size-16 rounded-xl object-cover" /> : <div className="size-16 rounded-xl bg-(--tertiary)" />}
+							<div className="absolute inset-0 hidden group-hover:flex items-center justify-center rounded-xl bg-black/45">
+								<PlayIcon className="size-6 text-white" />
+							</div>
+						</div>
+						<div className="flex flex-col min-w-0">
+							<span className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-[#6aaaff]">
+								<CheckBadgeIcon className="size-3.5" /> Artist Pick
+							</span>
+							<span className="font-bold truncate">{custom.pick.title}</span>
+							{custom.pick.note && (
+								<span className="text-sm text-(--text-secondary) line-clamp-1" style={{ fontFamily: artistFont }}>
+									{custom.pick.note}
+								</span>
+							)}
+						</div>
+					</button>
+				)}
+
 				{rankedSongs.length > 0 && (
 					<div className="flex flex-col gap-2.5">
 						{topSongs.map(t => <TopSongCard key={t.id} track={t} />)}
@@ -889,6 +978,23 @@ export const DigitalLibrary = ({ query }: DigitalLibraryProps) => {
 							</div>
 						))}
 					</Shelf>
+				</div>
+
+				<div className="flex items-center justify-center gap-2 py-2 text-xs text-(--text-tertiary)">
+					{canManage ? (
+						<button className={chip} onClick={() => openTab(`about:artists?page=${encodeURIComponent(artist.id)}`, artist.name)}>
+							Manage this page
+						</button>
+					) : (
+						!custom?.verified && (
+							<>
+								<span>Is this you?</span>
+								<button className={chip} onClick={() => openTab(`about:artists?claim=${encodeURIComponent(artist.id)}&name=${encodeURIComponent(artist.name)}`, "Claim your page")}>
+									Claim this page
+								</button>
+							</>
+						)
+					)}
 				</div>
 			</div>
 		);

@@ -35,7 +35,8 @@ import { useModal } from "../components/Modal/ModalContext";
 import FavoriteModal from "../components/Modal/Favorite";
 import { Modal } from "../components/Modal/Modal";
 import { changeProxy, getLogin, getProxy } from "../types";
-import { signOut } from "../libs/auth";
+import { getMe, signOut } from "../libs/auth";
+import { ShieldCheckIcon } from "@heroicons/react/24/solid";
 import { ContextMenu, type MenuItem } from "../components/ContextMenu";
 
 declare global {
@@ -63,6 +64,16 @@ export const UserCard = ({ id, display, handle, avatar }: UserProps) => {
 	const accountRef = useRef<HTMLDivElement>(null);
 	const menuRef = useRef<HTMLDivElement>(null);
 	const newTab = useTabsStore(state => state.newTab);
+	const [isAdmin, setIsAdmin] = useState(false);
+	useEffect(() => {
+		const load = () => void getMe().then(m => setIsAdmin(!!m?.isAdmin));
+		load();
+		window.addEventListener("account-upd", load);
+		return () => window.removeEventListener("account-upd", load);
+	}, []);
+	const menuItemCls =
+		"group flex items-center justify-between gap-5 w-[calc(100%)] p-2 pl-3 pr-2 rounded-md leading-none text-(--text-secondary) hover:text-(--text-primary) duration-100 cursor-pointer " +
+		(settings.brightness === "light" ? "hover:bg-[#00000018]" : "hover:bg-[#ffffff10]");
 
 	return (
 		<>
@@ -125,6 +136,16 @@ export const UserCard = ({ id, display, handle, avatar }: UserProps) => {
 							<span className="text-md font-semibold leading-none w-max">Manage Account</span>
 							<UserIcon className="size-5.5 group-active:scale-125 group-hover:scale-110 pointer-events-none duration-150" />
 						</button>
+						<button className={menuItemCls} onClick={() => newTab({ id: createId(), url: "about:artists", displayUrl: "about:artists", title: "Fracital for Artists", icon: null, current: true })}>
+							<span className="text-md font-semibold leading-none w-max">For Artists</span>
+							<CheckBadgeIcon className="size-5.5 group-active:scale-125 group-hover:scale-110 pointer-events-none duration-150" />
+						</button>
+						{isAdmin && (
+							<button className={menuItemCls} onClick={() => newTab({ id: createId(), url: "about:admin", displayUrl: "about:admin", title: "Admin Dashboard", icon: null, current: true })}>
+								<span className="text-md font-semibold leading-none w-max">Admin Dashboard</span>
+								<ShieldCheckIcon className="size-5.5 group-active:scale-125 group-hover:scale-110 pointer-events-none duration-150" />
+							</button>
+						)}
 						<button
 							className={
 								"group flex items-center justify-between gap-5 w-[calc(100%)] p-2 pl-3 pr-2 rounded-md leading-none text-(--text-secondary) hover:text-(--text-primary) duration-100 cursor-pointer" +

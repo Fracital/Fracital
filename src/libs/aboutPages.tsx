@@ -1,7 +1,7 @@
 import { type ReactNode } from "react";
 import { createId } from "@paralleldrive/cuid2";
 import { useTabsStore } from "../store";
-import { Cog6ToothIcon, MusicalNoteIcon, FolderIcon, UserCircleIcon, PlayIcon, PlayCircleIcon, GlobeAltIcon, DocumentIcon, SignalIcon } from "@heroicons/react/24/solid";
+import { Cog6ToothIcon, MusicalNoteIcon, FolderIcon, UserCircleIcon, PlayIcon, PlayCircleIcon, GlobeAltIcon, DocumentIcon, SignalIcon, CheckBadgeIcon, ShieldCheckIcon } from "@heroicons/react/24/solid";
 
 import Home from "../views/Home";
 import Settings from "../views/Settings";
@@ -9,6 +9,8 @@ import { MusicLibrary } from "../views/Music/MusicLibrary";
 import { MusicPlayer } from "../views/Music/MusicPlayer";
 import Files from "../views/Files/Files";
 import { Account } from "../views/Account";
+import { ArtistPanel } from "../views/ArtistPanel";
+import { AdminDashboard } from "../views/AdminDashboard";
 import Games from "../views/Games";
 import { TextEditor } from "../views/TextEditor";
 import { DigitalLibrary } from "../views/DigitalLibrary";
@@ -97,6 +99,20 @@ export const aboutPages: Record<string, AboutPage> = {
 		icon: <DocumentIcon className="size-5" />,
 		title: "Text Editor",
 		queryFields: ["path"],
+		hasQuery: true,
+	},
+	artists: {
+		name: "artists",
+		component: ArtistPanel,
+		icon: <CheckBadgeIcon className="size-5" />,
+		title: "Fracital for Artists",
+		hasQuery: true,
+	},
+	admin: {
+		name: "admin",
+		component: AdminDashboard,
+		icon: <ShieldCheckIcon className="size-5" />,
+		title: "Admin Dashboard",
 		hasQuery: true,
 	},
 	library: {

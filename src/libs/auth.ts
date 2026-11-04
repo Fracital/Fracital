@@ -26,6 +26,9 @@ export interface Me {
 	hasPassword: boolean;
 	lastfm: LastfmProfile | null;
 	lastfmAvailable: boolean;
+	isAdmin?: boolean;
+	username?: string | null;
+	premium?: boolean;
 }
 
 /** fetch() against the Fracital server with the session cookie. */
@@ -44,8 +47,10 @@ let meCache: Promise<Me | null> | null = null;
 
 /** The signed-in account (cached until `refreshMe`); null when signed out or accounts are disabled. */
 export function getMe(): Promise<Me | null> {
-	meCache ??= meFetch<Me>("/api/me").catch(() => null);
-	return meCache;
+	const pending = (meCache ??= meFetch<Me>("/api/me").catch(() => null));
+	// If the account changed while this was in flight (sign out/in), resolve to the newer answer
+	// so a slow, stale lookup can't overwrite fresh state.
+	return pending.then(me => (meCache && meCache !== pending ? getMe() : me));
 }
 
 /**
@@ -57,7 +62,7 @@ export async function refreshMe(): Promise<Me | null> {
 	try {
 		me = await meFetch<Me>("/api/me");
 		meCache = Promise.resolve(me);
-		await saveLogin({ id: me.user.id, display: me.user.name, handle: me.lastfm?.username || me.user.email || me.user.name, avatar: me.user.image || me.lastfm?.image || null });
+		await saveLogin({ id: me.user.id, display: me.user.name, handle: me.username || me.lastfm?.username || me.user.email || me.user.name, avatar: me.user.image || me.lastfm?.image || null });
 	} catch (err) {
 		meCache = null;
 		const status = (err as { status?: number }).status;
@@ -111,4 +116,18 @@ export function connectLastfm(mode: "signin" | "link"): Promise<void> {
 export async function disconnectLastfm(): Promise<void> {
 	await meFetch("/api/me/lastfm", { method: "DELETE" });
 	await refreshMe();
+}
+
+/** Updates display name, username and/or profile picture URL. */
+export async function updateProfile(change: { name?: string; username?: string | null; image?: string | null }): Promise<Me | null> {
+	await meFetch("/api/me/profile", { method: "PUT", body: JSON.stringify(change) });
+	return refreshMe();
+}
+
+/** Uploads a new profile picture and makes it the account's avatar. */
+export async function uploadAvatar(file: File): Promise<Me | null> {
+	const res = await fetch("/api/me/avatar", { method: "POST", credentials: "include", body: file, headers: { "Content-Type": file.type || "application/octet-stream" } });
+	const data = (await res.json().catch(() => ({}))) as { error?: string };
+	if (!res.ok) throw new Error(data.error || "Upload failed");
+	return refreshMe();
 }

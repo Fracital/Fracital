@@ -90,7 +90,7 @@ function registerMusicApi(server: { middlewares: ViteDevServer["middlewares"] },
 	void initAccounts();
 	const accounts = getRequestListener(getAccountsApp().fetch);
 	server.middlewares.use((req, res, next) => {
-		if (/^\/api\/(auth|me)(\/|\?|$)/.test(req.url || "")) void accounts(req, res);
+		if (/^\/api\/(auth|me|admin|artist-profile|artist-media|play-event)(\/|\?|$)/.test(req.url || "")) void accounts(req, res);
 		else next();
 	});
 

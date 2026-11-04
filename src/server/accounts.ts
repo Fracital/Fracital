@@ -18,6 +18,7 @@ import { Pool } from "pg";
 import * as z from "zod";
 import { asArray, lastfmCall, lastfmImage, lastfmKey, lastfmSecret, toCount } from "./lastfm";
 import { findDeezerArtist, findDeezerTrack, type RadioTrack } from "./music-radio";
+import { isBanned, migrateArtistTables, registerArtistRoutes, userMeta } from "./artists";
 
 const MUSIC_API = "/api/music";
 const STATE_COOKIE = "fracital_lastfm_state";
@@ -134,6 +135,14 @@ const authOptions = (pool: Pool) => ({
 	emailAndPassword: { enabled: true, autoSignIn: true, minPasswordLength: 8 },
 	session: { expiresIn: 60 * 60 * 24 * 30 },
 	plugins: [lastfmPlugin()],
+	databaseHooks: {
+		session: {
+			create: {
+				// Banned accounts can't sign in.
+				before: async (session: { userId: string }) => ((await isBanned(pool, session.userId).catch(() => false)) ? false : undefined),
+			},
+		},
+	},
 });
 
 const createAuth = (pool: Pool) => betterAuth(authOptions(pool));
@@ -183,6 +192,7 @@ function init() {
 				created_at timestamptz not null default now(),
 				primary key (user_id, artist_id)
 			)`);
+			await migrateArtistTables(pool);
 			console.log("Fracital Accounts ready");
 			return { auth, pool };
 		} catch (err) {
@@ -272,7 +282,7 @@ const PERIODS = new Set(["7day", "1month", "3month", "6month", "12month", "overa
 // HTTP routes
 // ============================================================
 
-type Env = { Variables: { user: { id: string; name: string; email: string; image?: string | null }; auth: Auth; pool: Pool } };
+export type Env = { Variables: { user: { id: string; name: string; email: string; image?: string | null }; auth: Auth; pool: Pool } };
 
 const escapeForScript = (v: unknown) => JSON.stringify(v).replace(/</g, "\\u003c");
 
@@ -309,6 +319,7 @@ else setTimeout(() => location.replace("/"), 1500);
 		if (!ctx) return c.json({ error: "Fracital Accounts aren't configured on this server" }, 503);
 		const session = await ctx.auth.api.getSession({ headers: c.req.raw.headers });
 		if (!session) return c.json({ error: "Not signed in" }, 401);
+		if (await isBanned(ctx.pool, session.user.id)) return c.json({ error: "This account has been banned" }, 403);
 		c.set("user", session.user);
 		c.set("auth", ctx.auth);
 		c.set("pool", ctx.pool);
@@ -316,6 +327,7 @@ else setTimeout(() => location.replace("/"), 1500);
 	};
 	app.use("/api/me", requireUser);
 	app.use("/api/me/*", requireUser);
+	registerArtistRoutes(app, { init, requireUser });
 
 	const lastfmLink = async (c: { get: <K extends keyof Env["Variables"]>(k: K) => Env["Variables"][K] }) => {
 		const adapter = (await c.get("auth").$context).internalAdapter;
@@ -340,7 +352,8 @@ else setTimeout(() => location.replace("/"), 1500);
 				registered: info?.user?.registered?.unixtime ? Number(info.user.registered.unixtime) * 1000 : undefined,
 			};
 		}
-		return c.json({ user: { id: user.id, name: user.name, email: user.email.endsWith("@lastfm.invalid") ? null : user.email, image: user.image ?? null }, hasPassword, lastfm, lastfmAvailable: !!(lastfmKey() && lastfmSecret()) });
+		const { isAdmin, username, premium } = await userMeta(c.get("pool"), user);
+		return c.json({ user: { id: user.id, name: user.name, email: user.email.endsWith("@lastfm.invalid") ? null : user.email, image: user.image ?? null }, hasPassword, lastfm, lastfmAvailable: !!(lastfmKey() && lastfmSecret()), isAdmin, username, premium });
 	});
 
 	app.delete("/api/me/lastfm", async c => {

@@ -1,4 +1,5 @@
 import { createId } from "@paralleldrive/cuid2";
+import { AD_UNITS, AdBanner, useShowAds } from "./components/AdBanner";
 import { useEffect, useRef, useState } from "react";
 import { RectangleStackIcon, PlusIcon, Cog6ToothIcon, ChevronLeftIcon, ChevronRightIcon, RadioIcon, XMarkIcon } from "@heroicons/react/24/solid";
 import type { detailProps } from "./libs/eventBus";
@@ -203,6 +204,16 @@ const App = () => {
 		})();
 		window.appReady = bootstrapPromise;
 		void bootstrapPromise;
+	}, []);
+
+	// Team invite links (fracital.xyz/?artist-invite=CODE) open the Artists panel.
+	useEffect(() => {
+		const code = new URLSearchParams(window.location.search).get("artist-invite");
+		if (!code || !/^[\w-]{6,40}$/.test(code)) return;
+		window.history.replaceState(null, "", window.location.pathname);
+		const url = `about:artists?invite=${code}`;
+		newTab({ id: createId(), url, displayUrl: url, title: "Fracital for Artists", icon: null, current: true });
+		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, []);
 
 	useEffect(() => {
@@ -424,19 +435,8 @@ const App = () => {
 				<Shell />
 				<div className="flex flex-col flex-1 min-h-0">
 					<div id="main" className="relative flex flex-1 min-h-0 gap-2.5">
-						{/* ad and promotion bar */}
-						{/* <div className={"relative flex flex-col min-h-0 bg-(--secondary) inset-shadow-(--inset-shadow-primary) p-4 gap-2.5 rounded-xl overflow-hidden"}>
-							<div className="flex items-center justify-between w-full px-2">
-								<div className="flex items-center justify-center w-max gap-2">
-									<RadioIcon className="size-4.5 stroke-0" />
-									<span className="text-lg font-medium leading-none">Ad</span>
-								</div>
-								<div>
-									<XMarkIcon className="size-5 stroke-current cursor-pointer" onClick={() => setSettings("show-ad", false)} />
-								</div>
-							</div>
-							<div className="w-55 h-55 bg-[#ffffff18] rounded-xl"></div>
-						</div> */}
+						{/* Ad panel (hidden for premium accounts and on narrow windows) */}
+						<SideAd />
 						<div className={"relative flex-1 min-h-0 h-[calc(100%+2px)] bg-(--secondary) inset-shadow-(--inset-shadow-primary) rounded-2xl overflow-hidden"}>
 							{tabs.length > 0 ? (
 								tabs.map(item => {
@@ -738,3 +738,14 @@ const App = () => {
 };
 
 export default App;
+
+/** Left-side 160×600 ad; the ad refreshes every 5–10 minutes (random). */
+function SideAd() {
+	const show = useShowAds();
+	if (!show) return null;
+	return (
+		<div className="hidden lg:flex flex-col items-center justify-center shrink-0 p-2 rounded-2xl bg-(--secondary) inset-shadow-(--inset-shadow-primary)">
+			<AdBanner unit={AD_UNITS.side} refreshMinutes={[5, 10]} className="rounded-lg" />
+		</div>
+	);
+}

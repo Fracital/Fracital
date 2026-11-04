@@ -3,10 +3,12 @@
  *
  * Follows Last.fm's rules: "now playing" when a song starts, and a scrobble once a
  * song longer than 30s has actually been listened to for half its length or 4 minutes.
+ * Also counts plays (30s of listening) for Fracital's own artist stats, signed in or not.
  */
 import { useMusicStore, usePlaybackStore } from "../store";
 import type { Track } from "../types";
 import { getMe, meFetch } from "./auth";
+import { listenerId } from "./artistPanel";
 
 interface PlayState {
 	key: string;
@@ -16,6 +18,8 @@ interface PlayState {
 	lastTime: number;
 	nowPlayingSent: boolean;
 	scrobbled: boolean;
+	/** Counted toward Fracital's own play stats (artist panel). */
+	counted: boolean;
 }
 
 let state: PlayState | null = null;
@@ -32,7 +36,7 @@ function payload(t: Track, duration: number) {
 }
 
 function beginPlay(track: Track) {
-	state = { key: track.id, track, startedAt: Date.now(), listened: 0, lastTime: usePlaybackStore.getState().currentTime, nowPlayingSent: false, scrobbled: false };
+	state = { key: track.id, track, startedAt: Date.now(), listened: 0, lastTime: usePlaybackStore.getState().currentTime, nowPlayingSent: false, scrobbled: false, counted: false };
 }
 
 async function sendNowPlaying(s: PlayState, duration: number) {
@@ -75,5 +79,13 @@ export function startScrobbler() {
 
 		if (isPlaying && !s.nowPlayingSent && duration > 0) void sendNowPlaying(s, duration);
 		if (!s.scrobbled && duration > 30 && s.listened >= Math.min(duration / 2, 240)) void scrobble(s, duration);
+		// Fracital play stats: a play counts after 30s of listening (or most of a short song).
+		if (!s.counted && s.listened >= Math.min(30, duration * 0.8 || 30)) {
+			s.counted = true;
+			const artist = primaryArtist(s.track);
+			if (artist && s.track.title && !/^unknown/i.test(artist)) {
+				void fetch("/api/play-event", { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ artist, title: s.track.title, listener: listenerId() }) }).catch(() => {});
+			}
+		}
 	});
 }

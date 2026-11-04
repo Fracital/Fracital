@@ -2,9 +2,9 @@ import { ArrowLeftStartOnRectangleIcon, CheckCircleIcon, UserCircleIcon } from "
 import { faLastfm } from "@fortawesome/free-brands-svg-icons";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { createId } from "@paralleldrive/cuid2";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Input } from "../components/Input";
-import { connectLastfm, disconnectLastfm, getMe, refreshMe, signIn, signOut, signUp, type Me } from "../libs/auth";
+import { connectLastfm, disconnectLastfm, getMe, refreshMe, signIn, signOut, signUp, updateProfile, uploadAvatar, type Me } from "../libs/auth";
 import { formatCount } from "../libs/music-service";
 import { useTabsStore } from "../store";
 
@@ -46,7 +46,21 @@ export const Account = ({ query }: AccountProps) => {
 	return me ? <Manage me={me} onChange={setMe} /> : <SignIn initialPage={query === "register" ? "register" : "login"} onSignedIn={setMe} />;
 };
 
-const SignIn = ({ initialPage, onSignedIn }: { initialPage: "login" | "register"; onSignedIn: (me: Me | null) => void }) => {
+export interface SignInBranding {
+	icon?: React.ReactNode;
+	loginTitle: string;
+	registerTitle: string;
+	subtitle: string;
+}
+
+const DEFAULT_BRANDING: SignInBranding = {
+	loginTitle: "Sign in to Fracital",
+	registerTitle: "Create a Fracital Account",
+	subtitle: "Sync your settings and build your library from Last.fm.",
+};
+
+/** Sign in / register with a Fracital Account. Reused by Fracital for Artists with its own branding. */
+export const SignIn = ({ initialPage, onSignedIn, branding = DEFAULT_BRANDING }: { initialPage: "login" | "register"; onSignedIn: (me: Me | null) => void; branding?: SignInBranding }) => {
 	const [page, setPage] = useState<"login" | "register">(initialPage);
 	const [name, setName] = useState("");
 	const [email, setEmail] = useState("");
@@ -93,9 +107,9 @@ const SignIn = ({ initialPage, onSignedIn }: { initialPage: "login" | "register"
 	return (
 		<div className="flex flex-col items-center justify-center size-full gap-5">
 			<div className="flex flex-col items-center gap-2">
-				<img src="/fracital.svg" alt="" className="size-14" />
-				<h1 className="text-2xl font-bold">{page === "login" ? "Sign in to Fracital" : "Create a Fracital Account"}</h1>
-				<p className="text-sm text-(--text-tertiary)">Sync your settings and build your library from Last.fm.</p>
+				{branding.icon ?? <img src="/fracital.svg" alt="" className="size-14" />}
+				<h1 className="text-2xl font-bold">{page === "login" ? branding.loginTitle : branding.registerTitle}</h1>
+				<p className="text-sm text-(--text-tertiary) text-center max-w-sm">{branding.subtitle}</p>
 			</div>
 			<div className="flex flex-col items-center gap-3 w-full max-w-sm">
 				{error && <div className="w-full p-2 bg-red-500/20 border border-red-500/50 rounded-md text-sm text-red-300">{error}</div>}
@@ -154,11 +168,14 @@ const Manage = ({ me, onChange }: { me: Me; onChange: (me: Me | null) => void })
 					{avatar ? <img src={avatar} alt="" className="size-16 rounded-full object-cover" /> : <UserCircleIcon className="size-16 text-(--text-secondary)" />}
 					<div className="flex flex-col min-w-0">
 						<h1 className="text-2xl font-bold truncate">{me.user.name}</h1>
+						{me.username && <span className="text-sm font-semibold text-(--text-secondary) truncate">@{me.username}</span>}
 						<span className="text-sm text-(--text-tertiary) truncate">{me.user.email ?? (me.lastfm ? `Signed in with Last.fm (@${me.lastfm.username})` : "")}</span>
 					</div>
 				</div>
 
 				{error && <div className="p-2 bg-red-500/20 border border-red-500/50 rounded-md text-sm text-red-300">{error}</div>}
+
+				<ProfileEditor me={me} onChange={onChange} />
 
 				<section className="flex flex-col gap-3 p-4 rounded-2xl bg-(--tertiary)">
 					<h2 className="font-bold">Connected services</h2>
@@ -216,5 +233,83 @@ const Manage = ({ me, onChange }: { me: Me; onChange: (me: Me | null) => void })
 				</button>
 			</div>
 		</div>
+	);
+};
+
+/** Display name, username and profile picture. */
+export const ProfileEditor = ({ me, onChange }: { me: Me; onChange: (me: Me | null) => void }) => {
+	const [name, setName] = useState(me.user.name);
+	const [username, setUsername] = useState(me.username ?? "");
+	const [busy, setBusy] = useState(false);
+	const [error, setError] = useState("");
+	const [saved, setSaved] = useState(false);
+	const fileRef = useRef<HTMLInputElement>(null);
+	const avatar = me.user.image || me.lastfm?.image;
+	const dirty = name.trim() !== me.user.name || username.trim().toLowerCase() !== (me.username ?? "");
+	const inputCls = "w-full px-3 py-2 rounded-xl text-sm outline-none bg-[#ffffff10] focus:bg-[#ffffff18] duration-150";
+
+	const run = async (fn: () => Promise<Me | null>) => {
+		setError("");
+		setSaved(false);
+		setBusy(true);
+		try {
+			onChange(await fn());
+			setSaved(true);
+		} catch (err) {
+			setError(err instanceof Error ? err.message : "Something went wrong");
+		} finally {
+			setBusy(false);
+		}
+	};
+
+	return (
+		<section className="flex flex-col gap-3 p-4 rounded-2xl bg-(--tertiary)">
+			<h2 className="font-bold">Profile</h2>
+			{error && <div className="p-2 bg-red-500/20 border border-red-500/50 rounded-md text-sm text-red-300">{error}</div>}
+			<div className="flex items-center gap-4">
+				<button className="group relative shrink-0 rounded-full cursor-pointer" title="Change profile picture" onClick={() => fileRef.current?.click()} disabled={busy}>
+					{avatar ? <img src={avatar} alt="" className="size-20 rounded-full object-cover" /> : <UserCircleIcon className="size-20 text-(--text-secondary)" />}
+					<span className="absolute inset-0 hidden group-hover:flex items-center justify-center rounded-full bg-black/50 text-white text-xs font-semibold">Change</span>
+				</button>
+				<div className="flex flex-col gap-1.5 text-xs text-(--text-tertiary)">
+					<span>PNG, JPEG, WebP or GIF, up to 3MB.</span>
+					{me.user.image && (
+						<button className="w-max font-semibold hover:text-(--text-primary) cursor-pointer" onClick={() => run(() => updateProfile({ image: null }))} disabled={busy}>
+							Remove picture
+						</button>
+					)}
+				</div>
+				<input
+					ref={fileRef}
+					type="file"
+					accept="image/png,image/jpeg,image/webp,image/gif"
+					className="hidden"
+					onChange={e => {
+						const file = e.target.files?.[0];
+						e.target.value = "";
+						if (file) void run(() => uploadAvatar(file));
+					}}
+				/>
+			</div>
+			<label className="flex flex-col gap-1.5">
+				<span className="text-sm font-semibold">Display name</span>
+				<input className={inputCls} maxLength={50} value={name} onChange={e => setName(e.target.value)} />
+			</label>
+			<label className="flex flex-col gap-1.5">
+				<span className="text-sm font-semibold">Username</span>
+				<div className="flex items-center gap-1 px-3 rounded-xl bg-[#ffffff10] focus-within:bg-[#ffffff18]">
+					<span className="text-sm text-(--text-tertiary)">@</span>
+					<input className="flex-1 py-2 bg-transparent outline-none text-sm" maxLength={30} value={username} placeholder="yourname" onChange={e => setUsername(e.target.value.replace(/[^a-zA-Z0-9_.]/g, ""))} />
+				</div>
+				<span className="text-xs text-(--text-tertiary)">3–30 characters: letters, numbers, _ and .</span>
+			</label>
+			<button
+				className="w-max px-4 py-2 rounded-full text-sm font-semibold bg-white text-black hover:bg-white/90 disabled:opacity-50 cursor-pointer duration-150"
+				disabled={!dirty || busy}
+				onClick={() => run(() => updateProfile({ name: name.trim(), username: username.trim() ? username.trim().toLowerCase() : null }))}
+			>
+				{busy ? "Saving…" : saved && !dirty ? "Saved ✓" : "Save profile"}
+			</button>
+		</section>
 	);
 };
