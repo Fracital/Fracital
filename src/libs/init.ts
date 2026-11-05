@@ -20,6 +20,18 @@ export const quickLinks = [
 		color: "#ffffff",
 		href: "https://google.com",
 	},
+	{
+		title: "Krunker",
+		icon: "/krunker.png",
+		color: "#ffffff",
+		href: "https://krunk.io",
+	},
+	{
+		title: "Estro AI Chat",
+		icon: "/estro.svg",
+		color: "#ffffff",
+		href: "https://estro.help/",
+	},
 ];
 
 export const init = async () => {
@@ -191,6 +203,17 @@ export const init = async () => {
 			if (migrated.some((l, i) => l !== saved[i])) window.localStorage.setItem("quicklinks", JSON.stringify(migrated));
 		} catch {
 			/* leave custom links alone */
+		}
+		// Add the newer defaults once; a user who deletes them afterwards keeps them deleted.
+		if (!window.localStorage.getItem("quicklinks-v2")) {
+			try {
+				const saved = JSON.parse(window.localStorage.getItem("quicklinks") || "[]") as { href?: string }[];
+				const added = quickLinks.filter(l => ["Krunker", "Estro AI Chat"].includes(l.title) && !saved.some(s => s.href === l.href));
+				if (added.length) window.localStorage.setItem("quicklinks", JSON.stringify([...saved, ...added]));
+			} catch {
+				/* leave custom links alone */
+			}
+			window.localStorage.setItem("quicklinks-v2", "1");
 		}
 	}
 

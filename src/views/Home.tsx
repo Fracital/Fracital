@@ -51,15 +51,15 @@ const Home = ({ className }: HomeProps) => {
 	}, []);
 
 	return (
-		<div className={"flex flex-col items-center justify-center size-full p-2" + " " + className}>
-			<div className="flex flex-col h-full items-center justify-center gap-4 mt-35">
-				<span className="text-7xl font-black text-center text-accent text-stroke">
+		<div className={"@container flex flex-col items-center size-full p-2 overflow-y-auto" + " " + className}>
+			<div className="flex flex-1 flex-col w-full items-center justify-center gap-4 py-6">
+				<span className="text-5xl @lg:text-6xl @2xl:text-7xl font-black text-center text-accent text-stroke">
 					<HolyText text="FRACITAL" />
 				</span>
-				<div className="grid grid-cols-3 gap-4 max-h-95 overflow-auto">{links.length > 0 && links.map((link, index) => <LinkCard key={index} title={link.title} icon={link.icon} color={link.color} href={link.href} edit={false} brightness={isColorBright(link.color)} />)}</div>
-				<AdBanner className="mt-2" />
+				<div className="grid w-full max-w-3xl grid-cols-2 @lg:grid-cols-3 gap-3 @lg:gap-4">{links.length > 0 && links.map((link, index) => <LinkCard key={index} title={link.title} icon={link.icon} color={link.color} href={link.href} edit={false} brightness={isColorBright(link.color)} />)}</div>
+				<AdBanner className="mt-2 max-w-full" />
 			</div>
-			<div className="flex items-center w-full overflow-hidden">
+			<div className="flex shrink-0 flex-wrap items-center w-full overflow-hidden">
 				<Link
 					target="_blank"
 					to="/LICENSE"

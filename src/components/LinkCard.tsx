@@ -173,7 +173,7 @@ const LinkCard: React.FC<LinkCardProps> = ({ title, icon, brightness, color, hre
 			) : (
 				<div
 					ref={cardRef}
-					className="group relative flex flex-col p-3 rounded-2xl bg-(--color) w-60 h-[142px] overflow-hidden cursor-pointer duration-200"
+					className="group relative flex flex-col p-3 rounded-2xl bg-(--color) w-full min-w-0 h-[142px] overflow-hidden cursor-pointer duration-200"
 					onClick={async () => {
 						if (href) {
 							navigationEvent({
@@ -212,7 +212,7 @@ const LinkCard: React.FC<LinkCardProps> = ({ title, icon, brightness, color, hre
 						)}
 						<div
 							className={
-								"flex items-center justify-center py-5 px-19" +
+								"flex items-center justify-center py-5 px-2" +
 								" " +
 								`
                                 ${color === "#ffffff" ? "text-black" : ""}
@@ -246,7 +246,7 @@ const LinkCard: React.FC<LinkCardProps> = ({ title, icon, brightness, color, hre
 						<div className="flex w-full justify-center">
 							<span
 								className={
-									"font-extrabold text-lg leading-none" +
+									"font-extrabold text-lg leading-none truncate px-1" +
 									" " +
 									`
                                     ${brightness === "dark" ? "text-[#00000098]" : "text-[#ffffffc7]"}

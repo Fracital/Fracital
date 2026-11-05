@@ -886,18 +886,7 @@ export const QuickPlayer = ({ panelsOpen, className, onOpenPanels }: QuickPlayer
 										</div>
 									</div>
 								)}
-								<div
-									className={`flex min-max-1 w-(calc(100%-1rem)) m-2 p-1 rounded-xl overflow-x-auto overflow-y-hidden items-start justify-between gap-0.5 transition-[padding] duration-200 ${brightness === "dark" ? "bg-[#ffffff10]" : "bg-[#00000025]"}`}
-									onScroll={e => {
-										const el = e.currentTarget as HTMLDivElement & { _scrollTimeout?: number };
-										if (el.scrollWidth <= el.clientWidth) return;
-										el.style.paddingBottom = "0.75rem";
-										window.clearTimeout(el._scrollTimeout);
-										el._scrollTimeout = window.setTimeout(() => {
-											el.style.paddingBottom = "";
-										}, 1000);
-									}}
-								>
+								<div className={`flex min-max-1 w-(calc(100%-1rem)) m-2 p-1 rounded-xl overflow-x-auto overflow-y-hidden [scrollbar-width:none] items-start justify-between gap-0.5 ${brightness === "dark" ? "bg-[#ffffff10]" : "bg-[#00000025]"}`}>
 									<div className={`flex gap-0.5 duration-150`}>
 										<div className="flex gap-1">
 											<button
@@ -979,14 +968,14 @@ export const QuickPlayer = ({ panelsOpen, className, onOpenPanels }: QuickPlayer
 										</div>
 										<button
 											title="Lyrics"
-											className={`flex items-center justify-center p-2 hover:bg-[#ffffff10] text-(--text-secondary) hover:text-(--text-primary) rounded-lg cursor-pointer duration-150 ${currentTrack ? "" : "opacity-0 translate-y-2 pointer-events-none"}`}
+											className={`flex items-center justify-center p-2 hover:bg-[#ffffff10] text-(--text-secondary) hover:text-(--text-primary) rounded-lg cursor-pointer duration-150 ${currentTrack ? "" : "hidden"}`}
 											onClick={() => openMusicPlayer("lyrics")}
 										>
 											<ChatBubbleBottomCenterTextIcon className="size-5 text-current pointer-events-none" />
 										</button>
 										<button
 											title="Open Full Player"
-											className={`flex items-center justify-center p-2 hover:bg-[#ffffff10] text-(--text-secondary) hover:text-(--text-primary) rounded-lg cursor-pointer duration-150 ${currentTrack ? "" : "opacity-0 translate-y-2 pointer-events-none"}`}
+											className={`flex items-center justify-center p-2 hover:bg-[#ffffff10] text-(--text-secondary) hover:text-(--text-primary) rounded-lg cursor-pointer duration-150 ${currentTrack ? "" : "hidden"}`}
 											onClick={() => openMusicPlayer("cover")}
 										>
 											<ArrowsPointingOutIcon className="size-5 text-current pointer-events-none stroke-0.5 stroke-(--text-secondary) hover:stroke-(--text-primary)" />
