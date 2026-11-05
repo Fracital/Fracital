@@ -966,18 +966,10 @@ export const QuickPlayer = ({ panelsOpen, className, onOpenPanels }: QuickPlayer
 										>
 											<RectangleGroupIcon className="size-5 text-current pointer-events-none" />
 										</div>
-										<button
-											title="Lyrics"
-											className={`flex items-center justify-center p-2 hover:bg-[#ffffff10] text-(--text-secondary) hover:text-(--text-primary) rounded-lg cursor-pointer duration-150 ${currentTrack ? "" : "hidden"}`}
-											onClick={() => openMusicPlayer("lyrics")}
-										>
+										<button title="Lyrics" className={`flex items-center justify-center p-2 hover:bg-[#ffffff10] text-(--text-secondary) hover:text-(--text-primary) rounded-lg cursor-pointer duration-150 ${currentTrack ? "" : "hidden"}`} onClick={() => openMusicPlayer("lyrics")}>
 											<ChatBubbleBottomCenterTextIcon className="size-5 text-current pointer-events-none" />
 										</button>
-										<button
-											title="Open Full Player"
-											className={`flex items-center justify-center p-2 hover:bg-[#ffffff10] text-(--text-secondary) hover:text-(--text-primary) rounded-lg cursor-pointer duration-150 ${currentTrack ? "" : "hidden"}`}
-											onClick={() => openMusicPlayer("cover")}
-										>
+										<button title="Open Full Player" className={`flex items-center justify-center p-2 hover:bg-[#ffffff10] text-(--text-secondary) hover:text-(--text-primary) rounded-lg cursor-pointer duration-150 ${currentTrack ? "" : "hidden"}`} onClick={() => openMusicPlayer("cover")}>
 											<ArrowsPointingOutIcon className="size-5 text-current pointer-events-none stroke-0.5 stroke-(--text-secondary) hover:stroke-(--text-primary)" />
 										</button>
 									</div>
