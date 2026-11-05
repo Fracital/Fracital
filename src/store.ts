@@ -226,7 +226,10 @@ export const useMusicStore = create<{
 	removeTrack: (id: string) => void;
 	setCurrentTrack: (track: Track | null) => void;
 
+	/** Plays a song on its own: the queue is replaced (autoplay radio refills it if on). */
 	playTrack: (track: Track) => void;
+	/** Plays `tracks[index]` and replaces the queue with the songs after it in that list. */
+	playList: (tracks: Track[], index?: number) => void;
 	playNext: () => void;
 	playPrev: () => boolean;
 
@@ -260,10 +263,15 @@ export const useMusicStore = create<{
 		const nextHistory = currentTrack ? [...playedHistory, currentTrack] : playedHistory;
 		set({ currentTrack: track ? { ...track, id: typeof track.id === "string" && track.id.length > 0 ? createId() : createId() } : null, src: track?.src || "", playedHistory: nextHistory });
 	},
-	playTrack: track => {
+	playTrack: track => get().playList([track], 0),
+	playList: (tracks, index = 0) => {
+		const track = tracks[index];
+		if (!track) return;
 		const { currentTrack, playedHistory } = get();
 		const nextHistory = currentTrack ? [...playedHistory, currentTrack] : playedHistory;
-		set({ currentTrack: track, src: track.src, playedHistory: nextHistory });
+		// Fresh ids: the same song can sit in the queue more than once.
+		const queue = tracks.slice(index + 1).map(t => ({ ...t, id: createId(), radio: undefined }));
+		set({ currentTrack: track, src: track.src, queue, playedHistory: nextHistory });
 	},
 	playNext: () => {
 		const { queue, currentTrack, playedHistory } = get();

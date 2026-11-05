@@ -100,7 +100,9 @@ const blobToDataUrl = (blob: Blob) =>
 
 export const MusicLibrary = ({ query }: MusicLibraryProps) => {
 	const settings = useSettingsStore(state => state.settings);
-	const setCurrentTrack = useMusicStore(state => state.setCurrentTrack);
+	const playList = useMusicStore(state => state.playList);
+	/** Plays an upload and replaces the queue with the uploads after it. */
+	const playUpload = (song: Track) => playList(library, Math.max(0, library.indexOf(song)));
 	const addTrack = useMusicStore(state => state.addTrack);
 	const removeTrack = useMusicStore(state => state.removeTrack);
 	const playNext = useMusicStore(state => state.playNext);
@@ -410,7 +412,7 @@ export const MusicLibrary = ({ query }: MusicLibraryProps) => {
 								onClick={(e: React.MouseEvent<HTMLElement>) => {
 									if ((e.target as HTMLElement).id === "options") return;
 									if (currentTrack === song) return;
-									setCurrentTrack(song);
+									playUpload(song);
 								}}
 							>
 								{song.cover ? (
@@ -443,7 +445,7 @@ export const MusicLibrary = ({ query }: MusicLibraryProps) => {
 											{
 												title: "Play",
 												onClick: () => {
-													setCurrentTrack(song);
+													playUpload(song);
 												},
 												icon: null,
 											},
@@ -964,7 +966,7 @@ export const MusicLibrary = ({ query }: MusicLibraryProps) => {
 					<div
 						key={`${song.id}-${i}`}
 						className={`group flex flex-col gap-1.5 w-32 shrink-0 p-1.5 rounded-lg cursor-pointer duration-150 ${dark ? "hover:bg-[#ffffff10]" : "hover:bg-[#00000008]"}`}
-						onClick={() => currentTrack !== song && setCurrentTrack(song)}
+						onClick={() => currentTrack !== song && playUpload(song)}
 					>
 						<div className="relative">
 							{song.cover ? (

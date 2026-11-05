@@ -93,9 +93,9 @@ export async function startRadio(artist: string, title?: string): Promise<void> 
 		const tracks = [opener, ...others.filter(t => !recent.has(songKey(t.title, t.artist)))];
 		const [first, ...rest] = tracks.slice(0, length).map(t => ({ ...trackToFracital(t), id: createId(), radio: true }));
 		selfStartedId = first.id;
-		const userQueued = useMusicStore.getState().queue.filter(t => !t.radio);
+		// Starting a station is a fresh start: it replaces whatever was queued.
 		useMusicStore.getState().playTrack(first);
-		useMusicStore.setState({ queue: [...userQueued, ...rest] });
+		useMusicStore.setState({ queue: rest });
 		useRadioStore.setState({ active: true, seed: { artist, title } });
 	} catch (err) {
 		if (gen === generation) useRadioStore.setState({ error: err instanceof Error ? err.message : "Radio failed" });

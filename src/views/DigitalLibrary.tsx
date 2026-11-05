@@ -231,6 +231,7 @@ export const DigitalLibrary = ({ query, urlPage = "library", urlPrefix, nav, ove
 	const settings = useSettingsStore(state => state.settings);
 	const brightness = settings.brightness as string;
 	const playTrack = useMusicStore(state => state.playTrack);
+	const playList = useMusicStore(state => state.playList);
 	const addTrack = useMusicStore(state => state.addTrack);
 	const configured = !!getMusicApiConfig()?.baseUrl;
 
@@ -487,12 +488,15 @@ export const DigitalLibrary = ({ query, urlPage = "library", urlPrefix, nav, ove
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [query, configured]);
 
-	const handlePlay = (track: MusicTrack) => {
-		const t = trackToFracital(track);
-		playTrack({ ...t, id: createId() });
-		// Warm the next track in the list
-		const idx = tracks.indexOf(track);
-		if (idx >= 0 && idx < tracks.length - 1) warmStream(tracks[idx + 1]);
+	/** Plays a song and replaces the queue: with the rest of `list` after it when given, otherwise empty. */
+	const handlePlay = (track: MusicTrack, list?: MusicTrack[]) => {
+		const playable = (list ?? [track]).filter(t => t === track || t.streamUrl || t.previewUrl);
+		const index = Math.max(0, playable.indexOf(track));
+		if (playable.length > 1) playList(playable.map(t => ({ ...trackToFracital(t), id: createId() })), index);
+		else playTrack({ ...trackToFracital(track), id: createId() });
+		// Warm the next track so it starts instantly.
+		const next = playable[index + 1];
+		if (next) warmStream(next);
 	};
 
 	const handleQueue = (track: MusicTrack) => {
@@ -500,11 +504,10 @@ export const DigitalLibrary = ({ query, urlPage = "library", urlPrefix, nav, ove
 		addTrack({ ...t, id: createId() });
 	};
 
+	/** Plays a whole list from the top, replacing the queue. */
 	const handlePlayAll = (trackList: MusicTrack[]) => {
 		const playable = trackList.filter(t => t.streamUrl || t.previewUrl);
-		if (playable.length === 0) return;
-		handlePlay(playable[0]);
-		playable.slice(1).forEach(t => handleQueue(t));
+		if (playable.length) handlePlay(playable[0], playable);
 	};
 
 	// --- Shared components ---
@@ -522,10 +525,11 @@ export const DigitalLibrary = ({ query, urlPage = "library", urlPrefix, nav, ove
 		</div>
 	);
 
-	const TrackRow = ({ track, index }: { track: MusicTrack; index?: number }) => (
+	/** `list` is what clicking the row plays from (the album, search results, chart…). */
+	const TrackRow = ({ track, index, list }: { track: MusicTrack; index?: number; list?: MusicTrack[] }) => (
 		<div
 			className={`group flex items-center gap-3 p-2 px-3 rounded-lg cursor-pointer duration-150 ${brightness === "dark" ? "hover:bg-[#ffffff12]" : "hover:bg-[#00000008]"}`}
-			onClick={() => handlePlay(track)}
+			onClick={() => handlePlay(track, list)}
 		>
 			{index !== undefined && <span className="w-6 text-right text-sm text-(--text-tertiary) group-hover:hidden">{index + 1}</span>}
 			{index !== undefined && <PlayIcon className="hidden group-hover:block size-4 w-6 text-(--text-primary)" />}
@@ -651,12 +655,11 @@ export const DigitalLibrary = ({ query, urlPage = "library", urlPrefix, nav, ove
 
 	/** Plays a list from `index`, queueing the rest after it (Your Library shelves). */
 	const playListFrom = (list: MusicTrack[], index: number) => {
-		const ordered = [...list.slice(index), ...list.slice(0, index)];
-		handlePlayAll(ordered);
+		if (list[index]) handlePlay(list[index], list);
 	};
 
 	/** A top song as its own full-width card: artwork, title/artist, play count, and a "⋯" menu. */
-	const TopSongCard = ({ track }: { track: MusicTrack }) => {
+	const TopSongCard = ({ track, list }: { track: MusicTrack; list?: MusicTrack[] }) => {
 		const key = songKey(track.title, track.artist);
 		const isLoved = !!lovedSongs[key];
 		const mine = myPlays[key];
@@ -664,7 +667,7 @@ export const DigitalLibrary = ({ query, urlPage = "library", urlPrefix, nav, ove
 		return (
 			<div
 				className={`group grid ${lastfmUser ? "grid-cols-[minmax(0,1.7fr)_minmax(6rem,1fr)_6.5rem]" : "grid-cols-[minmax(0,1.7fr)_minmax(6rem,1fr)_4.25rem]"} items-center gap-3 h-15 px-4 rounded-xl cursor-pointer duration-150 ${brightness === "dark" ? "bg-[#ffffff14] hover:bg-[#ffffff21]" : "bg-[#0000000a] hover:bg-[#00000014]"}`}
-				onClick={() => handlePlay(track)}
+				onClick={() => handlePlay(track, list)}
 				onContextMenu={e => { e.preventDefault(); openSongMenu(e, track); }}
 			>
 				<div className="flex items-center gap-3 min-w-0">
@@ -778,7 +781,7 @@ export const DigitalLibrary = ({ query, urlPage = "library", urlPrefix, nav, ove
 						</button>
 					</div>
 					<div className="flex flex-col">
-						{chartTracks.slice(0, 25).map((track, i) => <TrackRow key={track.id} track={track} index={i} />)}
+						{chartTracks.slice(0, 25).map((track, i) => <TrackRow key={track.id} track={track} index={i} list={chartTracks} />)}
 					</div>
 				</div>
 			)}
@@ -818,7 +821,7 @@ export const DigitalLibrary = ({ query, urlPage = "library", urlPrefix, nav, ove
 						</button>
 					</div>
 					<div className="flex flex-col">
-						{tracks.map((track, i) => <TrackRow key={track.id} track={track} index={i} />)}
+						{tracks.map((track, i) => <TrackRow key={track.id} track={track} index={i} list={tracks} />)}
 					</div>
 				</div>
 			)}
@@ -870,7 +873,7 @@ export const DigitalLibrary = ({ query, urlPage = "library", urlPrefix, nav, ove
 								{albumSaved ? "In Library" : "Add to Library"}
 							</button>
 						</div>
-						<div className="flex flex-col">{albumTracks.map((t, i) => <TrackRow key={t.id} track={t} index={i} />)}</div>
+						<div className="flex flex-col">{albumTracks.map((t, i) => <TrackRow key={t.id} track={t} index={i} list={albumTracks} />)}</div>
 					</>
 				)}
 			</div>
@@ -1123,7 +1126,7 @@ export const DigitalLibrary = ({ query, urlPage = "library", urlPrefix, nav, ove
 
 				{rankedSongs.length > 0 && (
 					<div className="flex flex-col gap-2.5">
-						{topSongs.map(t => <TopSongCard key={t.id} track={t} />)}
+						{topSongs.map(t => <TopSongCard key={t.id} track={t} list={rankedSongs} />)}
 						<div className="flex items-center justify-center gap-1.5">
 							<button className={chip} onClick={() => handlePlayAll(rankedSongs)}>Play All</button>
 							{rankedSongs.length > TOP_SONGS_MIN && (
