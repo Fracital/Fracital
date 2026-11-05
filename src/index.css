@@ -71,6 +71,16 @@ html, body {
   color: var(--primary);
 }
 
+/* In the base layer so a `select-text` utility can still opt an element back in. */
+@layer base {
+  button,
+  [role="button"],
+  .cursor-pointer {
+    -webkit-user-select: none;
+    user-select: none;
+  }
+}
+
 /* Custom EQ Slider Styles */
 .eq-slider {
   -webkit-appearance: none;
