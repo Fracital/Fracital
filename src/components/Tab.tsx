@@ -84,7 +84,7 @@ export const Tab = ({ title, url, id, icon }: TabProps) => {
 			data-url={url}
 			id={id}
 			className={
-				"flex w-full justify-between p-3 rounded-md duration-150" +
+				"flex w-full min-w-0 justify-between p-3 rounded-md duration-150" +
 				" " +
 				`
             ${currentTab && id === currentTab.id ? "bg-(--accent-opaque) rounded-b-md" : `${settings.brightness === "dark" ? "bg-[#ffffff10] hover:bg-[#ffffff18]" : "bg-[#00000025] hover:bg-[#0000001a]"}`}
@@ -104,8 +104,9 @@ export const Tab = ({ title, url, id, icon }: TabProps) => {
 				}
 			}}
 		>
-			<div className="flex w-full justify-between items-center duration-150">
-				<div className="flex items-center gap-1.5 *:pointer-events-none">
+			<div className="flex w-full min-w-0 justify-between items-center gap-1.5 duration-150">
+				{/* min-w-0 + truncate: the title takes whatever width the icon and close button leave. */}
+				<div className="flex flex-1 min-w-0 items-center gap-1.5 *:pointer-events-none *:shrink-0" title={currTitle}>
 					{hasStringIcon ? (
 						iconSrc && !iconFailed ? (
 							<img src={iconSrc} alt={currTitle} className="size-5" onError={handleIconError} />
@@ -119,19 +120,19 @@ export const Tab = ({ title, url, id, icon }: TabProps) => {
 					)}
 					<span
 						className={
-							"font-medium select-none" +
+							"min-w-0 shrink! truncate font-medium select-none" +
 							" " +
 							`
                         ${currentTab && id === currentTab.id ? "font-semibold" : "font-medium"}
                     `
 						}
 					>
-						{currTitle.length > 10 ? currTitle.slice(0, 10) + "…" : currTitle}
+						{currTitle}
 					</span>
 				</div>
 				<XMarkIcon
 					ref={closeRef}
-					className="size-5 text-[#ffffff70] hover:text-(--text-primary) stroke-current stroke-2 cursor-pointer duration-150"
+					className="size-5 shrink-0 text-[#ffffff70] hover:text-(--text-primary) stroke-current stroke-2 cursor-pointer duration-150"
 					onClick={e => {
 						e.stopPropagation();
 						closeTab(id);
