@@ -20,8 +20,9 @@ jobs:
 
       - name: "Setup Biome"
         uses: "biomejs/setup-biome@v2"
-        with:
-          version: "latest"
+        # No `version` here on purpose: the action then uses the repo's pinned
+        # Biome (package.json/lockfile). "latest" formatted differently than
+        # the project's Biome, so the bot found phantom drift on every push.
 
       - name: "Format with Biome"
         run: "biome format --write ."
