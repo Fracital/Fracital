@@ -17,10 +17,11 @@ import { CheckCircleIcon, PlusCircleIcon } from "@heroicons/react/24/outline";
 interface QuickPlayerProps {
 	panelsOpen: boolean;
 	className?: string;
-	onMouseDown?: (event: React.MouseEvent<HTMLDivElement, MouseEvent>) => void;
+	/** Opens the side panels; runs alongside whatever item was clicked while they were collapsed. */
+	onOpenPanels?: () => void;
 }
 
-export const QuickPlayer = ({ panelsOpen, className, onMouseDown }: QuickPlayerProps) => {
+export const QuickPlayer = ({ panelsOpen, className, onOpenPanels }: QuickPlayerProps) => {
 	const settings = useSettingsStore(state => state.settings);
 	const currentTrack = useMusicStore(state => state.currentTrack);
 	const currentLibraryTrack = currentTrack ? libraryTrackFromPlayer(currentTrack) : null;
@@ -459,7 +460,7 @@ export const QuickPlayer = ({ panelsOpen, className, onMouseDown }: QuickPlayerP
 					className={`flex flex-col w-full h-full min-h-0 bg-(--secondary) inset-shadow-(--inset-shadow-primary) overflow-hidden duration-150 ${panelsOpen ? "w-full" : "w-88"}
                     ${settings["floating-tabs"] && panelsOpen ? "rounded-xl" : "rounded-2xl"}
                     ${settings["floating-tabs"] && "shadow-[0_0_16px_3px_#00000035]"}`}
-					onMouseDown={onMouseDown}
+					onClickCapture={onOpenPanels}
 				>
 					{playerView === "tracks" || !currentTrack ? (
 						<>

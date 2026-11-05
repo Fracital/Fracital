@@ -585,9 +585,9 @@ const App = () => {
                                 ${settings["floating-tabs"] && "shadow-[0_0_16px_3px_#00000035]"}
                             `
 								}
-								onMouseDown={() => {
-									setPanelsOpen(true);
-								}}
+								// Open on click (capture), not mousedown: widening on mousedown moved the button out from
+								// under the cursor before mouseup, so collapsed items (new tab, tabs…) never got their click.
+								onClickCapture={() => setPanelsOpen(true)}
 							>
 								<div
 									className={"relative flex w-full flex-1 min-h-0 overflow-auto gap-2 p-2 flex-col items-stretch duration-200"}
@@ -725,9 +725,7 @@ const App = () => {
                                 ${playerTabOpen ? "hidden!" : ""}
                             `}
 								panelsOpen={panelsOpen}
-								onMouseDown={() => {
-									setPanelsOpen(true);
-								}}
+								onOpenPanels={() => setPanelsOpen(true)}
 							/>
 						</div>
 					</div>
