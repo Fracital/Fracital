@@ -168,3 +168,105 @@ export async function songCredits(title: string, artist: string): Promise<SongCr
 	creditsCache.set(key, { at: Date.now(), value, ttl: failed ? 2 * 60_000 : TTL });
 	return value;
 }
+
+// --- Album / single details ---
+
+export interface AlbumInfo {
+	releaseDate: string | null;
+	genre: string | null;
+	copyright: string | null;
+	label: string | null;
+	bio: { summary: string; full: string; url: string | null } | null;
+	listeners: number | null;
+	playcount: number | null;
+	tags: string[];
+	credits: SongCredits["sections"];
+	creditsUrl: string | null;
+	partial?: boolean;
+}
+
+const albumCache = new Map<string, { at: number; value: AlbumInfo; ttl?: number }>();
+
+/** Last.fm wiki text without its HTML and trailing "Read more on Last.fm" link. */
+const cleanWiki = (html: string | undefined) =>
+	(html ?? "")
+		.replace(/<a [^>]*>Read more on Last\.fm<\/a>\.?/gi, "")
+		.replace(/User-contributed text is available under[^.]*\.(\s*additional terms may apply\.)?/gi, "")
+		.replace(/<[^>]+>/g, "")
+		.replace(/&quot;/g, '"')
+		.replace(/&amp;/g, "&")
+		.replace(/&#39;/g, "'")
+		.trim();
+
+type LfmAlbum = { album?: { listeners?: string; playcount?: string; url?: string; tags?: { tag?: { name: string }[] | { name: string } }; wiki?: { summary?: string; content?: string } } };
+type MbRelease = { id: string; title: string; score?: number; status?: string; "track-count"?: number; "label-info"?: { label?: { name: string } }[]; relations?: MbRelation[]; media?: { tracks?: { recording?: MbRecording }[] }[] };
+
+async function lastfmAlbum(title: string, artist: string): Promise<LfmAlbum["album"] | null> {
+	const { lastfmCall } = await import("./lastfm");
+	const res = await lastfmCall<LfmAlbum>({ method: "album.getInfo", artist, album: title, autocorrect: "1" }).catch(() => null);
+	return res?.album ?? null;
+}
+
+/** Release info, a bio and full credits for an album, EP or single. */
+export async function albumInfo(id: string | undefined, rawTitle: string, artist: string, trackCount?: number): Promise<AlbumInfo> {
+	const title = rawTitle.replace(/\s*-\s*(Single|EP)\s*$/i, "");
+	const key = `${id ?? ""}|${norm(artist)}|${norm(title)}`;
+	const hit = cached(albumCache, key);
+	if (hit) return hit;
+
+	const [itunesRes, lfm, mbSearch] = await Promise.all([
+		id && /^\d+$/.test(id) ? itunes<{ results?: { primaryGenreName?: string; copyright?: string; releaseDate?: string }[] }>(`lookup?id=${id}&country=US`) : Promise.resolve(null),
+		lastfmAlbum(title, artist),
+		musicbrainz<{ releases?: MbRelease[] }>(`release?query=${encodeURIComponent(`release:${lucene(title)} AND artist:${lucene(artist)}`)}&limit=8&fmt=json`, 20_000),
+	]);
+	const collection = itunesRes?.results?.[0];
+
+	// The official release with the closest track count; one request then brings every track's credits.
+	const candidates = (mbSearch?.releases ?? [])
+		.filter(r => (r.score ?? 0) >= 85 && norm(r.title) === norm(title))
+		.sort((a, b) => Number(b.status === "Official") - Number(a.status === "Official") || Math.abs((a["track-count"] ?? 0) - (trackCount ?? 0)) - Math.abs((b["track-count"] ?? 0) - (trackCount ?? 0)));
+	let failed = !mbSearch;
+	let release: MbRelease | null = null;
+	if (candidates[0]) {
+		release = await musicbrainz<MbRelease>(`release/${candidates[0].id}?inc=labels+artist-rels+recordings+recording-level-rels+work-rels+work-level-rels&fmt=json`, 20_000);
+		if (!release) failed = true;
+	}
+
+	const sections = new Map<string, Map<string, SongCredit>>();
+	const add = (section: string, name: string, role: string) => {
+		const people = sections.get(section) ?? new Map<string, SongCredit>();
+		sections.set(section, people);
+		const person = people.get(name) ?? { name, roles: [] };
+		people.set(name, person);
+		if (!person.roles.includes(role)) person.roles.push(role);
+	};
+	const recordings = (release?.media ?? []).flatMap(m => m.tracks ?? []).map(t => t.recording).filter((r): r is MbRecording => !!r);
+	const rels = [...(release?.relations ?? []), ...recordings.flatMap(r => r.relations ?? [])];
+	for (const rel of [...rels, ...rels.flatMap(r => r.work?.relations ?? [])]) {
+		if (rel["target-type"] !== "artist" || !rel.artist) continue;
+		const d = describe(rel);
+		if (d) add(d.section, rel.artist.name, d.role);
+	}
+	// Who plays what on each song is long for albums; keep the people, not every track's line-up.
+	const order = ["Produced by", "Written by", "Engineering", "Performers"];
+
+	const tags = asTags(lfm?.tags?.tag).filter(t => !/^(albums? i own|seen live|favou?rite)/i.test(t)).slice(0, 5);
+	const full = cleanWiki(lfm?.wiki?.content);
+	const value: AlbumInfo = {
+		releaseDate: collection?.releaseDate ?? null,
+		genre: collection?.primaryGenreName ?? null,
+		copyright: collection?.copyright ?? null,
+		label: release?.["label-info"]?.find(l => l.label?.name && !/^\[no label\]$/i.test(l.label.name))?.label?.name ?? null,
+		bio: full ? { summary: cleanWiki(lfm?.wiki?.summary) || full.slice(0, 400), full, url: lfm?.url ?? null } : null,
+		listeners: Number(lfm?.listeners) || null,
+		playcount: Number(lfm?.playcount) || null,
+		tags,
+		credits: order.filter(t => sections.has(t)).map(t => ({ title: t, credits: [...sections.get(t)!.values()] })),
+		creditsUrl: release ? `https://musicbrainz.org/release/${release.id}` : null,
+		...(failed ? { partial: true } : {}),
+	};
+	albumCache.set(key, { at: Date.now(), value, ttl: failed ? 2 * 60_000 : TTL });
+	return value;
+}
+
+const asTags = (t: { name: string }[] | { name: string } | undefined) => (Array.isArray(t) ? t : t ? [t] : []).map(x => x.name);

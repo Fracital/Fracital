@@ -8,6 +8,7 @@ import { LYRICS_CHANGED_EVENT, LYRICS_SOURCE_LABELS, loadLyrics, type Lyrics } f
 import { activeLineIndex } from "../../libs/lrc";
 import { PlayCount } from "../../components/PlayCount";
 import { RadioStatus } from "../../components/RadioStatus";
+import { clearQueue } from "../../libs/radio";
 import { UserGroupIcon } from "@heroicons/react/24/solid";
 import { cleanAlbumTitle, getSongCredits, getSongInfo, type SongCredits } from "../../libs/music-service";
 import { isLinkable, openArtistByName, openTrackAlbum, openTrackArtist, trackArtists } from "../../libs/trackLinks";
@@ -376,7 +377,16 @@ const QueuePanel = () => {
 	return (
 		<div className="flex h-full flex-col gap-1 overflow-y-auto p-4">
 			<RadioStatus className="mb-2" />
-			<h2 className="px-2 pb-2 text-2xl font-bold">Up next</h2>
+			<div className="flex items-center justify-between gap-2 px-2 pb-2">
+				<h2 className="text-2xl font-bold">Up next</h2>
+				<button
+					className="flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold text-(--text-secondary) hover:text-(--text-primary) bg-[#ffffff18] hover:bg-[#ffffff28] cursor-pointer duration-150"
+					title={`Remove all ${queue.length} songs from the queue`}
+					onClick={clearQueue}
+				>
+					Clear queue
+				</button>
+			</div>
 			{queue.map(song => (
 				<div
 					key={song.id}
@@ -420,6 +430,7 @@ export const MusicPlayer = ({ query, className, onClose }: MusicPlayerProps) => 
 	const analyser = usePlaybackStore(state => state.analyser);
 	const dark = settings.brightness !== "light";
 	const releaseYear = useReleaseYear(currentTrack);
+	const failed = usePlaybackStore(state => !!currentTrack && state.failedTrackId === currentTrack.id);
 
 	const [mode, setMode] = useState<PlayerMode>(parsePlayerMode(query));
 	const [lastQuery, setLastQuery] = useState(query);
@@ -528,7 +539,11 @@ export const MusicPlayer = ({ query, className, onClose }: MusicPlayerProps) => 
 									);
 								})()}
 								<div className="flex items-center gap-2.5 mt-1">
-									<PlayCount title={currentTrack.title} artist={currentTrack.artists} skeleton={false} className="text-sm font-medium text-(--text-tertiary)" />
+									{failed ? (
+										<span className="text-sm font-semibold text-[#ff6b6b]">Couldn't play this song</span>
+									) : (
+										<PlayCount title={currentTrack.title} artist={currentTrack.artists} skeleton={false} className="text-sm font-medium text-(--text-tertiary)" />
+									)}
 									<button
 										className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold cursor-pointer duration-150 ${mode === "credits" ? (dark ? "bg-white text-black" : "bg-black text-white") : dark ? "bg-[#ffffff1f] hover:bg-[#ffffff33]" : "bg-[#00000012] hover:bg-[#00000022]"}`}
 										title={mode === "credits" ? "Hide credits" : "Show song credits"}

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { QueueListIcon, MusicalNoteIcon, PlusIcon, MinusIcon, ArrowUturnLeftIcon, BackwardIcon, ForwardIcon, RectangleGroupIcon, ArrowPathRoundedSquareIcon, SpeakerWaveIcon, SpeakerXMarkIcon, BarsArrowUpIcon, BackspaceIcon, AdjustmentsHorizontalIcon } from "@heroicons/react/24/solid";
+import { QueueListIcon, MusicalNoteIcon, PlusIcon, MinusIcon, ArrowUturnLeftIcon, BackwardIcon, ForwardIcon, RectangleGroupIcon, ArrowPathRoundedSquareIcon, SpeakerWaveIcon, SpeakerXMarkIcon, BarsArrowUpIcon, BackspaceIcon, AdjustmentsHorizontalIcon, XMarkIcon } from "@heroicons/react/24/solid";
 import { PlayIcon, PauseIcon, EllipsisHorizontalIcon } from "@heroicons/react/24/solid";
 import { ArrowsPointingOutIcon, ChatBubbleBottomCenterTextIcon } from "@heroicons/react/24/solid";
 import { useMusicStore, usePlaybackStore, useSettingsStore } from "../store";
@@ -10,6 +10,7 @@ import { openLibraryPage } from "../libs/aboutPages";
 import { isLinkable, openTrackAlbum, openTrackArtist } from "../libs/trackLinks";
 import { PlayCount } from "../components/PlayCount";
 import { RadioStatus } from "../components/RadioStatus";
+import { clearQueue } from "../libs/radio";
 import { ensureSavedLoaded, libraryTrackFromPlayer, useSavedStore } from "../libs/savedLibrary";
 import { CheckCircleIcon, PlusCircleIcon } from "@heroicons/react/24/outline";
 
@@ -111,7 +112,34 @@ export const QuickPlayer = ({ panelsOpen, className, onOpenPanels }: QuickPlayer
 		return () => registerAudio(null, null);
 	}, []);
 
+	const retriedRef = useRef<string | null>(null);
+	const failedTrackId = usePlaybackStore(state => state.failedTrackId);
+	const failed = !!currentTrack && failedTrackId === currentTrack.id;
+
+	/** The song's audio didn't load: retry once (stream links can expire), then say so and move on. */
+	const handleAudioError = () => {
+		const track = useMusicStore.getState().currentTrack;
+		const audio = audioRef.current;
+		if (!track?.src || !audio) return;
+		// A load cancelled by switching songs (or leaving the page) isn't a failure.
+		if (audio.error?.code === MediaError.MEDIA_ERR_ABORTED) return;
+		if (retriedRef.current !== track.id) {
+			retriedRef.current = track.id;
+			audio.src = `${track.src}${track.src.includes("?") ? "&" : "?"}retry=${Date.now()}`;
+			void audio.play().catch(() => {});
+			return;
+		}
+		usePlaybackStore.setState({ failedTrackId: track.id, isPlaying: false });
+		window.setTimeout(() => {
+			const { currentTrack: now, queue: upcoming } = useMusicStore.getState();
+			if (now?.id === track.id && upcoming.length > 0) playNext();
+		}, 2000);
+	};
+
 	useEffect(() => {
+		usePlaybackStore.setState({ failedTrackId: null });
+		// A track with nothing to stream can't play at all.
+		if (currentTrack && !currentTrack.src) usePlaybackStore.setState({ failedTrackId: currentTrack.id, isPlaying: false });
 		if (currentTrack?.src && audioRef.current) {
 			audioRef.current.src = currentTrack.src;
 			if (audioContextRef.current?.state === "suspended") {
@@ -271,7 +299,7 @@ export const QuickPlayer = ({ panelsOpen, className, onOpenPanels }: QuickPlayer
 	}, [eqTreble]);
 
 	useEffect(() => {
-		if (currentTime === duration) {
+		if (duration > 0 && currentTime === duration) {
 			if (currentTime === duration) {
 				if (queue && queue.length > 0) {
 					const next = queue[0];
@@ -530,7 +558,11 @@ export const QuickPlayer = ({ panelsOpen, className, onOpenPanels }: QuickPlayer
 															{Array.isArray(currentTrack.artists) ? currentTrack.artists[0] : currentTrack.artists}
 														</h2>
 													)}
-													<PlayCount title={currentTrack.title} artist={currentTrack.artists} skeleton={false} className="text-[11px] leading-none opacity-60" />
+													{failed ? (
+														<span className="text-[11px] leading-none font-semibold text-[#ff6b6b]">Couldn't play this song{queue.length ? " — skipping" : ""}</span>
+													) : (
+														<PlayCount title={currentTrack.title} artist={currentTrack.artists} skeleton={false} className="text-[11px] leading-none opacity-60" />
+													)}
 												</div>
 											</div>
 											{currentLibraryTrack && (
@@ -610,7 +642,19 @@ export const QuickPlayer = ({ panelsOpen, className, onOpenPanels }: QuickPlayer
 								{queue && (
 									<div className="flex flex-col items-start">
 										<RadioStatus className="w-full mt-1.5" />
-										{queue.length > 0 && <h1 className={`ml-1.5 mt-1.5 text-2xl font-bold`}>Queue</h1>}
+										{queue.length > 0 && (
+											<div className="flex items-center justify-between w-full mt-1.5 pr-1">
+												<h1 className={`ml-1.5 text-2xl font-bold`}>Queue</h1>
+												<button
+													className="flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold text-(--text-secondary) hover:text-(--text-primary) bg-[#ffffff14] hover:bg-[#ffffff24] cursor-pointer duration-150"
+													title={`Remove all ${queue.length} songs from the queue`}
+													onClick={clearQueue}
+												>
+													<XMarkIcon className="size-3.5" />
+													Clear
+												</button>
+											</div>
+										)}
 										{queue.map(song => (
 											<div
 												key={song.id}
@@ -1052,7 +1096,12 @@ export const QuickPlayer = ({ panelsOpen, className, onOpenPanels }: QuickPlayer
 												</span>
 											))}
 										</h2>
-										{currentTrack && <PlayCount title={currentTrack.title} artist={currentTrack.artists} skeleton={false} className="text-xs font-medium opacity-60" />}
+										{currentTrack &&
+											(failed ? (
+												<span className="text-xs font-semibold text-[#ff6b6b]">Couldn't play this song{queue.length ? " — skipping" : ""}</span>
+											) : (
+												<PlayCount title={currentTrack.title} artist={currentTrack.artists} skeleton={false} className="text-xs font-medium opacity-60" />
+											))}
 									</div>
 									<div className="flex w-full">
 										<div className="relative flex justify-center items-center w-full h-9">
@@ -1190,6 +1239,7 @@ export const QuickPlayer = ({ panelsOpen, className, onOpenPanels }: QuickPlayer
 						onTimeUpdate={() => setCurrentTime(audioRef.current?.currentTime || 0)}
 						onLoadedMetadata={() => setDuration(audioRef.current?.duration || 0)}
 						onPlay={() => setIsPlaying(true)}
+						onError={handleAudioError}
 						onPause={() => setIsPlaying(false)}
 						onEnded={() => {
 							setIsPlaying(false);

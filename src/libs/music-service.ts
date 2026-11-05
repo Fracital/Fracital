@@ -165,10 +165,25 @@ async function apiFetch<T>(path: string, signal?: AbortSignal): Promise<T> {
 
 // --- Search ---
 
+/**
+ * iTunes lists a song's clean and explicit editions as separate tracks, and the clean one
+ * can come first. Keep one per song (in the first one's position), preferring explicit.
+ */
+export function preferExplicit<T extends { title: string; artist: string; explicit?: boolean }>(tracks: T[]): T[] {
+	const key = (t: T) => `${t.title.toLowerCase().replace(/\(clean( version)?\)/g, "").replace(/[^\p{L}\p{N}]+/gu, "")}|${t.artist.toLowerCase()}`;
+	const best = new Map<string, T>();
+	for (const t of tracks) {
+		const seen = best.get(key(t));
+		if (!seen || (t.explicit && !seen.explicit)) best.set(key(t), t);
+	}
+	const used = new Set<string>();
+	return tracks.flatMap(t => (used.has(key(t)) ? [] : (used.add(key(t)), [best.get(key(t))!])));
+}
+
 export async function searchTracks(query: string, limit = 24, signal?: AbortSignal): Promise<SearchResults> {
 	const res = await apiFetch<SearchResults>(`/search?q=${encodeURIComponent(query)}&limit=${limit}`, signal);
 	rememberArtistNames((res.artists ?? []).map(a => a.name));
-	return res;
+	return { ...res, tracks: preferExplicit(res.tracks ?? []) };
 }
 
 // --- Albums ---
@@ -182,7 +197,7 @@ export async function getAlbum(id: string): Promise<AlbumDetail> {
 export async function getArtist(id: string): Promise<ArtistDetail> {
 	const res = await apiFetch<ArtistDetail>(`/artist/${encodeURIComponent(id)}`);
 	rememberArtistNames([res.artist?.name, ...(res.similar ?? []).map(s => s.name)]);
-	return res;
+	return { ...res, tracks: preferExplicit(res.tracks ?? []) };
 }
 
 const playsCache = new Map<string, Promise<TrackPlays | null>>();
@@ -296,19 +311,39 @@ export function getSongInfo(title: string, artist: string, albumId?: string): Pr
 	return apiFetch(`/song-info?${songParams(title, artist)}${albumId ? `&albumId=${encodeURIComponent(albumId)}` : ""}`);
 }
 
+export interface AlbumInfo {
+	releaseDate: string | null;
+	genre: string | null;
+	copyright: string | null;
+	label: string | null;
+	bio: { summary: string; full: string; url: string | null } | null;
+	listeners: number | null;
+	playcount: number | null;
+	tags: string[];
+	credits: SongCredits["sections"];
+	creditsUrl: string | null;
+}
+
+/** Release details, bio and credits for an album, EP or single. */
+export function getAlbumInfo(album: MusicAlbum): Promise<AlbumInfo> {
+	return apiFetch(`/album-info?${songParams(album.title, album.artist)}&id=${encodeURIComponent(album.id)}${album.trackCount ? `&tracks=${album.trackCount}` : ""}`);
+}
+
 /** Writers, producers, engineers and musicians (MusicBrainz). */
 export function getSongCredits(title: string, artist: string): Promise<SongCredits> {
 	return apiFetch(`/song-credits?${songParams(title, artist)}`);
 }
 
 export async function getArtistTop(id: string, limit = 20): Promise<{ tracks: MusicTrack[] }> {
-	return apiFetch(`/artist/${encodeURIComponent(id)}/top?limit=${limit}`);
+	const res = await apiFetch<{ tracks: MusicTrack[] }>(`/artist/${encodeURIComponent(id)}/top?limit=${limit}`);
+	return { ...res, tracks: preferExplicit(res.tracks ?? []) };
 }
 
 // --- Charts ---
 
 export async function getCharts(limit = 25): Promise<{ tracks: MusicTrack[]; albums: MusicAlbum[] }> {
-	return apiFetch(`/charts?limit=${limit}`);
+	const res = await apiFetch<{ tracks: MusicTrack[]; albums: MusicAlbum[] }>(`/charts?limit=${limit}`);
+	return { ...res, tracks: preferExplicit(res.tracks ?? []) };
 }
 
 // --- Radio ---

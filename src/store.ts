@@ -224,6 +224,7 @@ export const useMusicStore = create<{
 
 	addTrack: (track: Track) => void;
 	removeTrack: (id: string) => void;
+	clearQueue: () => void;
 	setCurrentTrack: (track: Track | null) => void;
 
 	/** Plays a song on its own: the queue is replaced (autoplay radio refills it if on). */
@@ -258,6 +259,7 @@ export const useMusicStore = create<{
 			queue: state.queue.filter(track => track.id !== id),
 		}));
 	},
+	clearQueue: () => set({ queue: [] }),
 	setCurrentTrack: track => {
 		const { currentTrack, playedHistory } = get();
 		const nextHistory = currentTrack ? [...playedHistory, currentTrack] : playedHistory;
@@ -349,6 +351,8 @@ export const usePlaybackStore = create<{
 	volume: number;
 	muted: boolean;
 	analyser: AnalyserNode | null;
+	/** Id of the current track when its audio couldn't load (shown as "Couldn't play this song"). */
+	failedTrackId: string | null;
 
 	setIsPlaying: (value: Updater<boolean>) => void;
 	setCurrentTime: (value: Updater<number>) => void;
@@ -365,6 +369,7 @@ export const usePlaybackStore = create<{
 	volume: 1,
 	muted: false,
 	analyser: null,
+	failedTrackId: null,
 
 	setIsPlaying: value => set(state => ({ isPlaying: applyUpdater(value, state.isPlaying) })),
 	setCurrentTime: value => set(state => ({ currentTime: applyUpdater(value, state.currentTime) })),
