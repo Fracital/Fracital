@@ -75,8 +75,10 @@ parity list and the one line the user needs to say.
 
 - Never print, log, or commit plaintext secrets. `.env` is gitignored and must
   stay that way.
-- GitHub Actions secrets (`TERP_DEPLOY_KEY`, and `TERP_CLOAKS_KEY` on
-  `y9x/cloaks-fracital`) are set with `gh secret set` and never echoed.
+- GitHub Actions secrets (`TERP_DEPLOY_KEY`, `CLOUDFLARE_API_TOKEN`, and
+  `TERP_CLOAKS_KEY` on `y9x/cloaks-fracital`) are set with `gh secret set` and
+  never echoed. `CLOUDFLARE_API_TOKEN` powers the post-deploy cache purge
+  (`scripts/cloudflare-purge.mjs`, runs in the deploy job).
 
 ## Cloak system (do not regress)
 

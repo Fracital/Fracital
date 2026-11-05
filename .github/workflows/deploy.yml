@@ -65,3 +65,10 @@ jobs:
       # terp's :80 is not reachable by IP from outside; the gate already health-checks :8080 locally.
       - name: Verify site responds
         run: curl -fsS -m 20 -o /dev/null -w 'site %{http_code}\n' https://fracital.xyz/
+
+      # Deploys change fixed-name assets (/vendor/*.js, sw.js); purge the edge
+      # cache so no client gets a stale vendor file against the new app.
+      - name: Purge Cloudflare cache
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: node scripts/cloudflare-purge.mjs
