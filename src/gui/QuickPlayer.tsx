@@ -478,38 +478,38 @@ export const QuickPlayer = ({ panelsOpen, className, onMouseDown }: QuickPlayerP
 									}
 									{currentTrack && (
 										<div className="flex items-center justify-between gap-2.5 p-1.5 w-full rounded-lg hover:bg-[#ffffff28] duration-150">
-											<div className="flex items-center gap-2.5">
-												{currentTrack.cover && <img className="size-10 rounded-md" src={currentTrack.cover} alt={currentTrack.title} />}
+											{/* min-w-0 down the chain so the title and artists truncate before the buttons. */}
+											<div className="flex flex-1 min-w-0 items-center gap-2.5">
+												{currentTrack.cover && <img className="size-10 shrink-0 rounded-md object-cover" src={currentTrack.cover} alt={currentTrack.title} />}
 												{!currentTrack.cover && (
-													<div className={`size-10 rounded-md flex justify-center items-center bg-(--primary) text-(--text-secondary) inset-shadow-(--inset-shadow-primary) font-bold`}>
+													<div className={`size-10 shrink-0 rounded-md flex justify-center items-center bg-(--primary) text-(--text-secondary) inset-shadow-(--inset-shadow-primary) font-bold`}>
 														<MusicalNoteIcon className="size-6" />
 													</div>
 												)}
-												<div className="flex flex-col gap-1">
+												<div className="flex flex-col gap-0.5 min-w-0">
 													<h1
 														title={currentTrack.title}
-														className={`text-md font-semibold leading-none ${isLinkable(currentTrack) ? "cursor-pointer hover:underline" : ""}`}
+														className={`truncate text-md font-semibold leading-tight ${isLinkable(currentTrack) ? "cursor-pointer hover:underline" : ""}`}
 														onClick={isLinkable(currentTrack) ? () => openTrackAlbum(currentTrack) : undefined}
 													>
-														{currentTrack.title.length > 22 ? currentTrack.title.slice(0, 22) + "..." : currentTrack.title}
+														{currentTrack.title}
 													</h1>
 													{Array.isArray(currentTrack.artists) && currentTrack.artists.length > 1 ? (
-														<div className="flex gap-1.5">
-															{currentTrack.explicit && <span className="flex justify-center items-center size-5 text-xs font-bold rounded-sm bg-[#ffffff46]">E</span>}
-															<div className="flex lg:flex-row flex-col gap-0.5">
+														<div className="flex items-center gap-1.5 min-w-0">
+															{currentTrack.explicit && <span className="flex shrink-0 justify-center items-center size-4 text-[10px] font-bold rounded-sm bg-[#ffffff46]">E</span>}
+															<span className="truncate text-xs leading-tight" title={currentTrack.artists.join(", ")}>
 																{currentTrack.artists.map((artist, index) => (
-																	<div key={index} className={`flex justify-center items-center w-max`}>
+																	<span key={index}>
 																		<span
-																			className={`text-xs leading-none duration-150 ${isLinkable(currentTrack) ? "cursor-pointer hover:underline" : ""}`}
-																			key={index}
+																			className={`duration-150 ${isLinkable(currentTrack) ? "cursor-pointer hover:underline" : ""}`}
 																			onClick={isLinkable(currentTrack) ? () => openTrackArtist(currentTrack, artist) : undefined}
 																		>
 																			{artist}
 																		</span>
-																		{index < currentTrack.artists.length - 1 && <span>,</span>}
-																	</div>
+																		{index < currentTrack.artists.length - 1 && ", "}
+																	</span>
 																))}
-															</div>
+															</span>
 															{isVolumeDragging && showVolumeSlider && volumeSliderPos && (
 																<div className="fixed z-50 select-none pointer-events-none" style={{ left: volumeSliderPos.x - 80, top: volumeSliderPos.y - 48 }}>
 																	<div className="px-3 py-2 rounded-lg shadow-[0_6px_24px_#00000050] bg-(--secondary) inset-shadow-(--inset-shadow-primary)">
@@ -523,7 +523,7 @@ export const QuickPlayer = ({ panelsOpen, className, onMouseDown }: QuickPlayerP
 														</div>
 													) : (
 														<h2
-															className={`text-sm leading-none cursor-pointer duration-150 ${isLinkable(currentTrack) ? "hover:underline" : ""}`}
+															className={`truncate text-sm leading-tight cursor-pointer duration-150 ${isLinkable(currentTrack) ? "hover:underline" : ""}`}
 															onClick={isLinkable(currentTrack) ? () => openTrackArtist(currentTrack, Array.isArray(currentTrack.artists) ? currentTrack.artists[0] : currentTrack.artists) : undefined}
 														>
 															{Array.isArray(currentTrack.artists) ? currentTrack.artists[0] : currentTrack.artists}
@@ -534,7 +534,7 @@ export const QuickPlayer = ({ panelsOpen, className, onMouseDown }: QuickPlayerP
 											</div>
 											{currentLibraryTrack && (
 												<button
-													className="ml-auto flex items-center justify-center shrink-0 p-1 rounded-full hover:bg-[#ffffff14] duration-150"
+													className="flex items-center justify-center shrink-0 p-1 rounded-full hover:bg-[#ffffff14] duration-150"
 													title={currentSaved ? "Remove from Library" : "Add to Library"}
 													onClick={e => {
 														e.stopPropagation();
