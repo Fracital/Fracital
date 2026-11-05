@@ -8,6 +8,9 @@ import { LYRICS_CHANGED_EVENT, LYRICS_SOURCE_LABELS, loadLyrics, type Lyrics } f
 import { activeLineIndex } from "../../libs/lrc";
 import { PlayCount } from "../../components/PlayCount";
 import { RadioStatus } from "../../components/RadioStatus";
+import { UserGroupIcon } from "@heroicons/react/24/solid";
+import { cleanAlbumTitle, getSongCredits, getSongInfo, type SongCredits } from "../../libs/music-service";
+import { isLinkable, openArtistByName, openTrackAlbum, openTrackArtist, trackArtists } from "../../libs/trackLinks";
 
 interface MusicPlayerProps {
 	query?: string;
@@ -260,6 +263,101 @@ const LyricsPanel = ({ track }: { track: Track }) => {
 	);
 };
 
+const songKey = (track: Track) => `${track.title}|${artistText(track)}|${track.albumId ?? ""}`;
+
+/** The release year: from the file's tags for uploads, otherwise looked up from the album or single. */
+const useReleaseYear = (track: Track | null) => {
+	const raw = track?.year instanceof Date ? String(track.year.getFullYear()) : String(track?.year ?? "");
+	const local = /^\d{4}/.test(raw) ? raw.slice(0, 4) : null;
+	const key = track ? songKey(track) : "";
+	const [fetched, setFetched] = useState<{ key: string; year: string | null } | null>(null);
+	useEffect(() => {
+		if (!track || local || !isLinkable(track)) return;
+		let alive = true;
+		getSongInfo(track.title, trackArtists(track)[0], track.albumId)
+			.then(r => alive && setFetched({ key, year: r.releaseDate ? r.releaseDate.slice(0, 4) : null }))
+			.catch(() => {});
+		return () => {
+			alive = false;
+		};
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [key, local]);
+	return local ?? (fetched?.key === key ? fetched.year : null);
+};
+
+/** Who wrote, produced, engineered and played on the song (MusicBrainz), shown beside the cover. */
+const CreditsPanel = ({ track }: { track: Track }) => {
+	const key = songKey(track);
+	const [result, setResult] = useState<{ key: string; data: SongCredits | null } | null>(null);
+	useEffect(() => {
+		let alive = true;
+		getSongCredits(track.title, trackArtists(track)[0])
+			.then(data => alive && setResult({ key, data }))
+			.catch(() => alive && setResult({ key, data: null }));
+		return () => {
+			alive = false;
+		};
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [key]);
+
+	const loading = result?.key !== key;
+	const data = loading ? null : result.data;
+	const found = !!data?.sections.length;
+	// Without catalogued credits, still show who performs it.
+	const sections = found ? data!.sections : [{ title: "Performed by", credits: trackArtists(track).map(name => ({ name, roles: [] as string[] })) }];
+	const linkable = isLinkable(track);
+
+	return (
+		<div className="flex h-full flex-col gap-5 overflow-y-auto p-6">
+			<h2 className="text-2xl font-bold">Credits</h2>
+			{loading ? (
+				<div className="flex flex-col gap-4">
+					{[0, 1, 2].map(i => (
+						<div key={i} className="flex flex-col gap-2">
+							<div className="h-3 w-24 rounded bg-[#ffffff20] animate-pulse" />
+							<div className="h-4 w-48 rounded bg-[#ffffff26] animate-pulse" />
+							<div className="h-3 w-32 rounded bg-[#ffffff18] animate-pulse" />
+						</div>
+					))}
+				</div>
+			) : (
+				<>
+					{sections.map(section => (
+						<section key={section.title} className="flex flex-col gap-2.5">
+							<h3 className="text-xs font-bold uppercase tracking-wider text-(--text-tertiary)">{section.title}</h3>
+							{section.credits.map(c => (
+								<div key={c.name} className="flex flex-col leading-tight">
+									{linkable ? (
+										<button
+											className="w-max max-w-full truncate text-left font-semibold hover:underline cursor-pointer"
+											title={`Go to ${c.name}`}
+											onClick={() => (section.title === "Performed by" && trackArtists(track).includes(c.name) ? openTrackArtist(track, c.name) : openArtistByName(c.name))}
+										>
+											{c.name}
+										</button>
+									) : (
+										<span className="font-semibold">{c.name}</span>
+									)}
+									{c.roles.length > 0 && <span className="text-sm text-(--text-secondary)">{c.roles.join(", ")}</span>}
+								</div>
+							))}
+						</section>
+					))}
+					{!found && <p className="text-sm text-(--text-tertiary)">No detailed credits for this song yet.</p>}
+					{data?.url && (
+						<button
+							className="w-max text-xs text-(--text-tertiary) hover:text-(--text-secondary) hover:underline cursor-pointer"
+							onClick={() => useTabsStore.getState().newTab({ id: crypto.randomUUID(), url: data.url!, displayUrl: data.url!, title: "MusicBrainz", icon: null, current: true })}
+						>
+							Source: MusicBrainz
+						</button>
+					)}
+				</>
+			)}
+		</div>
+	);
+};
+
 const QueuePanel = () => {
 	const queue = useMusicStore(state => state.queue);
 	const setCurrentTrack = useMusicStore(state => state.setCurrentTrack);
@@ -321,6 +419,7 @@ export const MusicPlayer = ({ query, className, onClose }: MusicPlayerProps) => 
 	const loop = usePlaybackStore(state => state.loop);
 	const analyser = usePlaybackStore(state => state.analyser);
 	const dark = settings.brightness !== "light";
+	const releaseYear = useReleaseYear(currentTrack);
 
 	const [mode, setMode] = useState<PlayerMode>(parsePlayerMode(query));
 	const [lastQuery, setLastQuery] = useState(query);
@@ -396,12 +495,49 @@ export const MusicPlayer = ({ query, className, onClose }: MusicPlayerProps) => 
 							</div>
 
 							<div className={`flex w-full flex-col items-center gap-1 text-center ${sidePanel ? "" : "max-w-2xl"}`}>
-								<h1 className="text-3xl font-bold leading-tight line-clamp-2" title={currentTrack.title}>
+								<h1
+									className={`text-3xl font-bold leading-tight line-clamp-2 ${isLinkable(currentTrack) ? "cursor-pointer hover:underline" : ""}`}
+									title={isLinkable(currentTrack) ? `Go to ${currentTrack.album || "album"}` : currentTrack.title}
+									onClick={isLinkable(currentTrack) ? () => openTrackAlbum(currentTrack) : undefined}
+								>
 									{currentTrack.title}
 								</h1>
-								<h2 className="text-lg font-semibold text-(--text-secondary)">{artistText(currentTrack)}</h2>
-								{currentTrack.album && !/^unknown/i.test(currentTrack.album) && <span className="text-sm text-(--text-tertiary)">{currentTrack.album}</span>}
-								<PlayCount title={currentTrack.title} artist={currentTrack.artists} skeleton={false} className="text-sm font-medium text-(--text-tertiary)" />
+								<h2 className="text-lg font-semibold text-(--text-secondary)">
+									{trackArtists(currentTrack).map((name, i, all) => (
+										<span key={`${name}-${i}`}>
+											<span className={isLinkable(currentTrack) ? "cursor-pointer hover:underline hover:text-(--text-primary)" : ""} onClick={isLinkable(currentTrack) ? () => openTrackArtist(currentTrack, name) : undefined}>
+												{name}
+											</span>
+											{i < all.length - 1 && ", "}
+										</span>
+									))}
+								</h2>
+								{(() => {
+									const album = currentTrack.album && !/^unknown/i.test(currentTrack.album) ? cleanAlbumTitle(currentTrack.album) : null;
+									if (!album && !releaseYear) return null;
+									return (
+										<span className="text-sm text-(--text-tertiary)">
+											{album && (
+												<span className={isLinkable(currentTrack) ? "cursor-pointer hover:underline hover:text-(--text-secondary)" : ""} onClick={isLinkable(currentTrack) ? () => openTrackAlbum(currentTrack) : undefined}>
+													{album}
+												</span>
+											)}
+											{album && releaseYear && " · "}
+											{releaseYear}
+										</span>
+									);
+								})()}
+								<div className="flex items-center gap-2.5 mt-1">
+									<PlayCount title={currentTrack.title} artist={currentTrack.artists} skeleton={false} className="text-sm font-medium text-(--text-tertiary)" />
+									<button
+										className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold cursor-pointer duration-150 ${mode === "credits" ? (dark ? "bg-white text-black" : "bg-black text-white") : dark ? "bg-[#ffffff1f] hover:bg-[#ffffff33]" : "bg-[#00000012] hover:bg-[#00000022]"}`}
+										title={mode === "credits" ? "Hide credits" : "Show song credits"}
+										onClick={() => changeMode("credits")}
+									>
+										<UserGroupIcon className="size-3.5" />
+										Credits
+									</button>
+								</div>
 							</div>
 
 							<div className={`flex w-full flex-col items-center gap-4 ${sidePanel ? "" : "max-w-2xl"}`}>
@@ -430,7 +566,7 @@ export const MusicPlayer = ({ query, className, onClose }: MusicPlayerProps) => 
 							</div>
 						</div>
 
-						{sidePanel && <div className={`flex-1 min-h-0 rounded-3xl ${dark ? "bg-[#00000030]" : "bg-[#ffffff40]"}`}>{mode === "lyrics" ? <LyricsPanel track={currentTrack} /> : <QueuePanel />}</div>}
+						{sidePanel && <div className={`flex-1 min-h-0 rounded-3xl ${dark ? "bg-[#00000030]" : "bg-[#ffffff40]"}`}>{mode === "lyrics" ? <LyricsPanel track={currentTrack} /> : mode === "credits" ? <CreditsPanel track={currentTrack} /> : <QueuePanel />}</div>}
 					</div>
 				)}
 			</div>

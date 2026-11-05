@@ -65,7 +65,7 @@ export const formatTime = (time: number): string => {
 	return hours > 0 ? `${hours}:${minutes.toString().padStart(2, "0")}:${seconds}` : `${minutes}:${seconds}`;
 };
 
-export type PlayerMode = "cover" | "lyrics" | "queue";
+export type PlayerMode = "cover" | "lyrics" | "queue" | "credits";
 
 export const PLAYER_PAGE = "player";
 
@@ -74,7 +74,7 @@ export const isPlayerUrl = (url: string | undefined) => !!url && /^about:(player
 
 export const playerUrl = (mode: PlayerMode) => (mode === "cover" ? "about:music?player" : `about:music?player&${mode}`);
 
-export const parsePlayerMode = (query: string | undefined): PlayerMode => (query === "lyrics" || query === "queue" ? query : "cover");
+export const parsePlayerMode = (query: string | undefined): PlayerMode => (query === "lyrics" || query === "queue" || query === "credits" ? query : "cover");
 
 /** Shows Now Playing in the open Music tab (switching it to `mode`) or opens a new one. */
 export const openMusicPlayer = (mode: PlayerMode = "cover") => {

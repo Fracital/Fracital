@@ -17,6 +17,7 @@ import { artistBanner, artistBio, artistTopTracks, buildRadio, findDeezerArtist,
 import { artistStats, lastfmKey, trackPlays } from "./src/server/music-stats";
 import { getAccountsApp, initAccounts } from "./src/server/accounts";
 import { artistExtras } from "./src/server/artist-extras";
+import { songCredits, songInfo } from "./src/server/song-info";
 
 export function fsrv() {
 	config.config();
@@ -73,6 +74,23 @@ export function fsrv() {
 		if (!name) return c.json({ error: "name is required" }, 400);
 		c.header("Cache-Control", "public, max-age=3600");
 		return c.json(await artistExtras(name));
+	});
+
+	// Now Playing: release date, and credits (loaded when the Credits panel opens).
+	app.get("/api/music/song-info", async c => {
+		const title = c.req.query("title")?.trim();
+		const artist = c.req.query("artist")?.trim();
+		if (!title || !artist) return c.json({ error: "title and artist are required" }, 400);
+		c.header("Cache-Control", "public, max-age=3600");
+		return c.json(await songInfo(title, artist, c.req.query("albumId")?.trim() || undefined));
+	});
+	app.get("/api/music/song-credits", async c => {
+		const title = c.req.query("title")?.trim();
+		const artist = c.req.query("artist")?.trim();
+		if (!title || !artist) return c.json({ error: "title and artist are required" }, 400);
+		const credits = await songCredits(title, artist);
+		c.header("Cache-Control", credits.partial ? "no-store" : "public, max-age=3600");
+		return c.json(credits);
 	});
 
 	// A song's total YouTube streams across its official uploads.

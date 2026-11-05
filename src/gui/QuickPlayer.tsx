@@ -7,27 +7,12 @@ import { ContextMenu, type MenuItem } from "../components/ContextMenu";
 import { AudvisVisualizer } from "../components/AudvisVisualizer";
 import { openMusicPlayer, registerAudio } from "../libs/playback";
 import { openLibraryPage } from "../libs/aboutPages";
+import { isLinkable, openTrackAlbum, openTrackArtist } from "../libs/trackLinks";
 import { PlayCount } from "../components/PlayCount";
 import { RadioStatus } from "../components/RadioStatus";
-import type { Track } from "../types";
 import { ensureSavedLoaded, libraryTrackFromPlayer, useSavedStore } from "../libs/savedLibrary";
 import { CheckCircleIcon, PlusCircleIcon } from "@heroicons/react/24/outline";
 
-/** Digital Library tracks link their artist names to artist pages. */
-const openTrackArtist = (track: Track, name: string) => {
-	const solo = !Array.isArray(track.artists) || track.artists.length === 1;
-	if (solo && track.artistId) openLibraryPage(`artist=${encodeURIComponent(track.artistId)}`, name);
-	else openLibraryPage(`artistName=${encodeURIComponent(name)}`, name);
-};
-
-/** Digital Library tracks link their title to the album or single they come from. */
-const openTrackAlbum = (track: Track) => {
-	if (track.albumId) return openLibraryPage(`album=${encodeURIComponent(track.albumId)}`, track.album || track.title);
-	const artist = Array.isArray(track.artists) ? track.artists[0] : track.artists;
-	openLibraryPage(`track=${encodeURIComponent(track.title)}&by=${encodeURIComponent(artist)}`, track.album || track.title);
-};
-
-const isLinkable = (track: Track | null | undefined) => track?.source === "digital-library";
 
 interface QuickPlayerProps {
 	panelsOpen: boolean;

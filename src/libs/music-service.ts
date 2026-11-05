@@ -281,6 +281,25 @@ export function formatCount(n: number): string {
 	return new Intl.NumberFormat("en", { notation: "compact", maximumSignificantDigits: 3 }).format(n);
 }
 
+// --- Now Playing details ---
+
+export interface SongCredits {
+	sections: { title: string; credits: { name: string; roles: string[] }[] }[];
+	url: string | null;
+}
+
+const songParams = (title: string, artist: string) => `title=${encodeURIComponent(title)}&artist=${encodeURIComponent(artist)}`;
+
+/** Release date of the song's album or single. */
+export function getSongInfo(title: string, artist: string, albumId?: string): Promise<{ releaseDate: string | null }> {
+	return apiFetch(`/song-info?${songParams(title, artist)}${albumId ? `&albumId=${encodeURIComponent(albumId)}` : ""}`);
+}
+
+/** Writers, producers, engineers and musicians (MusicBrainz). */
+export function getSongCredits(title: string, artist: string): Promise<SongCredits> {
+	return apiFetch(`/song-credits?${songParams(title, artist)}`);
+}
+
 export async function getArtistTop(id: string, limit = 20): Promise<{ tracks: MusicTrack[] }> {
 	return apiFetch(`/artist/${encodeURIComponent(id)}/top?limit=${limit}`);
 }

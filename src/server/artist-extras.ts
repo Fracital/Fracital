@@ -21,10 +21,10 @@ const cache = new Map<string, { at: number; value: ArtistExtras }>();
 
 // MusicBrainz allows ~1 request/second per client.
 let mbChain: Promise<unknown> = Promise.resolve();
-function musicbrainz<T>(path: string): Promise<T | null> {
+export function musicbrainz<T>(path: string, timeoutMs = 8000): Promise<T | null> {
 	const run = mbChain.then(async () => {
 		try {
-			const res = await fetch(`https://musicbrainz.org/ws/2/${path}`, { headers: { "User-Agent": UA, Accept: "application/json" }, signal: AbortSignal.timeout(8000) });
+			const res = await fetch(`https://musicbrainz.org/ws/2/${path}`, { headers: { "User-Agent": UA, Accept: "application/json" }, signal: AbortSignal.timeout(timeoutMs) });
 			return res.ok ? ((await res.json()) as T) : null;
 		} catch {
 			return null;

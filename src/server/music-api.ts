@@ -7,6 +7,7 @@ import { artistStats, lastfmKey, trackPlays } from "./music-stats";
 import { getRequestListener } from "@hono/node-server";
 import { getAccountsApp, initAccounts } from "./accounts";
 import { artistExtras } from "./artist-extras";
+import { songCredits, songInfo } from "./song-info";
 import type { SimilarArtist } from "./music-radio";
 
 /** Adds Last.fm listener counts to an artist and its similar artists (no-op without a key). */
@@ -388,6 +389,25 @@ function registerMusicApi(server: { middlewares: ViteDevServer["middlewares"] },
 		if (!name) return sendJson(res, 400, { error: "name is required" });
 		res.setHeader("Cache-Control", "public, max-age=3600");
 		sendJson(res, 200, await artistExtras(name));
+	});
+
+	// Now Playing: release date, and credits (loaded when the Credits panel opens).
+	server.middlewares.use(`${apiBase}/song-info`, async (req, res) => {
+		const q = parseUrl(req.url).searchParams;
+		const title = q.get("title")?.trim();
+		const artist = q.get("artist")?.trim();
+		if (!title || !artist) return sendJson(res, 400, { error: "title and artist are required" });
+		res.setHeader("Cache-Control", "public, max-age=3600");
+		sendJson(res, 200, await songInfo(title, artist, q.get("albumId")?.trim() || undefined));
+	});
+	server.middlewares.use(`${apiBase}/song-credits`, async (req, res) => {
+		const q = parseUrl(req.url).searchParams;
+		const title = q.get("title")?.trim();
+		const artist = q.get("artist")?.trim();
+		if (!title || !artist) return sendJson(res, 400, { error: "title and artist are required" });
+		const credits = await songCredits(title, artist);
+		res.setHeader("Cache-Control", credits.partial ? "no-store" : "public, max-age=3600");
+		sendJson(res, 200, credits);
 	});
 
 	// A song's total YouTube streams across its official uploads.
