@@ -14,6 +14,7 @@ original `HolyText`) and move it into a shadow root or reconstruct it in place.
 > cost, not creating a secret.
 
 All variants share `src/libs/holy-render.ts`:
+
 - `cipherFor(content, encrypted?)` — explicit `encrypted` wins, else the
   build-time registry (`window.__FRX_STRINGS__` / local), else `undefined`
   (⇒ unobfuscated fallback: the plaintext is rendered as-is).
@@ -44,6 +45,7 @@ only an opt-in `ellipsis` prop was added.
 ```
 
 Signature (additions in **bold**):
+
 ```ts
 interface HolyTextProps extends React.HTMLAttributes<HTMLElement> {
 	text?: string;
@@ -74,6 +76,7 @@ text with icons, inline `<a>`/`<strong>`, and `{dynamic}` values.
 ```
 
 Signature:
+
 ```ts
 interface HolyRichProps extends React.HTMLAttributes<HTMLElement> {
   as?: React.ElementType   // default 'span'
@@ -84,6 +87,7 @@ const HolyDynamic: React.FC<React.HTMLAttributes<HTMLSpanElement>>
 
 **Contract** — React cannot tell a literal `"Hi"` from `{value}` that is `"Hi"`
 at runtime, so the distinction is structural:
+
 - A **bare string** child is a static run ⇒ moved into its own closed shadow
   root (one `<HolyText>` span each).
 - Anything **wrapped in an element** passes through untouched and in position —
@@ -106,6 +110,7 @@ surrounding inline/flex flow.
 `text-overflow`, `white-space` and `overflow` are **non-inherited**, so they do
 not cross the shadow boundary from the host. `ellipsis` handles this on **both**
 sides:
+
 - A `<style>` carrying `ELLIPSIS_SHADOW_CSS` is injected into the shadow root and
   the text is wrapped in a `.holy-ellipsis` span, so the shadow-internal box
   truncates.
@@ -146,6 +151,7 @@ return <button ref={ref} {...placeholder} onClick={...}>×</button>
 ```
 
 Signatures:
+
 ```ts
 type HolyAttrName = 'aria-label' | 'aria-description' | 'title' | 'placeholder' | 'alt'
 function useHolyAttr(
@@ -190,6 +196,7 @@ this variant never uses one.
 ```
 
 Signature:
+
 ```ts
 interface HolyProseProps extends React.HTMLAttributes<HTMLElement> {
 	text?: string;
@@ -227,6 +234,7 @@ read on the host, at the cost of less reliable copy on some browsers — prefer
 | Legal prose that must stay selectable/copyable                    | `<HolyProse text=… />` (`light`), or `mode="shadow"` to also hide from `textContent` (§5) |
 
 Notes for the page-application wave:
+
 - Per-string ciphertext is unchanged: register strings as today; unregistered
   strings fall back to plaintext-in-shadow/-light-DOM.
 - `HolyRich`: wrap every dynamic value you want to remain in `textContent`.

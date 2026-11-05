@@ -128,6 +128,7 @@ const GAME_STORES: GameStore[] = [
 ## CORS Requirements
 
 The server hosting your store JSON and game files must:
+
 - Allow CORS requests from Fracital domains
 - Serve files with appropriate Content-Type headers
 - Support range requests for large files (optional but recommended)
@@ -145,11 +146,13 @@ Access-Control-Allow-Headers: Content-Type
 Base games are automatically discovered from the `src/assets/games` directory. They don't need to be added to store JSON files.
 
 Each base game folder should contain:
+
 - `index.json` - Metadata file
 - Game file(s) - `.swf` for Flash, or multiple files for HTML5
 - `index.jpg` (optional) - Thumbnail image
 
 Example `index.json` for base game:
+
 ```json
 {
 	"title": "Game Title",

@@ -26,12 +26,14 @@ The Game Installer provides a user-friendly interface for downloading and instal
 ### 1. Add Game Files to Public Folder
 
 **For Flash Games (.swf):**
+
 ```bash
 # Place your .swf file in public/games/
 public/games/your-game.swf
 ```
 
 **For HTML5 Games:**
+
 ```bash
 # Create a .zip file containing all game files
 # Include index.html as the entry point
@@ -43,6 +45,7 @@ public/games/your-game.zip
 Edit `/src/components/GameInstaller.tsx` and add your game to the `AVAILABLE_GAMES` array:
 
 **Flash Game Example:**
+
 ```typescript
 {
   id: "my-flash-game",           // Unique identifier (folder name)
@@ -57,6 +60,7 @@ Edit `/src/components/GameInstaller.tsx` and add your game to the `AVAILABLE_GAM
 ```
 
 **HTML5 Game Example:**
+
 ```typescript
 {
   id: "my-html5-game",
@@ -76,6 +80,7 @@ Edit `/src/components/GameInstaller.tsx` and add your game to the `AVAILABLE_GAM
 Games are stored in `/games/{game-id}/` with this structure:
 
 **Flash Game:**
+
 ```
 /games/my-flash-game/
   ├── game.swf           # The Flash game file
@@ -83,6 +88,7 @@ Games are stored in `/games/{game-id}/` with this structure:
 ```
 
 **HTML5 Game:**
+
 ```
 /games/my-html5-game/
   ├── index.html         # Game entry point
@@ -92,6 +98,7 @@ Games are stored in `/games/{game-id}/` with this structure:
 ```
 
 **index.json Format:**
+
 ```json
 {
   "title": "Game Title",
@@ -151,17 +158,20 @@ Games are stored in `/games/{game-id}/` with this structure:
 ## Troubleshooting
 
 **Game not appearing:**
+
 - Check console for errors
 - Verify file paths are correct
 - Ensure game ID is unique
 - Check file exists in public/games/
 
 **Download fails:**
+
 - Verify URL is accessible
 - Check CORS if using external URLs
 - Ensure file format is correct (.swf or .zip)
 
 **HTML5 game not loading:**
+
 - Verify index.html is in the root of the .zip
 - Check for absolute URLs (should be relative)
 - Ensure all assets are included in the .zip

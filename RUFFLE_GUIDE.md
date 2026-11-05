@@ -103,6 +103,7 @@ Games are stored in the Filer virtual filesystem at `/games/`. The system automa
 #### Metadata Format
 
 Each game can have an optional JSON metadata file with the same name:
+
 - `game.swf` → `game.json`
 
 \`\`\`json

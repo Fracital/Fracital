@@ -64,6 +64,7 @@ restart"). Once you have it, do the work; don't re-ask. Without it, give the
 parity list and the one line the user needs to say.
 
 **How to apply.**
+
 1. Back up first: `cp -p .env .env.bak-<topic>-$(date +%Y%m%d%H%M%S)`.
 2. Edit only the affected keys in place. Never rewrite the whole file.
 3. Restart only the services that read the changed keys (`pm2 restart fracital
@@ -126,6 +127,7 @@ the only transport protection. Do not describe the DOM or the bundle as secret
 in any user-facing copy.
 
 **Builds stay in compile mode, and the guardrail is always on.**
+
 - The shield VM (`src/server/shield/`) compiles every compilable chunk to
   encrypted bytecode by default. Never set `SHIELD_MODE=manifest` in a
   committed file, CI workflow, or deploy script; it is a local debug opt-out
@@ -146,6 +148,7 @@ in any user-facing copy.
 
 **Every new user-visible string is wrapped.** Follow
 `src/components/common/HOLYTEXT.md`.
+
 - Static text: `<HolyText text="…">` (`ellipsis` for truncated labels). Mixed
   static/dynamic: `<HolyRich>` with `<HolyDynamic>`. Legal/selectable prose:
   `<HolyProse>`.
@@ -158,6 +161,7 @@ in any user-facing copy.
   obfuscation would break assistive tech. "It was easier" is not a reason.
 
 **Every new network path is gated or sealed.**
+
 - The relay is plain wisp over TLS behind the `WISP_GATE_KEY` path gate
   (`/pipe/<key>/`, see `src/server/relay-gate.ts`). Never add a relay path or
   socket that skips the gate, and never name `wisp` in a URL.
