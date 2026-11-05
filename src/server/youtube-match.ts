@@ -33,12 +33,31 @@ export function playbackHints(t: { preview?: string; title: string; artist: stri
 	return params.toString();
 }
 
-type Video = { videoId?: string; title?: string; seconds?: number; views?: number; author?: { name?: string } };
+export type Video = { videoId?: string; title?: string; seconds?: number; views?: number; author?: { name?: string } };
 
 const norm = (s: string) => s.toLowerCase().normalize("NFKD").replace(/[^\p{L}\p{N}]+/gu, " ").trim();
 
 const CLEAN = /\b(clean|radio edit|radio version|censored|edited|kidz bop|family friendly|no swearing)\b/;
 const OFF_VERSION = /\b(live|remix|sped up|slowed|reverb|nightcore|8d|instrumental|acapella|a cappella|karaoke|cover|reaction|loop|1 hour|extended|mashup|bass boosted|chopped|screwed|snippet|teaser|fan made)\b/;
+
+/** Words of a title, for whole-word comparison ("parabol" must not match "parabola"). */
+const words = (s: string) => new Set(norm(s).split(" ").filter(Boolean));
+
+/** What's left of a video title once the artist names and upload labels are removed: ideally just the song. */
+function bareTitle(title: string, artists: string[]): string {
+	let t = norm(title.replace(/[([][^)\]]*[)\]]/g, " ")); // "(Official Audio)", "[Lyrics]", "(feat. X)"
+	for (const a of artists) t = ` ${t} `.replace(` ${a} `, " ").trim();
+	return t
+		.replace(/\b(official|audio|video|music|lyrics?|lyric video|visuali[sz]er|hd|hq|4k|explicit|topic)\b/g, " ")
+		.replace(/\b(feat|ft|featuring|with)\b.*$/, " ")
+		.replace(/\s+/g, " ")
+		.trim();
+}
+
+/** Higher is a better match. Exported for tests. */
+export function scoreVideo(v: Video, hints: MatchHints): number {
+	return score(v, hints);
+}
 
 function score(v: Video, hints: MatchHints): number {
 	const title = norm(v.title ?? "");
@@ -52,11 +71,21 @@ function score(v: Video, hints: MatchHints): number {
 		.filter(a => a.length > 1);
 	let s = 0;
 
-	// It has to be this song (featured-artist words aside: uploads write "ft." / "feat." / "with" differently).
-	const songWords = song.split(" ").filter(w => w.length > 1 && !["feat", "ft", "with", "featuring"].includes(w));
-	const hit = songWords.filter(w => title.includes(w)).length / Math.max(1, songWords.length);
+	// It has to be this song, matched by whole words (featured-artist words aside: uploads write "ft." / "feat." differently).
+	const titleWords = words(v.title ?? "");
+	const songWords = song.split(" ").filter(w => w.length > 0 && !["feat", "ft", "with", "featuring"].includes(w));
+	const hit = songWords.filter(w => titleWords.has(w)).length / Math.max(1, songWords.length);
 	s += hit * 40;
 	if (hit < 0.5) s -= 60;
+	// The upload is titled exactly this song (beats "Parabola" when looking for "Parabol", or "Intro" vs "Intro (Reprise)").
+	const bare = bareTitle(v.title ?? "", artists);
+	const bareSong = bareTitle(hints.title, []);
+	if (bare === bareSong) s += 25;
+	else if (bare && bareSong && bare.replace(/ /g, "") !== bareSong.replace(/ /g, "")) {
+		// Extra words that aren't in the song's title usually mean a different song or version.
+		const extra = [...words(bare)].filter(w => !words(hints.title).has(w) && !artists.some(a => a.split(" ").includes(w)));
+		s -= Math.min(30, extra.length * 10);
+	}
 
 	// Uploaded by the artist (or YouTube's auto-generated "Artist - Topic" album upload). Reuploads rank below.
 	// The artist's own channel is named exactly for them ("Kendrick Lamar", "KendrickLamarVEVO", "Kendrick Lamar - Topic");
@@ -80,7 +109,7 @@ function score(v: Video, hints: MatchHints): number {
 	// Length: clean edits are close, but live/extended takes and wrong songs are not.
 	if (hints.duration && v.seconds) {
 		const off = Math.abs(v.seconds - hints.duration);
-		s += off <= 3 ? 12 : off <= 10 ? 6 : off <= 30 ? 0 : -25;
+		s += off <= 3 ? 15 : off <= 10 ? 8 : off <= 30 ? 0 : off <= 90 ? -25 : -45;
 	}
 	return s;
 }
