@@ -2,6 +2,7 @@ name: "Biome Code Quality Assurance"
 
 on:
   push:
+    branches: [main]
   pull_request:
   workflow_dispatch:
 
@@ -15,8 +16,6 @@ jobs:
     steps:
       - name: "Checkout code"
         uses: "actions/checkout@v5"
-        with:
-          token: "${{ secrets.GITHUB_TOKEN }}"
 
       - name: "Setup Biome"
         uses: "biomejs/setup-biome@v2"
@@ -36,21 +35,23 @@ jobs:
             echo "changed=false" >> $GITHUB_OUTPUT
           fi
 
-      - name: "Commit Git changes"
+      # Push events on main keep the old behavior: the bot commits the fix.
+      # Pull requests never write back — a PR runs untrusted code, and a
+      # contents:write token must not touch it. PRs just fail the check and
+      # tell the author to run `npm run format`.
+      - name: "Commit and push (main pushes only)"
         if: steps.verify-changed-files.outputs.changed == 'true' && github.event_name == 'push'
         run: |
           git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
-            commit -am "chore: auto-fix formatting and linting with Biome"
-
-      - name: "Push Git changes"
-        if: steps.verify-changed-files.outputs.changed == 'true' && github.event_name == 'push'
-        uses: "ad-m/github-push-action@master"
-        with:
-          github_token: "${{ secrets.GITHUB_TOKEN }}"
-          branch: "${{ github.ref_name }}"
+            commit -am "chore: auto-fix formatting with Biome"
+          git push
 
       - name: "Fail if formatting was needed"
         if: steps.verify-changed-files.outputs.changed == 'true'
         run: |
-          echo "Biome formatting changes were needed. Please pull the latest changes."
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "Formatting differs from main. Run 'npm run format' and push again."
+          else
+            echo "Biome formatting changes were needed; committed and pushed. Pull the latest changes."
+          fi
           exit 1
