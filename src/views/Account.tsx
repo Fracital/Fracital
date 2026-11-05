@@ -4,6 +4,7 @@ import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { createId } from "@paralleldrive/cuid2";
 import { useEffect, useRef, useState } from "react";
 import { Input } from "../components/Input";
+import { HolyText } from "../components/common/HolyText";
 import { connectLastfm, disconnectLastfm, getMe, refreshMe, signIn, signOut, signUp, updateProfile, uploadAvatar, type Me } from "../libs/auth";
 import { formatCount } from "../libs/music-service";
 import { useTabsStore } from "../store";
@@ -107,9 +108,9 @@ export const SignIn = ({ initialPage, onSignedIn, branding = DEFAULT_BRANDING }:
 	return (
 		<div className="flex flex-col items-center justify-center size-full gap-5">
 			<div className="flex flex-col items-center gap-2">
-				{branding.icon ?? <img src="/fracital.svg" alt="" className="size-14" />}
-				<h1 className="text-2xl font-bold">{page === "login" ? branding.loginTitle : branding.registerTitle}</h1>
-				<p className="text-sm text-(--text-tertiary) text-center max-w-sm">{branding.subtitle}</p>
+				{branding.icon ?? <img src="/icon.svg" alt="" className="size-14" />}
+				<h1 className="text-2xl font-bold"><HolyText text={page === "login" ? branding.loginTitle : branding.registerTitle} /></h1>
+				<p className="text-sm text-(--text-tertiary) text-center max-w-sm"><HolyText text={branding.subtitle} /></p>
 			</div>
 			<div className="flex flex-col items-center gap-3 w-full max-w-sm">
 				{error && <div className="w-full p-2 bg-red-500/20 border border-red-500/50 rounded-md text-sm text-red-300">{error}</div>}

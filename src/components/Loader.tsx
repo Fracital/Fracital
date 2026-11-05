@@ -1,5 +1,6 @@
 import { ArrowPathIcon } from "@heroicons/react/24/outline";
 import { ArrowLeftIcon, ArrowRightIcon, ChevronLeftIcon, StarIcon } from "@heroicons/react/24/solid";
+import { HolyText } from "./common/HolyText";
 
 interface LoaderProps {
     type?: 'skeleton' | 'dots';
@@ -22,7 +23,7 @@ export const Loader: React.FC<LoaderProps> = ({ type = 'skeleton' }) => {
                 <div className="flex gap-2.5 p-3 pt-0 pr-0 size-full">
                     <div className="bg-[#232323] inset-shadow-[0_0_0_2px_#ffffff10] h-full w-full rounded-xl">
                         <div className="flex flex-col items-center justify-center h-full -mt-14 gap-4 p-4 animate-[pulse_1.6s_infinite]">
-                            <h1 className="text-7xl font-black leading-none text-[#ffffff10]">FRACITAL</h1>
+                            <h1 className="text-7xl font-black leading-none text-[#ffffff10]"><HolyText text="FRACITAL" /></h1>
                             <div className="flex items-center gap-4">
                                 <div className="w-55 h-33 bg-white/10 rounded-2xl"></div>
                                 <div className="w-55 h-33 bg-white/10 rounded-2xl"></div>

@@ -4,6 +4,8 @@ declare global {
 	interface Window {
 		Filer: FilerType;
 		loadLock: boolean;
+		/** Server-injected client config (see src/server/relay-gate.ts). */
+		__FRX_CFG__?: { relay?: string };
 	}
 }
 
@@ -14,7 +16,10 @@ export const SettingsPath = "/settings.json";
 export const MusicPath = "/music/";
 export const GamesPath = "/games/";
 export const isWebOS = false;
-export const wispURL = typeof window !== "undefined" && window.location && window.location.origin ? `${window.location.origin.replace(/^https?:\/\//, window.location.protocol === "https:" ? "wss://" : "ws://")}/wisp/` : "";
+// Relay path comes from the server-injected config (gated, neutral name);
+// the legacy literal is only a fallback for local dev without a gate key.
+const relayPath = typeof window !== "undefined" ? window.__FRX_CFG__?.relay || "/wisp/" : "/wisp/";
+export const wispURL = typeof window !== "undefined" && window.location && window.location.origin ? `${window.location.origin.replace(/^https?:\/\//, window.location.protocol === "https:" ? "wss://" : "ws://")}${relayPath}` : "";
 export const saveLogin = async ({ id, display, handle, avatar }: { id: string; display: string; handle: string; avatar: string | any }) => {
 	await window.fr.fs.promises.writeFile("/account.json", JSON.stringify({ id, display, handle, avatar }), "utf8");
 };

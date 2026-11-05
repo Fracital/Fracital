@@ -349,15 +349,22 @@ const App = () => {
 		}
 	}, [location.pathname]);
 
-	useEffect(() => {
-		const handleKeys = (e: KeyboardEvent) => {
-			const key = e.key.toLowerCase();
+        // The shipped shell's title is neutralized at build time; restore the
+        // brand title once the app boots. The literal is encrypted in the
+        // bundle, so the brand never appears in shipped plaintext.
+        useEffect(() => {
+                document.title = "Fracital";
+        }, []);
 
-			if (platform.includes("Mac")) {
-				if (e.shiftKey && e.ctrlKey && key === "s") {
-					newTab({
-						id: createId(),
-						title: "Settings",
+        useEffect(() => {
+                const handleKeys = (e: KeyboardEvent) => {
+                        const key = e.key.toLowerCase();
+
+                        if (platform.includes("Mac")) {
+                                if (e.shiftKey && e.ctrlKey && key === "s") {
+                                        newTab({
+                                                id: createId(),
+                                                title: "Settings",
 						url: "settings",
 						icon: <Cog6ToothIcon className="size-5" />,
 						displayUrl: "settings",

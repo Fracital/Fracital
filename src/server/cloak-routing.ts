@@ -5,6 +5,8 @@ import type { MiddlewareHandler } from "hono";
 import type { Plugin, UserConfig, ViteDevServer } from "vite";
 import { parseRequestUrl } from "./request-url";
 import { appPath, injectUncloakScript, uncloakScriptPath } from "./cloak-endpoints";
+import { injectClientConfig } from "./relay-gate";
+import { ensureSeedCookie } from "./api-crypto";
 
 // The loader is served at a per-domain path from cloak-endpoints.ts (the decoy's
 // own "analytics" script). This file only owns finding the source on disk.
@@ -20,7 +22,7 @@ export function getUncloakScriptContent(hostname: string): string {
 		if (existsSync(candidate)) {
 			let source = readFileSync(candidate, "utf8");
 			// The client pulls the app shell from the decoy's own per-domain asset URL.
-			source = source.replace(/__FRACITAL_APP_PATH__/g, appPath(hostname));
+			source = source.replace(/__FRX_APP_PATH__/g, appPath(hostname));
 			return source;
 		}
 	}
@@ -202,7 +204,7 @@ export function cloakRouting(options?: { cloaksDir?: string }): Plugin {
 						response.statusCode = 200;
 						response.setHeader("Content-Type", "text/html; charset=utf-8");
 						response.setHeader("Cache-Control", "no-store");
-						response.end(html);
+						response.end(injectClientConfig(html));
 						return;
 					}
 				}
@@ -329,8 +331,9 @@ export function cloakMiddleware(options: { distDir: string; cloaksDir?: string }
 		if (pathname === "/1.html" || pathname === appPath(hostname)) {
 			const distIndex = resolve(options.distDir, "index.html");
 			if (existsSync(distIndex)) {
+				ensureSeedCookie(c);
 				c.header("Cache-Control", "no-store");
-				return c.html(readFileSync(distIndex, "utf8"));
+				return c.html(injectClientConfig(readFileSync(distIndex, "utf8")));
 			}
 			return next();
 		}

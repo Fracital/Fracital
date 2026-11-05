@@ -1,0 +1,85 @@
+{
+  "_README": "Canary plaintext strings that must NOT appear verbatim in shipped client bundles (dist/). These are sensitive brand / domain / proxy-software strings the client-side protection is supposed to hide. This list lives in scripts/ so it is NEVER itself emitted into the bundle. Keep it SMALL and documented: add a string only when it is a real literal currently rendered to users that we commit to hiding. Scanned by scripts/check-plaintext-leaks.mjs (exit 2 on any hit — hard fail, no opt-out).",
+  "canaries": [
+    {
+      "value": "Fracital",
+      "reason": "B1: brand name (index.html metas, sign-in copy, footer, document.title)."
+    },
+    {
+      "value": "fracital",
+      "reason": "B1: brand lowercase (storage keys fracital:*, favicon, URLs)."
+    },
+    {
+      "value": "fracital.xyz",
+      "reason": "B1: direct-host domain."
+    },
+    {
+      "value": "SNOOT",
+      "reason": "B1: author handle (index.html meta description)."
+    },
+    {
+      "value": "NovaAppsInc",
+      "reason": "B1: GitHub org in repo URL (footer/about links)."
+    },
+    {
+      "value": "scramjet",
+      "reason": "P1: proxy engine name (vendored runtime, globals, paths). Renamed by the proxy transform."
+    },
+    {
+      "value": "Scramjet",
+      "reason": "P1: proxy engine name, PascalCase (classes, labels)."
+    },
+    {
+      "value": "wispurr",
+      "reason": "P1: wisp client library name. NOTE: bare 'wisp'/'Wisp' is deliberately NOT a canary (same as abulxt): the bundled wisp client declares identifiers (class names, this.wisp_url) in positions that cannot be veiled. The relay is protected by the gate-keyed opaque path instead."
+    },
+    {
+      "value": "/wisp/",
+      "reason": "P1: relay path fingerprint on the wire."
+    },
+    {
+      "value": "bare-mux",
+      "reason": "P1: transport mux name (hyphen form)."
+    },
+    {
+      "value": "baremux",
+      "reason": "P1: transport mux identifier form."
+    },
+    {
+      "value": "bare_mux",
+      "reason": "P1: transport mux identifier form."
+    },
+    {
+      "value": "BareMux",
+      "reason": "P1: transport mux, PascalCase (UMD global)."
+    },
+    {
+      "value": "epoxy",
+      "reason": "P1: transport engine name (epoxy-tls); wasm export names renamed too."
+    },
+    {
+      "value": "Epoxy",
+      "reason": "P1: transport engine, PascalCase."
+    },
+    {
+      "value": "libcurl",
+      "reason": "P1: transport engine name (libcurl.js, license blocks, sw.js comments)."
+    },
+    {
+      "value": "Libcurl",
+      "reason": "P1: transport engine, PascalCase."
+    },
+    {
+      "value": "ultraviolet",
+      "reason": "P1: other proxy stack name — future-proofing, must never appear."
+    },
+    {
+      "value": "wispUrl",
+      "reason": "P1: client config key fingerprint."
+    },
+    {
+      "value": "__uv$config",
+      "reason": "P1: ultraviolet storage fingerprint — future-proofing."
+    }
+  ]
+}

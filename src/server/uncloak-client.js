@@ -1,9 +1,9 @@
 (() => {
-  const UNCLOAK_STORAGE_KEY = 'fracital:on'
-  const SPLASH_SEEN_KEY = 'fracital:seen'
-  const COOKIE_NAME = 'fracital_on'
+  const UNCLOAK_STORAGE_KEY = 'frx:on'
+  const SPLASH_SEEN_KEY = 'frx:seen'
+  const COOKIE_NAME = 'frx_on'
 
-  const RETRY_STORAGE_KEY = 'fracital:uncloak-retry'
+  const RETRY_STORAGE_KEY = 'frx:uncloak-retry'
 
   let opening = false
   let isOpen = false
@@ -186,8 +186,8 @@
   }
 
   const installDomHooks = () => {
-    if (window.__fracital_dom_hooked) return
-    window.__fracital_dom_hooked = true
+    if (window.__frx_dh) return
+    window.__frx_dh = true
 
     const origGetElementById = document.getElementById.bind(document)
     document.getElementById = function (id) {
@@ -221,7 +221,7 @@
     if (currentHost && currentHost.parentNode) return currentHost
 
     const host = document.createElement('div')
-    host.id = '__fracital_host__'
+    host.id = '__frx_host__'
     Object.assign(host.style, {
       position: 'fixed',
       inset: '0',
@@ -235,7 +235,7 @@
 
     currentShadow = host.attachShadow({ mode: 'closed' })
     try {
-      window.__FRACITAL_SHADOW_ROOT__ = currentShadow
+      window.__frx_sr__ = currentShadow
     } catch (_) {}
 
     new MutationObserver((records) => {
@@ -378,15 +378,15 @@
     if (status) status.textContent = 'Opening site'
 
     // While the app is open, the tab keeps the decoy's identity so a shoulder
-    // glance sees the organization site, not "Fracital". The app may set its
+    // glance sees the organization site, not the app. The app may set its
     // own title once mounted; we re-apply the decoy's shortly after.
     const decoyTitle = document.title
     const decoyFavicon = document.querySelector('link[rel~="icon"]')?.getAttribute('href')
     applyDecoyChrome(decoyTitle, decoyFavicon)
 
     try {
-      // __FRACITAL_APP_PATH__ is substituted per-domain server-side.
-      const response = await fetch('__FRACITAL_APP_PATH__', { cache: 'no-store' })
+      // __FRX_APP_PATH__ is substituted per-domain server-side.
+      const response = await fetch('__FRX_APP_PATH__', { cache: 'no-store' })
       if (!response.ok) throw new Error(`Unable to load page (${response.status})`)
 
       const appHtml = await response.text()
@@ -499,10 +499,9 @@
       lockOuterScroll()
       currentHost.style.display = 'block'
 
-      // Classic scripts (scramjet, the controller API, ruffle, Filer) set
-      // window globals the app expects to exist before its module code runs.
-      // Load them in document order, awaiting each, exactly like a normal
-      // page load would — but only now, after Ctrl+E.
+      // Classic scripts set window globals the app expects to exist before its
+      // module code runs. Load them in document order, awaiting each, exactly
+      // like a normal page load would — but only now, after Ctrl+E.
       const classicScripts = doc.querySelectorAll('script[src]:not([type="module"])')
       for (const oldScript of Array.from(classicScripts)) {
         const src = oldScript.getAttribute('src')

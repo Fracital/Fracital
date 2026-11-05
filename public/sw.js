@@ -1,10 +1,9 @@
-importScripts("/controller/controller.sw.js");
+importScripts("/vendor/ctl.sw.js");
 
-// Buffer request bodies before handing them to the controller, which otherwise transfers `request.body` to the page:
+// Buffer request bodies before handing them to the routing layer, which otherwise transfers `request.body` to the page:
 // - Firefox doesn't implement Request.body, so every POST would be forwarded with an empty body.
-// - In Chromium, the transferred stream of sendBeacon/keepalive requests (e.g. Google's gen_204 pings) never finishes.
-//   Those requests then hang forever, fill libcurl's per-host connection limit and stall every later request to the
-//   same site, which is why clicking Google results stopped navigating.
+// - In Chromium, the transferred stream of sendBeacon/keepalive requests never finishes. Those requests then hang
+//   forever, fill the transport's per-host connection limit and stall every later request to the same site.
 const withBufferedBody = async e => {
 	const request = e.request;
 	if (request.method === "GET" || request.method === "HEAD") return e;

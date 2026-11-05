@@ -10,6 +10,7 @@
  */
 
 import { fileExists, type Track } from "../types";
+import { cryptoFetch } from "./api-crypto-fetch";
 import { rememberArtistNames, splitArtistCredit } from "./artistCredit";
 
 // ============================================================
@@ -149,7 +150,7 @@ function resolveTrackUrls(track: MusicTrack): MusicTrack {
 }
 
 async function apiFetch<T>(path: string, signal?: AbortSignal): Promise<T> {
-	const res = await fetch(`${apiBase()}${path}`, { signal });
+	const res = await cryptoFetch(`${apiBase()}${path}`, { signal });
 	if (!res.ok) {
 		const text = await res.text().catch(() => "");
 		throw new Error(`Music API error ${res.status}: ${text}`);
@@ -248,7 +249,7 @@ export interface LibraryAlbum {
 export type LastfmPeriod = "7day" | "1month" | "3month" | "6month" | "12month" | "overall";
 
 async function meJson<T>(path: string, init: RequestInit = {}): Promise<T> {
-	const res = await fetch(path, { ...init, credentials: "include", headers: init.body ? { "Content-Type": "application/json" } : undefined });
+	const res = await cryptoFetch(path, { ...init, credentials: "include", headers: init.body ? { "Content-Type": "application/json" } : undefined });
 	const data = await res.json().catch(() => ({}));
 	if (!res.ok) throw Object.assign(new Error((data as { error?: string }).error || `Request failed (${res.status})`), { status: res.status });
 	return data as T;

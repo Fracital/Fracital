@@ -5,6 +5,7 @@ import { getRequestListener } from "@hono/node-server";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { cors } from "hono/cors";
 import config from "dotenv";
+import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { version } from "./package.json";
@@ -12,6 +13,8 @@ import { server as wisp } from "@mercuryworkshop/wisp-js/server";
 import { create as createYoutubeDl } from "youtube-dl-exec";
 import ytSearch from "yt-search";
 import { cloakMiddleware } from "./src/server/cloak-routing";
+import { acceptedRelayPath, injectClientConfig, relayPath } from "./src/server/relay-gate";
+import { ensureSeedCookie, sealApiResponses } from "./src/server/api-crypto";
 import { rankAlbums, rankArtists, rankTracks } from "./src/server/music-rank";
 import { artistBanner, artistBio, artistTopTracks, buildRadio, findDeezerArtist, relatedArtists } from "./src/server/music-radio";
 import { artistStats, lastfmKey, trackPlays } from "./src/server/music-stats";
@@ -44,6 +47,9 @@ export function fsrv() {
 	// ============================================================
 	// Fracital Accounts (/api/auth, /api/me)
 	// ============================================================
+	// Seal JSON API responses for negotiating clients (cryptoFetch) and mint the
+	// per-session seed cookie. Mounts ahead of every API route.
+	app.use("/api/*", sealApiResponses());
 	void initAccounts();
 	app.route("/", getAccountsApp());
 
@@ -378,6 +384,22 @@ export function fsrv() {
 		}),
 	);
 
+	// Direct hosts: serve the app shell with the client config (relay gate
+	// path) injected. Read once at startup; dist/index.html is build output.
+	const appShellPath = path.join(__dirname, "dist", "index.html");
+	let appShell = "";
+	try {
+		appShell = injectClientConfig(fs.readFileSync(appShellPath, "utf8"));
+	} catch {
+		console.warn("dist/index.html not found at startup; run npm run build");
+	}
+	app.on("GET", ["/", "/index.html"], c => {
+		if (!appShell) return c.text("Not built", 503);
+		ensureSeedCookie(c);
+		c.header("Cache-Control", "no-store");
+		return c.html(appShell);
+	});
+
 	app.use(
 		"*",
 		serveStatic({
@@ -396,8 +418,12 @@ export function fsrv() {
 		}),
 	);
 
+	// Relay upgrades only on the gated path (legacy /wisp/ when no key is set,
+	// e.g. local dev). Anything else is destroyed without a response.
+	const relay = acceptedRelayPath();
+	if (!relayPath()) console.warn("WISP_GATE_KEY is not set; relay is on the legacy path");
 	server.on("upgrade", (req: IncomingMessage, socket: any, head: Buffer) => {
-		if (req.url?.endsWith("/wisp/")) {
+		if (req.url === relay) {
 			wisp.routeRequest(req as any, socket as any, head as any);
 		} else {
 			socket.destroy();

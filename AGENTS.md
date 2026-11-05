@@ -102,13 +102,76 @@ regression, even if the site still works.
 
 ## Verification before you hand work off
 
-- `npm run build` must succeed.
+- `npm run build` must succeed — this includes the full protection pipeline
+  (prune → obfuscate → canary check → dist-refs check), which hard-fails on any
+  leak. A build that skips `npm run protect` is not shippable.
 - `npx tsc -p tsconfig.json --noEmit` should not add errors beyond the current
   baseline.
 - If you touched the cloak system: run the backend on a spare port with
   `CLOAKS_DIR` set, then check with curl that a decoy `Host` returns the decoy
   page with the loader injected, that the loader and app shell return 200, and
   that a direct host still returns the real app.
+- If you touched the client bundle shape: run `node scripts/boot-check.mjs
+  http://localhost:<port>/` against a production build served by the backend.
+  It must render (rootBytes > 2000) with zero shield errors.
+
+## Obfuscation and security (mandatory for all changes)
+
+The client is protected on purpose. Every change must preserve this. A change
+that adds a plaintext path is a regression, even if it works.
+
+Limits to keep in mind: obfuscation raises the cost of reading the code and
+text. It does not make anything secret from a user with devtools, and TLS is
+the only transport protection. Do not describe the DOM or the bundle as secret
+in any user-facing copy.
+
+**Builds stay in compile mode, and the guardrail is always on.**
+- The shield VM (`src/server/shield/`) compiles every compilable chunk to
+  encrypted bytecode by default. Never set `SHIELD_MODE=manifest` in a
+  committed file, CI workflow, or deploy script; it is a local debug opt-out
+  only.
+- Every build must pass `scripts/check-plaintext-leaks.mjs` (canary scan, exit
+  2 on any hit) and `scripts/check-dist-refs.mjs`. There is no flag to disable
+  either. The canary list is `scripts/canary-list.json`; add any newly
+  user-visible sensitive literal to it. It lives in `scripts/` so it is never
+  itself emitted into the bundle.
+- Chunk and asset names are content hashes only (`assets/[hash]`). Never add a
+  fixed or module-derived bundle name; `check-dist-refs.mjs` hard-fails on one.
+- The vendored proxy runtime ships only as the five renamed files under
+  `dist/vendor/` (see vite.config.ts). Never reintroduce a `/scramjet/`,
+  `/controller/`, or similar fingerprint path, and never ship `.map`/`.d.ts`
+  artifacts (`scripts/prune-dist.mjs` removes them; if it removed something,
+  find out what shipped them).
+- Do not hand-edit anything under `dist/`; it is generated.
+
+**Every new user-visible string is wrapped.** Follow
+`src/components/common/HOLYTEXT.md`.
+- Static text: `<HolyText text="…">` (`ellipsis` for truncated labels). Mixed
+  static/dynamic: `<HolyRich>` with `<HolyDynamic>`. Legal/selectable prose:
+  `<HolyProse>`.
+- Attributes (`aria-label`, `title`, `placeholder`, `alt`): `useHolyAttr` from
+  `src/libs/holy-attr.ts`. Never write a plain static attribute.
+- A new identifying string (brand, product, community) also goes in
+  `src/server/obfuscation-strings.ts` so the registry covers it.
+- A string left plain needs a reason next to it. Valid reasons: it is a data
+  value, a form value the user must read, or a sole accessible name where
+  obfuscation would break assistive tech. "It was easier" is not a reason.
+
+**Every new network path is gated or sealed.**
+- The relay is plain wisp over TLS behind the `WISP_GATE_KEY` path gate
+  (`/pipe/<key>/`, see `src/server/relay-gate.ts`). Never add a relay path or
+  socket that skips the gate, and never name `wisp` in a URL.
+- `/api/*` JSON responses are sealed for negotiating clients by the
+  `sealApiResponses()` middleware and `cryptoFetch` (`src/libs/api-crypto-fetch.ts`).
+  New API call sites use `cryptoFetch`, not bare `fetch`. New server endpoints
+  under `/api/*` are sealed automatically; do not bypass the middleware.
+- A new JS asset that bypasses the obfuscation pipeline needs a documented,
+  specific reason in the pipeline itself.
+
+**Anti-tamper policy.** Wipe-on-detect is only for high-confidence checks: the
+bytecode integrity hash and the `toString` guard. Timing and environment checks
+(`isLikelyBot`, timing, mutation) only flag. Never make them wipe or block a
+user.
 
 ## Repository layout
 

@@ -2,6 +2,7 @@
  * Fracital Accounts client. Accounts live on the Fracital server itself
  * (/api/auth via better-auth, /api/me for profile, settings and Last.fm).
  */
+import { cryptoFetch } from "./api-crypto-fetch";
 import { createAuthClient } from "better-auth/client";
 import { saveLogin, clearLogin } from "../types";
 import { compressImage, IMAGE_PRESETS } from "./compressImage";
@@ -34,7 +35,7 @@ export interface Me {
 
 /** fetch() against the Fracital server with the session cookie. */
 export async function meFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
-	const res = await fetch(path, {
+	const res = await cryptoFetch(path, {
 		...init,
 		credentials: "include",
 		headers: { ...(init.body ? { "Content-Type": "application/json" } : {}), ...init.headers },

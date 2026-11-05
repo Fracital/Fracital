@@ -3,6 +3,7 @@ import { useSettingsStore, useTabsStore } from "../store";
 import { useEffect, useRef, useState } from "react";
 import { handleImg } from "../libs/imgHandler";
 import { appRoot } from "../libs/cloak";
+import { HolyText } from "./common/HolyText";
 
 export interface TabProps {
 	title: string;
@@ -127,7 +128,8 @@ export const Tab = ({ title, url, id, icon }: TabProps) => {
                     `
 						}
 					>
-						{currTitle}
+						{/* Dynamic titles (proxied pages) pass through; registry strings (brand tabs) decrypt. Either way the text reveals into a closed shadow root. */}
+						<HolyText text={currTitle} ellipsis />
 					</span>
 				</div>
 				<XMarkIcon

@@ -37,6 +37,7 @@ import FavoriteModal from "../components/Modal/Favorite";
 import { Modal } from "../components/Modal/Modal";
 import { changeProxy, getLogin, getProxy } from "../types";
 import { getMe, signOut } from "../libs/auth";
+import { runtimeGlobal } from "../libs/proxyGlobals";
 import { ShieldCheckIcon } from "@heroicons/react/24/solid";
 import { ContextMenu, type MenuItem } from "../components/ContextMenu";
 
@@ -291,7 +292,8 @@ const Shell = () => {
 	const [isFullscreen, setIsFullscreen] = useState<boolean>(Boolean(document.fullscreenElement));
 
 	const [uvVersion] = useState("v3.2.10");
-	const sjVersion = typeof $scramjet !== "undefined" ? `v${$scramjet.versionInfo.version}` : "";
+	const runtime = runtimeGlobal();
+	const sjVersion = runtime?.versionInfo?.version ? `v${runtime.versionInfo.version}` : "";
 
 	const { openModal } = useModal();
 	const [isFavorited, setIsFavorited] = useState<boolean>(false);

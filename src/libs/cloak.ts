@@ -7,13 +7,13 @@ let capturedShadowRoot: ShadowRoot | undefined;
  */
 export function getCloakShadowRoot(): ShadowRoot | undefined {
 	if (typeof window === "undefined") return capturedShadowRoot;
-	const holder = window as unknown as { __FRACITAL_SHADOW_ROOT__?: ShadowRoot };
-	if (holder.__FRACITAL_SHADOW_ROOT__) {
-		capturedShadowRoot = holder.__FRACITAL_SHADOW_ROOT__;
+	const holder = window as unknown as { __frx_sr__?: ShadowRoot };
+	if (holder.__frx_sr__) {
+		capturedShadowRoot = holder.__frx_sr__;
 		try {
-			delete holder.__FRACITAL_SHADOW_ROOT__;
+			delete holder.__frx_sr__;
 		} catch {
-			holder.__FRACITAL_SHADOW_ROOT__ = undefined;
+			holder.__frx_sr__ = undefined;
 		}
 	}
 	return capturedShadowRoot;
