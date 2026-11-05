@@ -63,13 +63,12 @@ function albumType(title: string | undefined): "album" | "single" | "ep" {
 	return "album";
 }
 
-
 async function lookupItunesTrack(id: string): Promise<{ title: string; artist: string; preview: string } | null> {
 	try {
 		const res = await fetch(`https://itunes.apple.com/lookup?id=${encodeURIComponent(id)}&entity=song`, { headers: { Accept: "application/json" } });
 		if (!res.ok) return null;
 		const data = (await res.json()) as { results?: ItunesTrack[] };
-		const track = data.results?.find((r) => r.wrapperType === "track");
+		const track = data.results?.find(r => r.wrapperType === "track");
 		if (!track?.trackName || !track?.artistName) return null;
 		return { title: track.trackName, artist: track.artistName, preview: track.previewUrl || "" };
 	} catch {
@@ -107,10 +106,10 @@ function registerMusicApi(server: { middlewares: ViteDevServer["middlewares"] },
 			const albumCatalog = albumRes.ok ? ((await albumRes.json()) as { results?: any[] }) : { results: [] };
 			const artistCatalog = artistRes.ok ? ((await artistRes.json()) as { results?: any[] }) : { results: [] };
 
-			const candidates = (songCatalog.results || []).filter((i) => i.wrapperType === "track" && i.kind === "song" && i.trackName && i.artistName);
+			const candidates = (songCatalog.results || []).filter(i => i.wrapperType === "track" && i.kind === "song" && i.trackName && i.artistName);
 
 			// YouTube resolution is deferred to playback time so search responds instantly.
-			const tracks = candidates.map((item) => ({
+			const tracks = candidates.map(item => ({
 				id: String(item.trackId),
 				title: item.trackName!,
 				artist: item.artistName!,
@@ -168,7 +167,16 @@ function registerMusicApi(server: { middlewares: ViteDevServer["middlewares"] },
 			const songs = results.filter((r: any) => r.wrapperType === "track" && r.kind === "song");
 
 			const album = collection
-				? { id: String(collection.collectionId), title: collection.collectionName, artist: collection.artistName, artistId: collection.artistId ? String(collection.artistId) : undefined, artwork: artworkHd(collection.artworkUrl100), trackCount: collection.trackCount, releaseDate: collection.releaseDate, type: albumType(collection.collectionName) }
+				? {
+						id: String(collection.collectionId),
+						title: collection.collectionName,
+						artist: collection.artistName,
+						artistId: collection.artistId ? String(collection.artistId) : undefined,
+						artwork: artworkHd(collection.artworkUrl100),
+						trackCount: collection.trackCount,
+						releaseDate: collection.releaseDate,
+						type: albumType(collection.collectionName),
+					}
 				: { id, title: "Album", artist: "", artwork: "" };
 
 			const tracks = songs.map((item: any) => ({
@@ -216,17 +224,23 @@ function registerMusicApi(server: { middlewares: ViteDevServer["middlewares"] },
 				known ? findDeezerArtist(name).catch(() => null) : Promise.resolve(null),
 			]);
 			const artist = { id: String(artistRecord?.artistId || id), name, picture: banner || artworkHd(artistRecord?.artworkUrl100 || ""), banner, bio, fans: dzArtist?.nb_fan };
-			const tracks = ranked.length > 0
-				? ranked
-				: (songsData.results || [])
-					.filter((r: any) => r.wrapperType === "track" && r.kind === "song")
-					.map((item: any) => ({
-						id: String(item.trackId), title: item.trackName, artist: item.artistName, album: item.collectionName,
-						albumId: item.collectionId ? String(item.collectionId) : undefined,
-						duration: Math.round((item.trackTimeMillis || 0) / 1000), artwork: artworkHd(item.artworkUrl100),
-						streamUrl: `${apiBase}/playback/${item.trackId}?${playbackHints({ preview: item.previewUrl, title: item.trackName || "", artist: item.artistName || "", explicit: isExplicitEdition(item.trackExplicitness), duration: (item.trackTimeMillis || 0) / 1000 })}`,
-						previewUrl: item.previewUrl || "", explicit: isExplicitEdition(item.trackExplicitness),
-					}));
+			const tracks =
+				ranked.length > 0
+					? ranked
+					: (songsData.results || [])
+							.filter((r: any) => r.wrapperType === "track" && r.kind === "song")
+							.map((item: any) => ({
+								id: String(item.trackId),
+								title: item.trackName,
+								artist: item.artistName,
+								album: item.collectionName,
+								albumId: item.collectionId ? String(item.collectionId) : undefined,
+								duration: Math.round((item.trackTimeMillis || 0) / 1000),
+								artwork: artworkHd(item.artworkUrl100),
+								streamUrl: `${apiBase}/playback/${item.trackId}?${playbackHints({ preview: item.previewUrl, title: item.trackName || "", artist: item.artistName || "", explicit: isExplicitEdition(item.trackExplicitness), duration: (item.trackTimeMillis || 0) / 1000 })}`,
+								previewUrl: item.previewUrl || "",
+								explicit: isExplicitEdition(item.trackExplicitness),
+							}));
 			const albums = (albumsData.results || [])
 				.filter((r: any) => r.wrapperType === "collection")
 				.map((r: any) => ({ id: String(r.collectionId), title: r.collectionName, artist: r.artistName, artwork: artworkHd(r.artworkUrl100), trackCount: r.trackCount, releaseDate: r.releaseDate, type: albumType(r.collectionName), explicit: isExplicitEdition(r.collectionExplicitness) }))
@@ -251,27 +265,31 @@ function registerMusicApi(server: { middlewares: ViteDevServer["middlewares"] },
 			const feed = (await (await fetch(`https://rss.marketingtools.apple.com/api/v2/us/music/most-played/${limit}/songs.json`, { headers: { Accept: "application/json" } })).json()) as {
 				feed?: { results?: { id: string }[] };
 			};
-			const ids = (feed.feed?.results || []).map((r) => r.id).filter(Boolean);
+			const ids = (feed.feed?.results || []).map(r => r.id).filter(Boolean);
 			if (ids.length === 0) throw new Error("Empty charts feed");
 
 			const lookup = (await (await fetch(`https://itunes.apple.com/lookup?id=${ids.join(",")}&entity=song`, { headers: { Accept: "application/json" } })).json()) as { results?: ItunesTrack[] };
-			const byId = new Map((lookup.results || []).filter((r) => r.wrapperType === "track").map((r) => [String(r.trackId), r]));
+			const byId = new Map((lookup.results || []).filter(r => r.wrapperType === "track").map(r => [String(r.trackId), r]));
 
 			const albumMap = new Map<string, any>();
 			// Keep the feed's chart order, not the lookup's.
 			const tracks = ids
-				.map((id) => byId.get(id))
+				.map(id => byId.get(id))
 				.filter((item): item is ItunesTrack => !!item?.trackName && !!item?.artistName)
-				.map((item) => {
-					if (item.collectionId && !albumMap.has(String(item.collectionId)))
-						albumMap.set(String(item.collectionId), { id: String(item.collectionId), title: item.collectionName, artist: item.artistName, artwork: artworkHd(item.artworkUrl100) });
+				.map(item => {
+					if (item.collectionId && !albumMap.has(String(item.collectionId))) albumMap.set(String(item.collectionId), { id: String(item.collectionId), title: item.collectionName, artist: item.artistName, artwork: artworkHd(item.artworkUrl100) });
 					return {
-						id: String(item.trackId), title: item.trackName, artist: item.artistName,
+						id: String(item.trackId),
+						title: item.trackName,
+						artist: item.artistName,
 						artistId: item.artistId ? String(item.artistId) : undefined,
-						album: item.collectionName, albumId: item.collectionId ? String(item.collectionId) : undefined,
-						duration: Math.round((item.trackTimeMillis || 0) / 1000), artwork: artworkHd(item.artworkUrl100),
+						album: item.collectionName,
+						albumId: item.collectionId ? String(item.collectionId) : undefined,
+						duration: Math.round((item.trackTimeMillis || 0) / 1000),
+						artwork: artworkHd(item.artworkUrl100),
 						streamUrl: `${apiBase}/playback/${item.trackId}?${playbackHints({ preview: item.previewUrl, title: item.trackName || "", artist: item.artistName || "", explicit: isExplicitEdition(item.trackExplicitness), duration: (item.trackTimeMillis || 0) / 1000 })}`,
-						previewUrl: item.previewUrl || "", explicit: isExplicitEdition(item.trackExplicitness),
+						previewUrl: item.previewUrl || "",
+						explicit: isExplicitEdition(item.trackExplicitness),
 					};
 				});
 
@@ -295,7 +313,12 @@ function registerMusicApi(server: { middlewares: ViteDevServer["middlewares"] },
 		const warmOnly = reqUrl.searchParams.get("warm") === "1";
 
 		const redirectToFallback = () => {
-			if (fallback.startsWith("https://")) { res.statusCode = 302; res.setHeader("Location", fallback); res.end(); return true; }
+			if (fallback.startsWith("https://")) {
+				res.statusCode = 302;
+				res.setHeader("Location", fallback);
+				res.end();
+				return true;
+			}
 			return false;
 		};
 
@@ -307,16 +330,27 @@ function registerMusicApi(server: { middlewares: ViteDevServer["middlewares"] },
 			const cacheKey = titleHint && artistHint ? `${id}|${artistHint}|${titleHint}`.toLowerCase() : id;
 			videoId = trackToVideoCache.get(cacheKey) || null;
 			if (!videoId) {
-				let title = titleHint, artist = artistHint;
+				let title = titleHint,
+					artist = artistHint;
 				if (!title || !artist) {
 					const info = await lookupItunesTrack(id);
-					if (info) { title = title || info.title; artist = artist || info.artist; if (!fallback && info.preview) fallback = info.preview; }
+					if (info) {
+						title = title || info.title;
+						artist = artist || info.artist;
+						if (!fallback && info.preview) fallback = info.preview;
+					}
 				}
-				if (title && artist) { videoId = await findYoutubeMatch({ title, artist, explicit: explicitHint, duration: durationHint }); if (videoId) trackToVideoCache.set(cacheKey, videoId); }
+				if (title && artist) {
+					videoId = await findYoutubeMatch({ title, artist, explicit: explicitHint, duration: durationHint });
+					if (videoId) trackToVideoCache.set(cacheKey, videoId);
+				}
 			}
 		}
 
-		if (!videoId) { if (redirectToFallback()) return; return sendJson(res, 400, { error: "Could not resolve track" }); }
+		if (!videoId) {
+			if (redirectToFallback()) return;
+			return sendJson(res, 400, { error: "Could not resolve track" });
+		}
 
 		if (warmOnly) {
 			try {
@@ -327,7 +361,8 @@ function registerMusicApi(server: { middlewares: ViteDevServer["middlewares"] },
 					if (url.startsWith("http")) streamUrlCache.set(videoId, { url, at: Date.now() });
 				}
 			} catch {}
-			res.statusCode = 204; return res.end();
+			res.statusCode = 204;
+			return res.end();
 		}
 
 		try {
@@ -345,10 +380,20 @@ function registerMusicApi(server: { middlewares: ViteDevServer["middlewares"] },
 			const upstream = await fetch(streamUrl, { headers });
 			if (!upstream.ok || !upstream.body) throw new Error(`Upstream ${upstream.status}`);
 			res.statusCode = upstream.status;
-			for (const name of ["content-type", "content-length", "content-range", "accept-ranges"]) { const v = upstream.headers.get(name); if (v) res.setHeader(name, v); }
+			for (const name of ["content-type", "content-length", "content-range", "accept-ranges"]) {
+				const v = upstream.headers.get(name);
+				if (v) res.setHeader(name, v);
+			}
 			res.setHeader("Cache-Control", "private, max-age=3600");
 			const reader = upstream.body.getReader();
-			const pump = async () => { while (true) { const { done, value } = await reader.read(); if (done) break; res.write(Buffer.from(value)); } res.end(); };
+			const pump = async () => {
+				while (true) {
+					const { done, value } = await reader.read();
+					if (done) break;
+					res.write(Buffer.from(value));
+				}
+				res.end();
+			};
 			pump().catch(() => res.end());
 			req.on("close", () => reader.cancel().catch(() => {}));
 		} catch (err) {
@@ -439,7 +484,11 @@ export function musicApi(options: { apiBase?: string; resolverPath?: string } = 
 	const resolverPath = options.resolverPath || "yt-dlp";
 	return {
 		name: "fracital-music-api",
-		configureServer(server) { registerMusicApi(server, apiBase, resolverPath); },
-		configurePreviewServer(server) { registerMusicApi(server, apiBase, resolverPath); },
+		configureServer(server) {
+			registerMusicApi(server, apiBase, resolverPath);
+		},
+		configurePreviewServer(server) {
+			registerMusicApi(server, apiBase, resolverPath);
+		},
 	};
 }

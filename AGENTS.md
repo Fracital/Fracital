@@ -175,15 +175,15 @@ user.
 
 ## Repository layout
 
-| Path | What it is |
-|------|-----------|
-| `backend.ts` | The whole server: Hono app, wisp, scramjet, music/library APIs, static serving, cloak middleware. |
-| `src/` | React app (client) + `src/server/` server-side TypeScript. |
-| `src/server/cloak-routing.ts` | Decoy host discovery + serving (vite plugin and production middleware). |
-| `src/server/cloak-endpoints.ts` | Per-domain loader/app URL derivation and HTML injection. |
-| `src/server/uncloak-client.js` | Raw client that opens the app on decoy domains. |
-| `deploy/terp-deploy-gate.sh` | Source of `/usr/local/sbin/fracital-deploy-gate` on terp (installs by hand; CI never updates it). |
-| `.github/workflows/deploy.yml` | Build + deploy to terp on push to `main`. |
+| Path                            | What it is                                                                                        |
+| ------------------------------- | ------------------------------------------------------------------------------------------------- |
+| `backend.ts`                    | The whole server: Hono app, wisp, scramjet, music/library APIs, static serving, cloak middleware. |
+| `src/`                          | React app (client) + `src/server/` server-side TypeScript.                                        |
+| `src/server/cloak-routing.ts`   | Decoy host discovery + serving (vite plugin and production middleware).                           |
+| `src/server/cloak-endpoints.ts` | Per-domain loader/app URL derivation and HTML injection.                                          |
+| `src/server/uncloak-client.js`  | Raw client that opens the app on decoy domains.                                                   |
+| `deploy/terp-deploy-gate.sh`    | Source of `/usr/local/sbin/fracital-deploy-gate` on terp (installs by hand; CI never updates it). |
+| `.github/workflows/deploy.yml`  | Build + deploy to terp on push to `main`.                                                         |
 
 Related checkouts (siblings, separate repos): `~/src/cloaks-fracital` (the
 decoy sites) and `~/src/cloaks-abulxt` (abulxt's decoys — do not serve those

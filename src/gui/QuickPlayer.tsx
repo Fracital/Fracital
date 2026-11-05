@@ -14,7 +14,6 @@ import { clearQueue } from "../libs/radio";
 import { ensureSavedLoaded, libraryTrackFromPlayer, useSavedStore } from "../libs/savedLibrary";
 import { CheckCircleIcon, PlusCircleIcon } from "@heroicons/react/24/outline";
 
-
 interface QuickPlayerProps {
 	panelsOpen: boolean;
 	className?: string;
@@ -494,17 +493,17 @@ export const QuickPlayer = ({ panelsOpen, className, onOpenPanels }: QuickPlayer
 						<>
 							<div className={"relative flex w-full flex-1 min-h-0 overflow-auto gap-2 p-2 px-3 flex-col duration-200"}>
 								<div className="flex flex-col items-start">
-									{currentTrack ? <h1 className={`ml-1.5 mt-1.5 text-2xl font-bold`}>Currently playing</h1> :
+									{currentTrack ? (
+										<h1 className={`ml-1.5 mt-1.5 text-2xl font-bold`}>Currently playing</h1>
+									) : (
 										<>
 											<h1 className={`ml-1.5 mt-1.5 text-2xl font-bold`}>Nothing playing</h1>
-											<button className="flex items-center justify-center gap-2 px-4 py-2 bg-(--tertiary) text-(--text-primary) rounded-md hover:bg-(--accent) duration-150"
-												onClick={() => openLibraryPage("")}
-											>
+											<button className="flex items-center justify-center gap-2 px-4 py-2 bg-(--tertiary) text-(--text-primary) rounded-md hover:bg-(--accent) duration-150" onClick={() => openLibraryPage("")}>
 												<span className="text-xs w-max">Browse Music</span>
 												<MusicalNoteIcon className="size-3" />
 											</button>
 										</>
-									}
+									)}
 									{currentTrack && (
 										<div className="flex items-center justify-between gap-2.5 p-1.5 w-full rounded-lg hover:bg-[#ffffff28] duration-150">
 											{/* min-w-0 down the chain so the title and artists truncate before the buttons. */}
@@ -516,11 +515,7 @@ export const QuickPlayer = ({ panelsOpen, className, onOpenPanels }: QuickPlayer
 													</div>
 												)}
 												<div className="flex flex-col gap-0.5 min-w-0">
-													<h1
-														title={currentTrack.title}
-														className={`truncate text-md font-semibold leading-tight ${isLinkable(currentTrack) ? "cursor-pointer hover:underline" : ""}`}
-														onClick={isLinkable(currentTrack) ? () => openTrackAlbum(currentTrack) : undefined}
-													>
+													<h1 title={currentTrack.title} className={`truncate text-md font-semibold leading-tight ${isLinkable(currentTrack) ? "cursor-pointer hover:underline" : ""}`} onClick={isLinkable(currentTrack) ? () => openTrackAlbum(currentTrack) : undefined}>
 														{currentTrack.title}
 													</h1>
 													{Array.isArray(currentTrack.artists) && currentTrack.artists.length > 1 ? (
@@ -529,10 +524,7 @@ export const QuickPlayer = ({ panelsOpen, className, onOpenPanels }: QuickPlayer
 															<span className="truncate text-xs leading-tight" title={currentTrack.artists.join(", ")}>
 																{currentTrack.artists.map((artist, index) => (
 																	<span key={index}>
-																		<span
-																			className={`duration-150 ${isLinkable(currentTrack) ? "cursor-pointer hover:underline" : ""}`}
-																			onClick={isLinkable(currentTrack) ? () => openTrackArtist(currentTrack, artist) : undefined}
-																		>
+																		<span className={`duration-150 ${isLinkable(currentTrack) ? "cursor-pointer hover:underline" : ""}`} onClick={isLinkable(currentTrack) ? () => openTrackArtist(currentTrack, artist) : undefined}>
 																			{artist}
 																		</span>
 																		{index < currentTrack.artists.length - 1 && ", "}
@@ -1077,19 +1069,13 @@ export const QuickPlayer = ({ panelsOpen, className, onOpenPanels }: QuickPlayer
 								</div>
 								<div className="flex flex-col items-center justify-center w-full gap-2">
 									<div className="flex flex-col items-center gap-1.5">
-										<h1
-											className={`font-bold text-2xl leading-none ${isLinkable(currentTrack) ? "cursor-pointer hover:underline" : ""}`}
-											onClick={isLinkable(currentTrack) ? () => openTrackAlbum(currentTrack!) : undefined}
-										>
+										<h1 className={`font-bold text-2xl leading-none ${isLinkable(currentTrack) ? "cursor-pointer hover:underline" : ""}`} onClick={isLinkable(currentTrack) ? () => openTrackAlbum(currentTrack!) : undefined}>
 											{currentTrack?.title}
 										</h1>
 										<h2 className="font-semibold text-lg text-center leading-none mt-0.5">
 											{(Array.isArray(currentTrack?.artists) ? currentTrack.artists : currentTrack?.artists ? [currentTrack.artists] : []).map((artist, i, all) => (
 												<span key={`${artist}-${i}`}>
-													<span
-														className={isLinkable(currentTrack) ? "cursor-pointer hover:underline" : ""}
-														onClick={isLinkable(currentTrack) ? () => openTrackArtist(currentTrack!, artist) : undefined}
-													>
+													<span className={isLinkable(currentTrack) ? "cursor-pointer hover:underline" : ""} onClick={isLinkable(currentTrack) ? () => openTrackArtist(currentTrack!, artist) : undefined}>
 														{artist}
 													</span>
 													{i < all.length - 1 && ", "}
@@ -1097,11 +1083,7 @@ export const QuickPlayer = ({ panelsOpen, className, onOpenPanels }: QuickPlayer
 											))}
 										</h2>
 										{currentTrack &&
-											(failed ? (
-												<span className="text-xs font-semibold text-[#ff6b6b]">Couldn't play this song{queue.length ? " — skipping" : ""}</span>
-											) : (
-												<PlayCount title={currentTrack.title} artist={currentTrack.artists} skeleton={false} className="text-xs font-medium opacity-60" />
-											))}
+											(failed ? <span className="text-xs font-semibold text-[#ff6b6b]">Couldn't play this song{queue.length ? " — skipping" : ""}</span> : <PlayCount title={currentTrack.title} artist={currentTrack.artists} skeleton={false} className="text-xs font-medium opacity-60" />)}
 									</div>
 									<div className="flex w-full">
 										<div className="relative flex justify-center items-center w-full h-9">

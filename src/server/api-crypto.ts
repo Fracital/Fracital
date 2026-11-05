@@ -14,14 +14,7 @@
 
 import type { Context, MiddlewareHandler } from "hono";
 import { generateSeed, encodeSeed, WCS_COOKIE_NAME } from "../libs/seal-codec";
-import {
-	deriveApiKeys,
-	sealText,
-	seedFromCookieHeader,
-	API_CRYPTO_HEADER,
-	API_CRYPTO_TOKEN,
-	API_CRYPTO_CONTENT_TYPE,
-} from "../libs/api-crypto-codec";
+import { deriveApiKeys, sealText, seedFromCookieHeader, API_CRYPTO_HEADER, API_CRYPTO_TOKEN, API_CRYPTO_CONTENT_TYPE } from "../libs/api-crypto-codec";
 
 function hasSeedCookie(c: Context): boolean {
 	return seedFromCookieHeader(c.req.header("cookie")) !== null;
@@ -65,12 +58,7 @@ interface MockResponse {
  * false when the caller should send plaintext. Mirrors abulxt's helper so the
  * codec test suite exercises the exact negotiation/ sealing path.
  */
-export function writeSealedJson(
-	request: { headers: Record<string, unknown> },
-	response: MockResponse,
-	bodyText: string,
-	status = 200,
-): boolean {
+export function writeSealedJson(request: { headers: Record<string, unknown> }, response: MockResponse, bodyText: string, status = 200): boolean {
 	if (!clientAcceptsCrypto(request)) return false;
 	const seed = seedFromCookieHeader(request.headers.cookie as string | undefined);
 	if (!seed) return false;

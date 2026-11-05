@@ -559,111 +559,111 @@ const Games = ({ query, className }: GamesProps) => {
 					) : (
 						<div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 auto-rows-min gap-3 md:gap-4">
 							{loading ? (
-							<div className="col-span-full flex flex-col items-center justify-center py-20 gap-4">
-								<div className={`size-12 border-4 border-(--accent) border-t-transparent rounded-full animate-spin`}></div>
-								<span className="text-lg font-semibold text-(--text-secondary)">Loading games...</span>
-							</div>
-						) : displayedGames.length > 0 ? (
-							displayedGames.map(game => (
-								<div key={game.id} className={`group flex flex-col gap-3 p-3 md:p-4 rounded-xl md:rounded-2xl cursor-pointer duration-150 ${settings.brightness === "dark" ? "bg-[#ffffff10] hover:bg-[#ffffff18]" : "bg-[#00000010] hover:bg-[#00000018]"}`} onClick={() => setSelectedGame(game)}>
-									<div className="relative aspect-video bg-(--primary) rounded-lg overflow-hidden shrink-0">
-										<span className="absolute top-2 right-2 text-xs md:text-sm text-(--text-tertiary) p-1 px-2 md:p-1.5 md:px-2 leading-none rounded-md z-10 bg-(--tertiary) capitalize">{game.type === "html5" ? "HTML" : game.type}</span>
-										{game.thumbnail ? (
-											<div className="relative w-full h-full bg-(--primary) flex items-center justify-center">
-												<PlayIcon className="absolute size-10 md:size-12 text-(--text-tertiary) group-hover:text-(--text-primary) duration-150" />
-												<img src={game.thumbnail} alt={game.title} className="w-full h-full object-cover" />
-											</div>
-										) : (
-											<div className="flex items-center justify-center w-full h-full">
-												<PlayIcon className="size-10 md:size-12 text-(--text-tertiary) group-hover:text-(--text-primary) duration-150" />
-											</div>
-										)}
-									</div>
-									<div className="flex flex-col gap-1.5 md:gap-1 flex-1 min-h-0">
-										<div className="flex items-start gap-2">
-											<h3 className="text-base md:text-lg font-bold line-clamp-2 flex-1 min-w-0">{game.title}</h3>
-											<span className="shrink-0 p-1 px-1.5 md:p-1.5 md:px-2 leading-none text-xs md:text-sm font-semibold text-(--text-tertiary) bg-(--tertiary) rounded-md">v{game.version || "1.0"}</span>
-										</div>
-										<span className="text-xs md:text-sm text-(--text-tertiary) truncate">{game.author || "Unknown"}</span>
-										<div className="flex flex-wrap gap-1 min-h-6">
-											{game.tags && game.tags.length > 0 ? (
-												<>
-													{game.tags.slice(0, 3).map((tag, index) => (
-														<span key={index} className="p-1.5 md:p-2 text-xs font-semibold leading-none text-(--text-tertiary) bg-(--tertiary) rounded-md">
-															{tag}
-														</span>
-													))}
-													{game.tags.length > 3 && <span className="p-1.5 md:p-2 text-xs font-semibold leading-none text-(--text-tertiary) bg-(--tertiary) rounded-md">+{game.tags.length - 3}</span>}
-												</>
-											) : null}
-										</div>
-									</div>
-									<div className="flex items-center justify-between gap-1.5 md:gap-2 pt-1 mt-auto">
-										<div className="flex items-center gap-1.5">
-											<button
-												className={`p-2 md:px-3 md:py-1.5 text-sm rounded-md font-semibold duration-150 ${settings.brightness === "dark" ? "bg-[#ffffff10] hover:bg-[#ffffff18] text-(--text-primary)" : "bg-[#00000010] hover:bg-[#00000018] text-(--text-primary)"}`}
-												onClick={e => {
-													e.stopPropagation();
-													toggleFavorite(game);
-												}}
-												title={game.isFavorite ? "Remove from favorites" : "Add to favorites"}
-											>
-												{game.isFavorite ? <StarIcon className="size-3.5 md:size-4 text-yellow-400" /> : <StarOutlineIcon className="size-3.5 md:size-4 stroke-2 stroke-current" />}
-											</button>
-											<button
-												className={`p-2 md:px-3 md:py-1.5 text-sm rounded-md font-semibold duration-150 ${settings.brightness === "dark" ? "bg-[#ffffff10] hover:bg-[#ffffff18] text-(--text-primary)" : "bg-[#00000010] hover:bg-[#00000018] text-(--text-primary)"}`}
-												onClick={e => {
-													e.stopPropagation();
-													setEditModal({
-														game,
-														title: game.title,
-														thumbnail: game.thumbnail,
-														author: game.author || "",
-														version: game.version || "1.0",
-														description: game.description || "",
-														tags: game.tags?.join(", ") || "",
-													});
-												}}
-											>
-												<PencilIcon className="size-3.5 md:size-4" />
-											</button>
-										</div>
-										<button
-											className={`p-2 md:px-3 md:py-1.5 text-sm rounded-md font-semibold duration-150 ${settings.brightness === "dark" ? "bg-[#ffffff10] hover:bg-[#ffffff18] text-(--text-primary)" : "bg-[#00000010] hover:bg-[#00000018] text-(--text-primary)"}`}
-											onClick={e => {
-												e.stopPropagation();
-												if (deleting) return;
-												deleteGame(game);
-											}}
-										>
-											<TrashIcon className="size-3.5 md:size-4" />
-										</button>
-									</div>
+								<div className="col-span-full flex flex-col items-center justify-center py-20 gap-4">
+									<div className={`size-12 border-4 border-(--accent) border-t-transparent rounded-full animate-spin`}></div>
+									<span className="text-lg font-semibold text-(--text-secondary)">Loading games...</span>
 								</div>
-							))
-						) : (
-							<div className="col-span-full flex flex-col items-center justify-center h-full py-20 gap-4">
-								{activeTab === "favorites" ? (
-									<>
-										<StarIcon className="size-16 text-(--text-tertiary)" />
-										<div className="flex flex-col items-center gap-2">
-											<h2 className="text-2xl font-bold text-(--text-secondary)">No favorites yet</h2>
-											<p className="text-(--text-tertiary)">Star games to add them to your favorites</p>
+							) : displayedGames.length > 0 ? (
+								displayedGames.map(game => (
+									<div key={game.id} className={`group flex flex-col gap-3 p-3 md:p-4 rounded-xl md:rounded-2xl cursor-pointer duration-150 ${settings.brightness === "dark" ? "bg-[#ffffff10] hover:bg-[#ffffff18]" : "bg-[#00000010] hover:bg-[#00000018]"}`} onClick={() => setSelectedGame(game)}>
+										<div className="relative aspect-video bg-(--primary) rounded-lg overflow-hidden shrink-0">
+											<span className="absolute top-2 right-2 text-xs md:text-sm text-(--text-tertiary) p-1 px-2 md:p-1.5 md:px-2 leading-none rounded-md z-10 bg-(--tertiary) capitalize">{game.type === "html5" ? "HTML" : game.type}</span>
+											{game.thumbnail ? (
+												<div className="relative w-full h-full bg-(--primary) flex items-center justify-center">
+													<PlayIcon className="absolute size-10 md:size-12 text-(--text-tertiary) group-hover:text-(--text-primary) duration-150" />
+													<img src={game.thumbnail} alt={game.title} className="w-full h-full object-cover" />
+												</div>
+											) : (
+												<div className="flex items-center justify-center w-full h-full">
+													<PlayIcon className="size-10 md:size-12 text-(--text-tertiary) group-hover:text-(--text-primary) duration-150" />
+												</div>
+											)}
 										</div>
-									</>
-								) : (
-									<>
-										<PlayIcon className="size-16 text-(--text-tertiary)" />
-										<div className="flex flex-col items-center gap-2">
-											<h2 className="text-2xl font-bold text-(--text-secondary)">No games yet</h2>
-											<p className="text-(--text-tertiary)">Add some games to get started or go to the Download tab to install base games</p>
+										<div className="flex flex-col gap-1.5 md:gap-1 flex-1 min-h-0">
+											<div className="flex items-start gap-2">
+												<h3 className="text-base md:text-lg font-bold line-clamp-2 flex-1 min-w-0">{game.title}</h3>
+												<span className="shrink-0 p-1 px-1.5 md:p-1.5 md:px-2 leading-none text-xs md:text-sm font-semibold text-(--text-tertiary) bg-(--tertiary) rounded-md">v{game.version || "1.0"}</span>
+											</div>
+											<span className="text-xs md:text-sm text-(--text-tertiary) truncate">{game.author || "Unknown"}</span>
+											<div className="flex flex-wrap gap-1 min-h-6">
+												{game.tags && game.tags.length > 0 ? (
+													<>
+														{game.tags.slice(0, 3).map((tag, index) => (
+															<span key={index} className="p-1.5 md:p-2 text-xs font-semibold leading-none text-(--text-tertiary) bg-(--tertiary) rounded-md">
+																{tag}
+															</span>
+														))}
+														{game.tags.length > 3 && <span className="p-1.5 md:p-2 text-xs font-semibold leading-none text-(--text-tertiary) bg-(--tertiary) rounded-md">+{game.tags.length - 3}</span>}
+													</>
+												) : null}
+											</div>
 										</div>
-									</>
-								)}
-							</div>
-						)}
-					</div>
-				)}
+										<div className="flex items-center justify-between gap-1.5 md:gap-2 pt-1 mt-auto">
+											<div className="flex items-center gap-1.5">
+												<button
+													className={`p-2 md:px-3 md:py-1.5 text-sm rounded-md font-semibold duration-150 ${settings.brightness === "dark" ? "bg-[#ffffff10] hover:bg-[#ffffff18] text-(--text-primary)" : "bg-[#00000010] hover:bg-[#00000018] text-(--text-primary)"}`}
+													onClick={e => {
+														e.stopPropagation();
+														toggleFavorite(game);
+													}}
+													title={game.isFavorite ? "Remove from favorites" : "Add to favorites"}
+												>
+													{game.isFavorite ? <StarIcon className="size-3.5 md:size-4 text-yellow-400" /> : <StarOutlineIcon className="size-3.5 md:size-4 stroke-2 stroke-current" />}
+												</button>
+												<button
+													className={`p-2 md:px-3 md:py-1.5 text-sm rounded-md font-semibold duration-150 ${settings.brightness === "dark" ? "bg-[#ffffff10] hover:bg-[#ffffff18] text-(--text-primary)" : "bg-[#00000010] hover:bg-[#00000018] text-(--text-primary)"}`}
+													onClick={e => {
+														e.stopPropagation();
+														setEditModal({
+															game,
+															title: game.title,
+															thumbnail: game.thumbnail,
+															author: game.author || "",
+															version: game.version || "1.0",
+															description: game.description || "",
+															tags: game.tags?.join(", ") || "",
+														});
+													}}
+												>
+													<PencilIcon className="size-3.5 md:size-4" />
+												</button>
+											</div>
+											<button
+												className={`p-2 md:px-3 md:py-1.5 text-sm rounded-md font-semibold duration-150 ${settings.brightness === "dark" ? "bg-[#ffffff10] hover:bg-[#ffffff18] text-(--text-primary)" : "bg-[#00000010] hover:bg-[#00000018] text-(--text-primary)"}`}
+												onClick={e => {
+													e.stopPropagation();
+													if (deleting) return;
+													deleteGame(game);
+												}}
+											>
+												<TrashIcon className="size-3.5 md:size-4" />
+											</button>
+										</div>
+									</div>
+								))
+							) : (
+								<div className="col-span-full flex flex-col items-center justify-center h-full py-20 gap-4">
+									{activeTab === "favorites" ? (
+										<>
+											<StarIcon className="size-16 text-(--text-tertiary)" />
+											<div className="flex flex-col items-center gap-2">
+												<h2 className="text-2xl font-bold text-(--text-secondary)">No favorites yet</h2>
+												<p className="text-(--text-tertiary)">Star games to add them to your favorites</p>
+											</div>
+										</>
+									) : (
+										<>
+											<PlayIcon className="size-16 text-(--text-tertiary)" />
+											<div className="flex flex-col items-center gap-2">
+												<h2 className="text-2xl font-bold text-(--text-secondary)">No games yet</h2>
+												<p className="text-(--text-tertiary)">Add some games to get started or go to the Download tab to install base games</p>
+											</div>
+										</>
+									)}
+								</div>
+							)}
+						</div>
+					)}
 				</>
 			) : (
 				<>

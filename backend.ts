@@ -68,7 +68,6 @@ export function fsrv() {
 	// iTunes marks singles and EPs with a title suffix.
 	const albumType = (title: string | undefined): "album" | "single" | "ep" => (/ - single$/i.test(title || "") ? "single" : / - ep$/i.test(title || "") ? "ep" : "album");
 
-
 	// Social links + gallery photos for the artist page hero (loaded after the page).
 	app.get("/api/music/artist-extras", async c => {
 		const name = c.req.query("name")?.trim();
@@ -136,7 +135,6 @@ export function fsrv() {
 		}
 	});
 
-
 	app.get("/api/music/search", async c => {
 		const q = c.req.query("q")?.trim();
 		if (!q) return c.json({ tracks: [], albums: [], artists: [] });
@@ -156,20 +154,30 @@ export function fsrv() {
 			const candidates = (songCatalog.results || []).filter((i: any) => i.wrapperType === "track" && i.kind === "song" && i.trackName && i.artistName);
 			// YouTube resolution is deferred to playback time so search responds instantly.
 			const tracks = candidates.map((item: any) => ({
-				id: String(item.trackId), title: item.trackName, artist: item.artistName,
+				id: String(item.trackId),
+				title: item.trackName,
+				artist: item.artistName,
 				artistId: item.artistId ? String(item.artistId) : undefined,
-				album: item.collectionName || undefined, albumId: item.collectionId ? String(item.collectionId) : undefined,
-				duration: Math.round((item.trackTimeMillis || 0) / 1000), artwork: artworkHd(item.artworkUrl100),
+				album: item.collectionName || undefined,
+				albumId: item.collectionId ? String(item.collectionId) : undefined,
+				duration: Math.round((item.trackTimeMillis || 0) / 1000),
+				artwork: artworkHd(item.artworkUrl100),
 				// Title/artist hints let playback resolve YouTube without another iTunes lookup.
 				streamUrl: `/api/music/playback/${item.trackId}?${playbackHints({ preview: item.previewUrl, title: item.trackName || "", artist: item.artistName || "", explicit: isExplicitEdition(item.trackExplicitness), duration: (item.trackTimeMillis || 0) / 1000 })}`,
-				previewUrl: item.previewUrl || "", explicit: isExplicitEdition(item.trackExplicitness),
+				previewUrl: item.previewUrl || "",
+				explicit: isExplicitEdition(item.trackExplicitness),
 			}));
 			const albums = (albumCatalog.results || [])
 				.filter((r: any) => r.wrapperType === "collection" && r.collectionName)
 				.map((r: any) => ({
-					id: String(r.collectionId), title: r.collectionName, artist: r.artistName || "",
+					id: String(r.collectionId),
+					title: r.collectionName,
+					artist: r.artistName || "",
 					artistId: r.artistId ? String(r.artistId) : undefined,
-					artwork: artworkHd(r.artworkUrl100), trackCount: r.trackCount, releaseDate: r.releaseDate, type: albumType(r.collectionName),
+					artwork: artworkHd(r.artworkUrl100),
+					trackCount: r.trackCount,
+					releaseDate: r.releaseDate,
+					type: albumType(r.collectionName),
 				}));
 			// Profile pictures come from Deezer (cached); iTunes has none.
 			const artists = await Promise.all(
@@ -182,7 +190,9 @@ export function fsrv() {
 					}),
 			);
 			return c.json({ tracks: rankTracks(q, tracks), albums: rankAlbums(q, albums), artists: rankArtists(q, artists) });
-		} catch (err: any) { return c.json({ error: err.message }, 502); }
+		} catch (err: any) {
+			return c.json({ error: err.message }, 502);
+		}
 	});
 
 	app.get("/api/music/album/:id", async c => {
@@ -194,16 +204,25 @@ export function fsrv() {
 			const results = catalog.results || [];
 			const col = results.find((r: any) => r.wrapperType === "collection");
 			const songs = results.filter((r: any) => r.wrapperType === "track" && r.kind === "song");
-			const album = col ? { id: String(col.collectionId), title: col.collectionName, artist: col.artistName, artistId: col.artistId ? String(col.artistId) : undefined, artwork: artworkHd(col.artworkUrl100), trackCount: col.trackCount, releaseDate: col.releaseDate, type: albumType(col.collectionName) } : { id, title: "Album", artist: "", artwork: "" };
+			const album = col
+				? { id: String(col.collectionId), title: col.collectionName, artist: col.artistName, artistId: col.artistId ? String(col.artistId) : undefined, artwork: artworkHd(col.artworkUrl100), trackCount: col.trackCount, releaseDate: col.releaseDate, type: albumType(col.collectionName) }
+				: { id, title: "Album", artist: "", artwork: "" };
 			const tracks = songs.map((item: any) => ({
-				id: String(item.trackId), title: item.trackName || "Unknown", artist: item.artistName || "",
-				album: item.collectionName || album.title, albumId: String(item.collectionId || id),
-				duration: Math.round((item.trackTimeMillis || 0) / 1000), artwork: artworkHd(item.artworkUrl100) || album.artwork,
+				id: String(item.trackId),
+				title: item.trackName || "Unknown",
+				artist: item.artistName || "",
+				album: item.collectionName || album.title,
+				albumId: String(item.collectionId || id),
+				duration: Math.round((item.trackTimeMillis || 0) / 1000),
+				artwork: artworkHd(item.artworkUrl100) || album.artwork,
 				streamUrl: `/api/music/playback/${item.trackId}?${playbackHints({ preview: item.previewUrl, title: item.trackName || "", artist: item.artistName || "", explicit: isExplicitEdition(item.trackExplicitness), duration: (item.trackTimeMillis || 0) / 1000 })}`,
-				previewUrl: item.previewUrl || "", explicit: isExplicitEdition(item.trackExplicitness),
+				previewUrl: item.previewUrl || "",
+				explicit: isExplicitEdition(item.trackExplicitness),
 			}));
 			return c.json({ album, tracks });
-		} catch (err: any) { return c.json({ error: err.message }, 502); }
+		} catch (err: any) {
+			return c.json({ error: err.message }, 502);
+		}
 	});
 
 	app.get("/api/music/artist/:id", async c => {
@@ -228,18 +247,36 @@ export function fsrv() {
 				known ? findDeezerArtist(artistName).catch(() => null) : Promise.resolve(null),
 			]);
 			const artist = { id: String(rec?.artistId || id), name: artistName, picture: banner || artworkHd(rec?.artistId ? rec?.artworkUrl100 : ""), banner, bio, fans: dzArtist?.nb_fan };
-			const tracks = ranked.length > 0
-				? ranked
-				: (sd.results || []).filter((r: any) => r.wrapperType === "track" && r.kind === "song").map((item: any) => ({
-					id: String(item.trackId), title: item.trackName, artist: item.artistName, album: item.collectionName,
-					albumId: item.collectionId ? String(item.collectionId) : undefined,
-					duration: Math.round((item.trackTimeMillis || 0) / 1000), artwork: artworkHd(item.artworkUrl100),
-					streamUrl: `/api/music/playback/${item.trackId}?${playbackHints({ preview: item.previewUrl, title: item.trackName || "", artist: item.artistName || "", explicit: isExplicitEdition(item.trackExplicitness), duration: (item.trackTimeMillis || 0) / 1000 })}`,
-					previewUrl: item.previewUrl || "", explicit: isExplicitEdition(item.trackExplicitness),
-				}));
-			const albums = (ad.results || []).filter((r: any) => r.wrapperType === "collection").map((r: any) => ({
-				id: String(r.collectionId), title: r.collectionName, artist: r.artistName, artwork: artworkHd(r.artworkUrl100), trackCount: r.trackCount, releaseDate: r.releaseDate, type: albumType(r.collectionName), explicit: isExplicitEdition(r.collectionExplicitness),
-			})).sort((a: any, b: any) => new Date(b.releaseDate || 0).getTime() - new Date(a.releaseDate || 0).getTime());
+			const tracks =
+				ranked.length > 0
+					? ranked
+					: (sd.results || [])
+							.filter((r: any) => r.wrapperType === "track" && r.kind === "song")
+							.map((item: any) => ({
+								id: String(item.trackId),
+								title: item.trackName,
+								artist: item.artistName,
+								album: item.collectionName,
+								albumId: item.collectionId ? String(item.collectionId) : undefined,
+								duration: Math.round((item.trackTimeMillis || 0) / 1000),
+								artwork: artworkHd(item.artworkUrl100),
+								streamUrl: `/api/music/playback/${item.trackId}?${playbackHints({ preview: item.previewUrl, title: item.trackName || "", artist: item.artistName || "", explicit: isExplicitEdition(item.trackExplicitness), duration: (item.trackTimeMillis || 0) / 1000 })}`,
+								previewUrl: item.previewUrl || "",
+								explicit: isExplicitEdition(item.trackExplicitness),
+							}));
+			const albums = (ad.results || [])
+				.filter((r: any) => r.wrapperType === "collection")
+				.map((r: any) => ({
+					id: String(r.collectionId),
+					title: r.collectionName,
+					artist: r.artistName,
+					artwork: artworkHd(r.artworkUrl100),
+					trackCount: r.trackCount,
+					releaseDate: r.releaseDate,
+					type: albumType(r.collectionName),
+					explicit: isExplicitEdition(r.collectionExplicitness),
+				}))
+				.sort((a: any, b: any) => new Date(b.releaseDate || 0).getTime() - new Date(a.releaseDate || 0).getTime());
 			// Last.fm listener counts (no-op without LASTFM_API_KEY).
 			const [mainStats, ...similarStats] = await Promise.all([artistStats(artistName), ...similar.map(s => artistStats(s.name))]);
 			return c.json({
@@ -248,7 +285,9 @@ export function fsrv() {
 				tracks,
 				albums,
 			});
-		} catch (err: any) { return c.json({ error: err.message }, 502); }
+		} catch (err: any) {
+			return c.json({ error: err.message }, 502);
+		}
 	});
 
 	// Real Apple Music most-played chart, resolved to full tracks and cached.
@@ -273,22 +312,28 @@ export function fsrv() {
 				.map(id => byId.get(id))
 				.filter((item: any) => item?.trackName && item?.artistName)
 				.map((item: any) => {
-					if (item.collectionId && !albumMap.has(String(item.collectionId)))
-						albumMap.set(String(item.collectionId), { id: String(item.collectionId), title: item.collectionName, artist: item.artistName, artwork: artworkHd(item.artworkUrl100) });
+					if (item.collectionId && !albumMap.has(String(item.collectionId))) albumMap.set(String(item.collectionId), { id: String(item.collectionId), title: item.collectionName, artist: item.artistName, artwork: artworkHd(item.artworkUrl100) });
 					return {
-						id: String(item.trackId), title: item.trackName, artist: item.artistName,
+						id: String(item.trackId),
+						title: item.trackName,
+						artist: item.artistName,
 						artistId: item.artistId ? String(item.artistId) : undefined,
-						album: item.collectionName, albumId: item.collectionId ? String(item.collectionId) : undefined,
-						duration: Math.round((item.trackTimeMillis || 0) / 1000), artwork: artworkHd(item.artworkUrl100),
+						album: item.collectionName,
+						albumId: item.collectionId ? String(item.collectionId) : undefined,
+						duration: Math.round((item.trackTimeMillis || 0) / 1000),
+						artwork: artworkHd(item.artworkUrl100),
 						streamUrl: `/api/music/playback/${item.trackId}?${playbackHints({ preview: item.previewUrl, title: item.trackName || "", artist: item.artistName || "", explicit: isExplicitEdition(item.trackExplicitness), duration: (item.trackTimeMillis || 0) / 1000 })}`,
-						previewUrl: item.previewUrl || "", explicit: isExplicitEdition(item.trackExplicitness),
+						previewUrl: item.previewUrl || "",
+						explicit: isExplicitEdition(item.trackExplicitness),
 					};
 				});
 
 			const payload = { tracks, albums: [...albumMap.values()].slice(0, 12) };
 			chartsCache = { at: Date.now(), payload };
 			return c.json(payload);
-		} catch (err: any) { return c.json({ error: err.message }, 502); }
+		} catch (err: any) {
+			return c.json({ error: err.message }, 502);
+		}
 	});
 
 	app.get("/api/music/playback/:id", async c => {
@@ -301,22 +346,32 @@ export function fsrv() {
 		const warm = c.req.query("warm") === "1";
 
 		let videoId: string | null = null;
-		if (videoIdPattern.test(id)) { videoId = id; }
+		if (videoIdPattern.test(id)) {
+			videoId = id;
+		}
 		// Numeric catalog ids, or lfm-<hash> for Last.fm songs that resolve via the title/artist hints.
 		else if (/^(\d+|lfm-[a-f0-9]+)$/.test(id)) {
 			const cacheKey = titleHint && artistHint ? `${id}|${artistHint}|${titleHint}`.toLowerCase() : id;
 			videoId = trackToVideoCache.get(cacheKey) || null;
 			if (!videoId) {
-				let t = titleHint, a = artistHint;
+				let t = titleHint,
+					a = artistHint;
 				if (!t || !a) {
 					try {
 						const lr = await fetch(`https://itunes.apple.com/lookup?id=${id}&entity=song`);
 						const ld = (await lr.json()) as { results?: any[] };
 						const tr = ld.results?.find((r: any) => r.wrapperType === "track");
-						if (tr) { t = t || tr.trackName; a = a || tr.artistName; if (!fallback && tr.previewUrl) fallback = tr.previewUrl; }
+						if (tr) {
+							t = t || tr.trackName;
+							a = a || tr.artistName;
+							if (!fallback && tr.previewUrl) fallback = tr.previewUrl;
+						}
 					} catch {}
 				}
-				if (t && a) { videoId = await findYoutubeMatch({ title: t, artist: a, explicit: explicitHint, duration: durationHint }); if (videoId) trackToVideoCache.set(cacheKey, videoId); }
+				if (t && a) {
+					videoId = await findYoutubeMatch({ title: t, artist: a, explicit: explicitHint, duration: durationHint });
+					if (videoId) trackToVideoCache.set(cacheKey, videoId);
+				}
 			}
 		}
 

@@ -1,34 +1,29 @@
-import { useCallback, useLayoutEffect, useMemo, useRef } from 'react'
-import type { RefCallback } from 'react'
-import { cipherFor, makeDashPlaceholder, resolveHoly } from './holy-render'
+import { useCallback, useLayoutEffect, useMemo, useRef } from "react";
+import type { RefCallback } from "react";
+import { cipherFor, makeDashPlaceholder, resolveHoly } from "./holy-render";
 
 /**
  * Attributes whose text cannot live in a shadow root (a shadow root holds
  * nodes, not attribute strings). These are obfuscated by shipping a dash
  * placeholder attribute, then setting the real value on mount.
  */
-export type HolyAttrName =
-  | 'aria-label'
-  | 'aria-description'
-  | 'title'
-  | 'placeholder'
-  | 'alt'
+export type HolyAttrName = "aria-label" | "aria-description" | "title" | "placeholder" | "alt";
 
-export type HolyAttrValues = Partial<Record<HolyAttrName, string>>
+export type HolyAttrValues = Partial<Record<HolyAttrName, string>>;
 
 export interface UseHolyAttrOptions {
-  /**
-   * Reveal the real attribute even when the bot tripwire fires. Default false
-   * (bots keep dashes), matching HolyText.
-   */
-  revealForBots?: boolean
+	/**
+	 * Reveal the real attribute even when the bot tripwire fires. Default false
+	 * (bots keep dashes), matching HolyText.
+	 */
+	revealForBots?: boolean;
 }
 
 export interface UseHolyAttrResult {
-  /** Attach to the element; the real values are set on mount. */
-  ref: RefCallback<HTMLElement>
-  /** Dash placeholders to spread onto the element as its initial attributes. */
-  placeholder: Record<string, string>
+	/** Attach to the element; the real values are set on mount. */
+	ref: RefCallback<HTMLElement>;
+	/** Dash placeholders to spread onto the element as its initial attributes. */
+	placeholder: Record<string, string>;
 }
 
 /**
@@ -52,47 +47,44 @@ export interface UseHolyAttrResult {
  * KEEP the dash placeholder (never reveal), identical to HolyText. A failed
  * reveal therefore degrades to dashes, not to a blank attribute.
  */
-export function useHolyAttr(
-  values: HolyAttrValues,
-  opts?: UseHolyAttrOptions,
-): UseHolyAttrResult {
-  // Stable dependency key: the hook's work is a pure function of the values.
-  const serialized = JSON.stringify(values)
-  const revealForBots = opts?.revealForBots ?? false
+export function useHolyAttr(values: HolyAttrValues, opts?: UseHolyAttrOptions): UseHolyAttrResult {
+	// Stable dependency key: the hook's work is a pure function of the values.
+	const serialized = JSON.stringify(values);
+	const revealForBots = opts?.revealForBots ?? false;
 
-  const placeholder = useMemo(() => {
-    const out: Record<string, string> = {}
-    for (const [name, value] of Object.entries(values)) {
-      if (typeof value === 'string') out[name] = makeDashPlaceholder(value)
-    }
-    return out
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [serialized])
+	const placeholder = useMemo(() => {
+		const out: Record<string, string> = {};
+		for (const [name, value] of Object.entries(values)) {
+			if (typeof value === "string") out[name] = makeDashPlaceholder(value);
+		}
+		return out;
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [serialized]);
 
-  const nodeRef = useRef<HTMLElement | null>(null)
+	const nodeRef = useRef<HTMLElement | null>(null);
 
-  const apply = useCallback(
-    (node: HTMLElement) => {
-      for (const [name, value] of Object.entries(values)) {
-        if (typeof value !== 'string') continue
-        const res = resolveHoly(value, cipherFor(value), { revealForBots })
-        // keep -> leave the dash placeholder already present on the element.
-        if (res.kind === 'reveal') node.setAttribute(name, res.plaintext)
-      }
-    },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [serialized, revealForBots],
-  )
+	const apply = useCallback(
+		(node: HTMLElement) => {
+			for (const [name, value] of Object.entries(values)) {
+				if (typeof value !== "string") continue;
+				const res = resolveHoly(value, cipherFor(value), { revealForBots });
+				// keep -> leave the dash placeholder already present on the element.
+				if (res.kind === "reveal") node.setAttribute(name, res.plaintext);
+			}
+		},
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+		[serialized, revealForBots],
+	);
 
-  const ref = useCallback<RefCallback<HTMLElement>>((node) => {
-    nodeRef.current = node
-  }, [])
+	const ref = useCallback<RefCallback<HTMLElement>>(node => {
+		nodeRef.current = node;
+	}, []);
 
-  // Layout effect: set real attributes synchronously after mount, before paint,
-  // to keep the dashes-visible-to-a11y window as short as possible.
-  useLayoutEffect(() => {
-    if (nodeRef.current) apply(nodeRef.current)
-  }, [apply])
+	// Layout effect: set real attributes synchronously after mount, before paint,
+	// to keep the dashes-visible-to-a11y window as short as possible.
+	useLayoutEffect(() => {
+		if (nodeRef.current) apply(nodeRef.current);
+	}, [apply]);
 
-  return { ref, placeholder }
+	return { ref, placeholder };
 }

@@ -37,7 +37,7 @@ const artistCache = new Map<string, { at: number; value: ArtistStats | null }>()
 
 export { lastfmKey };
 
-const lastfmOnce = <T,>(params: Record<string, string>, autocorrect: boolean) => lastfmCall<T>({ ...params, autocorrect: autocorrect ? "1" : "0" });
+const lastfmOnce = <T>(params: Record<string, string>, autocorrect: boolean) => lastfmCall<T>({ ...params, autocorrect: autocorrect ? "1" : "0" });
 
 /**
  * Exact-name lookup first; Last.fm's autocorrect only as a fallback, since it can
@@ -134,9 +134,7 @@ async function youtubePlays(title: string, artist: string): Promise<TrackPlays |
 		return { plays: official.reduce((sum, v) => sum + (v.views ?? 0), 0), source: "youtube", uploads: official.length, official: true };
 	}
 	// No official uploads (common for smaller artists): the most-played matching upload.
-	const best = candidates
-		.filter(v => core(v.title ?? "").includes(core(artist).split(" ")[0] ?? "") || byArtist(v.author?.name))
-		.reduce((max, v) => Math.max(max, v.views ?? 0), 0);
+	const best = candidates.filter(v => core(v.title ?? "").includes(core(artist).split(" ")[0] ?? "") || byArtist(v.author?.name)).reduce((max, v) => Math.max(max, v.views ?? 0), 0);
 	return best > 0 ? { plays: best, source: "youtube", uploads: 1, official: false } : null;
 }
 

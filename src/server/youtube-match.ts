@@ -35,7 +35,12 @@ export function playbackHints(t: { preview?: string; title: string; artist: stri
 
 export type Video = { videoId?: string; title?: string; seconds?: number; views?: number; author?: { name?: string } };
 
-const norm = (s: string) => s.toLowerCase().normalize("NFKD").replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+const norm = (s: string) =>
+	s
+		.toLowerCase()
+		.normalize("NFKD")
+		.replace(/[^\p{L}\p{N}]+/gu, " ")
+		.trim();
 
 const CLEAN = /\b(clean|radio edit|radio version|censored|edited|kidz bop|family friendly|no swearing)\b/;
 const OFF_VERSION = /\b(live|remix|sped up|slowed|reverb|nightcore|8d|instrumental|acapella|a cappella|karaoke|cover|reaction|loop|1 hour|extended|mashup|bass boosted|chopped|screwed|snippet|teaser|fan made)\b/;

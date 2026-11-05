@@ -98,7 +98,13 @@ const ExternalSite = ({ url, className, current, id }: ExternalSiteProps) => {
 		};
 	}, [url, updateTab, id, getSjFrame]);
 
-	return <>{url !== undefined ? <iframe ref={frameRef} className={`size-[calc(100%-4px)] left-0.5 top-0.5 rounded-2xl duration-150 ${className ?? ""}` + " " + (current ? "" : "opacity-0 translate-y-3 pointer-events-none")} sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-top-navigation-by-user-activation" /> : null}</>;
+	return (
+		<>
+			{url !== undefined ? (
+				<iframe ref={frameRef} className={`size-[calc(100%-4px)] left-0.5 top-0.5 rounded-2xl duration-150 ${className ?? ""}` + " " + (current ? "" : "opacity-0 translate-y-3 pointer-events-none")} sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-top-navigation-by-user-activation" />
+			) : null}
+		</>
+	);
 };
 
 export default ExternalSite;

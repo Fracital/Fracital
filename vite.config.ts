@@ -117,6 +117,36 @@ export default defineConfig({
 							rename: "ctl.frame.js",
 							overwrite: true,
 						},
+						// Transport engine wasm, self-hosted (never a CDN: filters
+						// block jsdelivr and the relay dies with it).
+						{
+							src: "node_modules/libcurl.js/libcurl.wasm",
+							dest: "vendor",
+							rename: "net.wasm",
+							overwrite: true,
+						},
+						// Flash emulator, self-hosted for the same reason. Companion
+						// chunks/wasm keep their content-hashed names; only the entry is
+						// renamed. ruffle.js resolves its siblings relative to its own URL.
+						{
+							src: "node_modules/@ruffle-rs/ruffle/*.js",
+							dest: "vendor/flash",
+							rename: (name: string, ext: string) => (name === "ruffle" ? "player.js" : `${name}.${ext}`),
+							overwrite: true,
+						},
+						{
+							src: "node_modules/@ruffle-rs/ruffle/*.wasm",
+							dest: "vendor/flash",
+							overwrite: true,
+						},
+						// Code editor, self-hosted (monaco's default loader pulls from
+						// jsdelivr at runtime). The min/vs tree is self-contained: its
+						// loader fetches chunks, css and fonts relative to itself.
+						{
+							src: "node_modules/monaco-editor/min/vs/**/*",
+							dest: "vendor/editor/vs",
+							overwrite: true,
+						},
 					],
 				})
 			: null,

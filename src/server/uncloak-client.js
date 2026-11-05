@@ -1,418 +1,410 @@
 (() => {
-  const UNCLOAK_STORAGE_KEY = 'frx:on'
-  const SPLASH_SEEN_KEY = 'frx:seen'
-  const COOKIE_NAME = 'frx_on'
+	const UNCLOAK_STORAGE_KEY = "frx:on";
+	const SPLASH_SEEN_KEY = "frx:seen";
+	const COOKIE_NAME = "frx_on";
 
-  const RETRY_STORAGE_KEY = 'frx:uncloak-retry'
+	const RETRY_STORAGE_KEY = "frx:uncloak-retry";
 
-  let opening = false
-  let isOpen = false
-  let isLoaded = false
-  let currentHost = null
-  let currentShadow = null
+	let opening = false;
+	let isOpen = false;
+	let isLoaded = false;
+	let currentHost = null;
+	let currentShadow = null;
 
-  // Outer (light-DOM) scroll lock state. We save the exact inline overflow
-  // values so close() can restore them rather than assuming they were empty.
-  let savedHtmlOverflow = null
-  let savedBodyOverflow = null
-  let savedHtmlFontSize = null
-  let scrollLocked = false
+	// Outer (light-DOM) scroll lock state. We save the exact inline overflow
+	// values so close() can restore them rather than assuming they were empty.
+	let savedHtmlOverflow = null;
+	let savedBodyOverflow = null;
+	let savedHtmlFontSize = null;
+	let scrollLocked = false;
 
-  const lockOuterScroll = () => {
-    if (scrollLocked) return
-    try {
-      const de = document.documentElement
-      const bd = document.body
-      savedHtmlOverflow = de ? de.style.overflow : null
-      savedBodyOverflow = bd ? bd.style.overflow : null
-      savedHtmlFontSize = de ? de.style.getPropertyValue('font-size') : null
-      if (de) de.style.overflow = 'hidden'
-      if (bd) bd.style.overflow = 'hidden'
-      // The app's rem units resolve against the decoy's <html>; pin it to the browser default.
-      if (de) de.style.setProperty('font-size', 'medium', 'important')
-      scrollLocked = true
-    } catch (_) {}
-  }
+	const lockOuterScroll = () => {
+		if (scrollLocked) return;
+		try {
+			const de = document.documentElement;
+			const bd = document.body;
+			savedHtmlOverflow = de ? de.style.overflow : null;
+			savedBodyOverflow = bd ? bd.style.overflow : null;
+			savedHtmlFontSize = de ? de.style.getPropertyValue("font-size") : null;
+			if (de) de.style.overflow = "hidden";
+			if (bd) bd.style.overflow = "hidden";
+			// The app's rem units resolve against the decoy's <html>; pin it to the browser default.
+			if (de) de.style.setProperty("font-size", "medium", "important");
+			scrollLocked = true;
+		} catch (_) {}
+	};
 
-  const unlockOuterScroll = () => {
-    if (!scrollLocked) return
-    try {
-      const de = document.documentElement
-      const bd = document.body
-      if (de) de.style.overflow = savedHtmlOverflow == null ? '' : savedHtmlOverflow
-      if (bd) bd.style.overflow = savedBodyOverflow == null ? '' : savedBodyOverflow
-      if (de) {
-        if (savedHtmlFontSize) de.style.setProperty('font-size', savedHtmlFontSize)
-        else de.style.removeProperty('font-size')
-      }
-    } catch (_) {}
-    savedHtmlOverflow = null
-    savedBodyOverflow = null
-    savedHtmlFontSize = null
-    scrollLocked = false
-  }
+	const unlockOuterScroll = () => {
+		if (!scrollLocked) return;
+		try {
+			const de = document.documentElement;
+			const bd = document.body;
+			if (de) de.style.overflow = savedHtmlOverflow == null ? "" : savedHtmlOverflow;
+			if (bd) bd.style.overflow = savedBodyOverflow == null ? "" : savedBodyOverflow;
+			if (de) {
+				if (savedHtmlFontSize) de.style.setProperty("font-size", savedHtmlFontSize);
+				else de.style.removeProperty("font-size");
+			}
+		} catch (_) {}
+		savedHtmlOverflow = null;
+		savedBodyOverflow = null;
+		savedHtmlFontSize = null;
+		scrollLocked = false;
+	};
 
-  // @property and @font-face are ignored inside shadow trees, so Tailwind's
-  // shadows, borders and transforms only work once registered on the document.
-  let globalRulesStyle = null
-  const hoistedRules = new Set()
+	// @property and @font-face are ignored inside shadow trees, so Tailwind's
+	// shadows, borders and transforms only work once registered on the document.
+	let globalRulesStyle = null;
+	const hoistedRules = new Set();
 
-  const collectGlobalRules = (rules, out) => {
-    for (const rule of Array.from(rules)) {
-      if (
-        rule instanceof CSSFontFaceRule ||
-        (typeof CSSPropertyRule !== 'undefined' && rule instanceof CSSPropertyRule)
-      ) {
-        out.push(rule.cssText)
-      } else if (rule.cssRules) {
-        collectGlobalRules(rule.cssRules, out)
-      }
-    }
-    return out
-  }
+	const collectGlobalRules = (rules, out) => {
+		for (const rule of Array.from(rules)) {
+			if (rule instanceof CSSFontFaceRule || (typeof CSSPropertyRule !== "undefined" && rule instanceof CSSPropertyRule)) {
+				out.push(rule.cssText);
+			} else if (rule.cssRules) {
+				collectGlobalRules(rule.cssRules, out);
+			}
+		}
+		return out;
+	};
 
-  const hoistSheetRules = (node) => {
-    const run = () => {
-      let rules = null
-      try {
-        rules = node.sheet && node.sheet.cssRules
-      } catch (_) {
-        return
-      }
-      if (!rules) return
-      const fresh = collectGlobalRules(rules, []).filter((text) => !hoistedRules.has(text))
-      if (!fresh.length) return
-      fresh.forEach((text) => hoistedRules.add(text))
-      if (!globalRulesStyle) {
-        globalRulesStyle = document.createElement('style')
-        ;(document.head || document.documentElement).appendChild(globalRulesStyle)
-      }
-      globalRulesStyle.textContent += `${fresh.join('\n')}\n`
-    }
-    if (node.tagName.toLowerCase() === 'link') node.addEventListener('load', run, { once: true })
-    run()
-  }
+	const hoistSheetRules = node => {
+		const run = () => {
+			let rules = null;
+			try {
+				rules = node.sheet && node.sheet.cssRules;
+			} catch (_) {
+				return;
+			}
+			if (!rules) return;
+			const fresh = collectGlobalRules(rules, []).filter(text => !hoistedRules.has(text));
+			if (!fresh.length) return;
+			fresh.forEach(text => hoistedRules.add(text));
+			if (!globalRulesStyle) {
+				globalRulesStyle = document.createElement("style");
+				(document.head || document.documentElement).appendChild(globalRulesStyle);
+			}
+			globalRulesStyle.textContent += `${fresh.join("\n")}\n`;
+		};
+		if (node.tagName.toLowerCase() === "link") node.addEventListener("load", run, { once: true });
+		run();
+	};
 
-  const canAutoRetry = () => {
-    try {
-      return sessionStorage.getItem(RETRY_STORAGE_KEY) !== '1'
-    } catch (_) {
-      return false
-    }
-  }
-  const markAutoRetry = () => {
-    try {
-      sessionStorage.setItem(RETRY_STORAGE_KEY, '1')
-    } catch (_) {}
-  }
-  const clearAutoRetry = () => {
-    try {
-      sessionStorage.removeItem(RETRY_STORAGE_KEY)
-    } catch (_) {}
-  }
+	const canAutoRetry = () => {
+		try {
+			return sessionStorage.getItem(RETRY_STORAGE_KEY) !== "1";
+		} catch (_) {
+			return false;
+		}
+	};
+	const markAutoRetry = () => {
+		try {
+			sessionStorage.setItem(RETRY_STORAGE_KEY, "1");
+		} catch (_) {}
+	};
+	const clearAutoRetry = () => {
+		try {
+			sessionStorage.removeItem(RETRY_STORAGE_KEY);
+		} catch (_) {}
+	};
 
-  let decoyChromeTimer = null
+	let decoyChromeTimer = null;
 
-  const applyDecoyChrome = (title, favicon) => {
-    const apply = () => {
-      try {
-        if (title) document.title = title
-        if (favicon) {
-          let icon = document.querySelector('link[rel~="icon"]')
-          if (!icon) {
-            icon = document.createElement('link')
-            icon.rel = 'icon'
-            document.head.appendChild(icon)
-          }
-          icon.setAttribute('href', favicon)
-        }
-      } catch (_) {}
-    }
-    apply()
-    // Re-apply briefly while the app sets its own title on mount.
-    clearInterval(decoyChromeTimer)
-    let ticks = 0
-    decoyChromeTimer = setInterval(() => {
-      apply()
-      if (++ticks > 8) clearInterval(decoyChromeTimer)
-    }, 500)
-  }
+	const applyDecoyChrome = (title, favicon) => {
+		const apply = () => {
+			try {
+				if (title) document.title = title;
+				if (favicon) {
+					let icon = document.querySelector('link[rel~="icon"]');
+					if (!icon) {
+						icon = document.createElement("link");
+						icon.rel = "icon";
+						document.head.appendChild(icon);
+					}
+					icon.setAttribute("href", favicon);
+				}
+			} catch (_) {}
+		};
+		apply();
+		// Re-apply briefly while the app sets its own title on mount.
+		clearInterval(decoyChromeTimer);
+		let ticks = 0;
+		decoyChromeTimer = setInterval(() => {
+			apply();
+			if (++ticks > 8) clearInterval(decoyChromeTimer);
+		}, 500);
+	};
 
-  const restoreChrome = () => clearInterval(decoyChromeTimer)
+	const restoreChrome = () => clearInterval(decoyChromeTimer);
 
-  // Resolves once the app has actually mounted something into the shadow
-  // #root, or false after timeoutMs. React may commit a frame or two after
-  // the module import promise resolves, so we poll instead of checking once.
-  const waitForMount = (rootEl, timeoutMs) =>
-    new Promise((resolve) => {
-      if (rootEl && rootEl.childNodes.length > 0) {
-        resolve(true)
-        return
-      }
-      const start = Date.now()
-      const check = () => {
-        if (rootEl && rootEl.childNodes.length > 0) {
-          resolve(true)
-          return
-        }
-        if (Date.now() - start >= timeoutMs) {
-          resolve(false)
-          return
-        }
-        requestAnimationFrame(check)
-      }
-      requestAnimationFrame(check)
-    })
+	// Resolves once the app has actually mounted something into the shadow
+	// #root, or false after timeoutMs. React may commit a frame or two after
+	// the module import promise resolves, so we poll instead of checking once.
+	const waitForMount = (rootEl, timeoutMs) =>
+		new Promise(resolve => {
+			if (rootEl && rootEl.childNodes.length > 0) {
+				resolve(true);
+				return;
+			}
+			const start = Date.now();
+			const check = () => {
+				if (rootEl && rootEl.childNodes.length > 0) {
+					resolve(true);
+					return;
+				}
+				if (Date.now() - start >= timeoutMs) {
+					resolve(false);
+					return;
+				}
+				requestAnimationFrame(check);
+			};
+			requestAnimationFrame(check);
+		});
 
-  const isUncloaked = () => {
-    try {
-      return sessionStorage.getItem(UNCLOAK_STORAGE_KEY) === '1'
-    } catch {
-      return false
-    }
-  }
+	const isUncloaked = () => {
+		try {
+			return sessionStorage.getItem(UNCLOAK_STORAGE_KEY) === "1";
+		} catch {
+			return false;
+		}
+	};
 
-  // Unlock lasts for the tab session only; the other keys are from the old
-  // persistent unlock and are cleared here.
-  const setUncloaked = (val) => {
-    try {
-      if (val) sessionStorage.setItem(UNCLOAK_STORAGE_KEY, '1')
-      else sessionStorage.removeItem(UNCLOAK_STORAGE_KEY)
-      sessionStorage.removeItem(SPLASH_SEEN_KEY)
-      localStorage.removeItem(UNCLOAK_STORAGE_KEY)
-      localStorage.removeItem(SPLASH_SEEN_KEY)
-      document.cookie = `${COOKIE_NAME}=; path=/; max-age=0; SameSite=Lax`
-    } catch {}
-  }
+	// Unlock lasts for the tab session only; the other keys are from the old
+	// persistent unlock and are cleared here.
+	const setUncloaked = val => {
+		try {
+			if (val) sessionStorage.setItem(UNCLOAK_STORAGE_KEY, "1");
+			else sessionStorage.removeItem(UNCLOAK_STORAGE_KEY);
+			sessionStorage.removeItem(SPLASH_SEEN_KEY);
+			localStorage.removeItem(UNCLOAK_STORAGE_KEY);
+			localStorage.removeItem(SPLASH_SEEN_KEY);
+			document.cookie = `${COOKIE_NAME}=; path=/; max-age=0; SameSite=Lax`;
+		} catch {}
+	};
 
-  const installDomHooks = () => {
-    if (window.__frx_dh) return
-    window.__frx_dh = true
+	const installDomHooks = () => {
+		if (window.__frx_dh) return;
+		window.__frx_dh = true;
 
-    const origGetElementById = document.getElementById.bind(document)
-    document.getElementById = function (id) {
-      if (currentShadow) {
-        try {
-          const el = currentShadow.getElementById
-            ? currentShadow.getElementById(id)
-            : currentShadow.querySelector('#' + CSS.escape(id))
-          if (el) return el
-        } catch (_) {}
-      }
-      return origGetElementById(id)
-    }
+		const origGetElementById = document.getElementById.bind(document);
+		document.getElementById = function (id) {
+			if (currentShadow) {
+				try {
+					const el = currentShadow.getElementById ? currentShadow.getElementById(id) : currentShadow.querySelector("#" + CSS.escape(id));
+					if (el) return el;
+				} catch (_) {}
+			}
+			return origGetElementById(id);
+		};
 
-    const origQuerySelector = document.querySelector.bind(document)
-    document.querySelector = function (selectors) {
-      if (currentShadow && typeof selectors === 'string') {
-        const trimmed = selectors.trim()
-        if (trimmed.startsWith('#root')) {
-          try {
-            const el = currentShadow.querySelector(selectors)
-            if (el) return el
-          } catch (_) {}
-        }
-      }
-      return origQuerySelector(selectors)
-    }
-  }
+		const origQuerySelector = document.querySelector.bind(document);
+		document.querySelector = function (selectors) {
+			if (currentShadow && typeof selectors === "string") {
+				const trimmed = selectors.trim();
+				if (trimmed.startsWith("#root")) {
+					try {
+						const el = currentShadow.querySelector(selectors);
+						if (el) return el;
+					} catch (_) {}
+				}
+			}
+			return origQuerySelector(selectors);
+		};
+	};
 
-  const ensureHost = () => {
-    if (currentHost && currentHost.parentNode) return currentHost
+	const ensureHost = () => {
+		if (currentHost && currentHost.parentNode) return currentHost;
 
-    const host = document.createElement('div')
-    host.id = '__frx_host__'
-    Object.assign(host.style, {
-      position: 'fixed',
-      inset: '0',
-      width: '100vw',
-      height: '100vh',
-      zIndex: '2147483647',
-      background: '#1a1a1a',
-      display: 'none',
-      overflow: 'hidden',
-    })
+		const host = document.createElement("div");
+		host.id = "__frx_host__";
+		Object.assign(host.style, {
+			position: "fixed",
+			inset: "0",
+			width: "100vw",
+			height: "100vh",
+			zIndex: "2147483647",
+			background: "#1a1a1a",
+			display: "none",
+			overflow: "hidden",
+		});
 
-    currentShadow = host.attachShadow({ mode: 'closed' })
-    try {
-      window.__frx_sr__ = currentShadow
-    } catch (_) {}
+		currentShadow = host.attachShadow({ mode: "closed" });
+		try {
+			window.__frx_sr__ = currentShadow;
+		} catch (_) {}
 
-    new MutationObserver((records) => {
-      for (const record of records) {
-        record.addedNodes.forEach((node) => {
-          const tag = node.tagName && node.tagName.toLowerCase()
-          if (tag === 'link' || tag === 'style') hoistSheetRules(node)
-        })
-      }
-    }).observe(currentShadow, { childList: true })
+		new MutationObserver(records => {
+			for (const record of records) {
+				record.addedNodes.forEach(node => {
+					const tag = node.tagName && node.tagName.toLowerCase();
+					if (tag === "link" || tag === "style") hoistSheetRules(node);
+				});
+			}
+		}).observe(currentShadow, { childList: true });
 
-    installDomHooks()
-    currentHost = host
+		installDomHooks();
+		currentHost = host;
 
-    const mount = () => {
-      if (host.parentNode) return
-      if (document.body) {
-        document.body.appendChild(host)
-      } else if (document.documentElement) {
-        document.documentElement.appendChild(host)
-      }
-    }
+		const mount = () => {
+			if (host.parentNode) return;
+			if (document.body) {
+				document.body.appendChild(host);
+			} else if (document.documentElement) {
+				document.documentElement.appendChild(host);
+			}
+		};
 
-    if (document.body || document.documentElement) {
-      mount()
-    } else {
-      document.addEventListener('DOMContentLoaded', mount, { once: true })
-    }
+		if (document.body || document.documentElement) {
+			mount();
+		} else {
+			document.addEventListener("DOMContentLoaded", mount, { once: true });
+		}
 
-    return host
-  }
+		return host;
+	};
 
-  const pauseMedia = () => {
-    if (!currentShadow) return
-    try {
-      const mediaElements = currentShadow.querySelectorAll('audio, video')
-      mediaElements.forEach((media) => {
-        try {
-          media.pause()
-        } catch (_) {}
-      })
-    } catch (_) {}
-  }
+	const pauseMedia = () => {
+		if (!currentShadow) return;
+		try {
+			const mediaElements = currentShadow.querySelectorAll("audio, video");
+			mediaElements.forEach(media => {
+				try {
+					media.pause();
+				} catch (_) {}
+			});
+		} catch (_) {}
+	};
 
-  const close = () => {
-    setUncloaked(false)
-    opening = false
-    isOpen = false
-    try {
-      if (location.hash) {
-        history.replaceState(null, '', location.pathname + location.search)
-      }
-    } catch {}
+	const close = () => {
+		setUncloaked(false);
+		opening = false;
+		isOpen = false;
+		try {
+			if (location.hash) {
+				history.replaceState(null, "", location.pathname + location.search);
+			}
+		} catch {}
 
-    pauseMedia()
-    unlockOuterScroll()
-    restoreChrome()
-    if (currentHost) {
-      currentHost.style.display = 'none'
-    } else {
-      location.reload()
-    }
-  }
+		pauseMedia();
+		unlockOuterScroll();
+		restoreChrome();
+		if (currentHost) {
+			currentHost.style.display = "none";
+		} else {
+			location.reload();
+		}
+	};
 
-  let headObserver = null
-  const mirroredSheets = new WeakSet()
+	let headObserver = null;
+	const mirroredSheets = new WeakSet();
 
-  const mirrorSheetIntoShadow = (node) => {
-    if (!currentShadow || !node || mirroredSheets.has(node)) return
-    const tag = node.tagName && node.tagName.toLowerCase()
-    if (tag === 'link') {
-      if ((node.getAttribute('rel') || '').toLowerCase() !== 'stylesheet') return
-      const href = node.getAttribute('href') || ''
-      if (!href || href.includes('fonts.googleapis.com')) return
-      if (currentShadow.querySelector(`link[rel="stylesheet"][href="${CSS.escape(href)}"]`)) return
-      const link = document.createElement('link')
-      link.rel = 'stylesheet'
-      link.href = href
-      if (node.hasAttribute('crossorigin')) {
-        link.setAttribute('crossorigin', node.getAttribute('crossorigin') || '')
-      }
-      currentShadow.appendChild(link)
-      mirroredSheets.add(node)
-    } else if (tag === 'style') {
-      const clone = node.cloneNode(true)
-      currentShadow.appendChild(clone)
-      mirroredSheets.add(node)
-      // Style tags mutated in place (CSS-in-JS) keep their clone in sync.
-      new MutationObserver(() => { clone.textContent = node.textContent })
-        .observe(node, { childList: true, characterData: true, subtree: true })
-    }
-  }
+	const mirrorSheetIntoShadow = node => {
+		if (!currentShadow || !node || mirroredSheets.has(node)) return;
+		const tag = node.tagName && node.tagName.toLowerCase();
+		if (tag === "link") {
+			if ((node.getAttribute("rel") || "").toLowerCase() !== "stylesheet") return;
+			const href = node.getAttribute("href") || "";
+			if (!href || href.includes("fonts.googleapis.com")) return;
+			if (currentShadow.querySelector(`link[rel="stylesheet"][href="${CSS.escape(href)}"]`)) return;
+			const link = document.createElement("link");
+			link.rel = "stylesheet";
+			link.href = href;
+			if (node.hasAttribute("crossorigin")) {
+				link.setAttribute("crossorigin", node.getAttribute("crossorigin") || "");
+			}
+			currentShadow.appendChild(link);
+			mirroredSheets.add(node);
+		} else if (tag === "style") {
+			const clone = node.cloneNode(true);
+			currentShadow.appendChild(clone);
+			mirroredSheets.add(node);
+			// Style tags mutated in place (CSS-in-JS) keep their clone in sync.
+			new MutationObserver(() => {
+				clone.textContent = node.textContent;
+			}).observe(node, { childList: true, characterData: true, subtree: true });
+		}
+	};
 
-  const mirrorHeadStylesheets = () => {
-    if (!document.head || headObserver) return
-    // Sheets already in <head> belong to the cloak page, not the app; only
-    // mirror what the app adds from here on.
-    document.head.querySelectorAll('link[rel="stylesheet"], style').forEach((n) => mirroredSheets.add(n))
-    headObserver = new MutationObserver((records) => {
-      for (const record of records) {
-        record.addedNodes.forEach(mirrorSheetIntoShadow)
-      }
-    })
-    headObserver.observe(document.head, { childList: true })
-  }
+	const mirrorHeadStylesheets = () => {
+		if (!document.head || headObserver) return;
+		// Sheets already in <head> belong to the cloak page, not the app; only
+		// mirror what the app adds from here on.
+		document.head.querySelectorAll('link[rel="stylesheet"], style').forEach(n => mirroredSheets.add(n));
+		headObserver = new MutationObserver(records => {
+			for (const record of records) {
+				record.addedNodes.forEach(mirrorSheetIntoShadow);
+			}
+		});
+		headObserver.observe(document.head, { childList: true });
+	};
 
-  const resolveAbsoluteUrl = (value, baseOrigin) => {
-    if (!value) return value
-    const trimmed = String(value).trim()
-    if (
-      trimmed.startsWith('data:') ||
-      trimmed.startsWith('blob:') ||
-      trimmed.startsWith('javascript:')
-    ) {
-      return trimmed
-    }
-    try {
-      return new URL(trimmed, baseOrigin).href
-    } catch (_) {
-      return trimmed
-    }
-  }
+	const resolveAbsoluteUrl = (value, baseOrigin) => {
+		if (!value) return value;
+		const trimmed = String(value).trim();
+		if (trimmed.startsWith("data:") || trimmed.startsWith("blob:") || trimmed.startsWith("javascript:")) {
+			return trimmed;
+		}
+		try {
+			return new URL(trimmed, baseOrigin).href;
+		} catch (_) {
+			return trimmed;
+		}
+	};
 
-  const open = async () => {
-    if (opening || isOpen) return
-    opening = true
+	const open = async () => {
+		if (opening || isOpen) return;
+		opening = true;
 
-    setUncloaked(true)
-    ensureHost()
+		setUncloaked(true);
+		ensureHost();
 
-    if (isLoaded && currentHost) {
-      lockOuterScroll()
-      currentHost.style.display = 'block'
-      isOpen = true
-      opening = false
-      return
-    }
+		if (isLoaded && currentHost) {
+			lockOuterScroll();
+			currentHost.style.display = "block";
+			isOpen = true;
+			opening = false;
+			return;
+		}
 
-    const status = document.querySelector('.status')
-    if (status) status.textContent = 'Opening site'
+		const status = document.querySelector(".status");
+		if (status) status.textContent = "Opening site";
 
-    // While the app is open, the tab keeps the decoy's identity so a shoulder
-    // glance sees the organization site, not the app. The app may set its
-    // own title once mounted; we re-apply the decoy's shortly after.
-    const decoyTitle = document.title
-    const decoyFavicon = document.querySelector('link[rel~="icon"]')?.getAttribute('href')
-    applyDecoyChrome(decoyTitle, decoyFavicon)
+		// While the app is open, the tab keeps the decoy's identity so a shoulder
+		// glance sees the organization site, not the app. The app may set its
+		// own title once mounted; we re-apply the decoy's shortly after.
+		const decoyTitle = document.title;
+		const decoyFavicon = document.querySelector('link[rel~="icon"]')?.getAttribute("href");
+		applyDecoyChrome(decoyTitle, decoyFavicon);
 
-    try {
-      // __FRX_APP_PATH__ is substituted per-domain server-side.
-      const response = await fetch('__FRX_APP_PATH__', { cache: 'no-store' })
-      if (!response.ok) throw new Error(`Unable to load page (${response.status})`)
+		try {
+			// __FRX_APP_PATH__ is substituted per-domain server-side.
+			const response = await fetch("__FRX_APP_PATH__", { cache: "no-store" });
+			if (!response.ok) throw new Error(`Unable to load page (${response.status})`);
 
-      const appHtml = await response.text()
-      const baseOrigin = location.origin
+			const appHtml = await response.text();
+			const baseOrigin = location.origin;
 
-      const parser = new DOMParser()
-      const doc = parser.parseFromString(appHtml, 'text/html')
+			const parser = new DOMParser();
+			const doc = parser.parseFromString(appHtml, "text/html");
 
-      const elementsWithUrls = doc.querySelectorAll('[src], [href], [poster], [action]')
-      elementsWithUrls.forEach((el) => {
-        if (el.hasAttribute('src')) {
-          el.setAttribute('src', resolveAbsoluteUrl(el.getAttribute('src'), baseOrigin))
-        }
-        if (el.hasAttribute('href')) {
-          el.setAttribute('href', resolveAbsoluteUrl(el.getAttribute('href'), baseOrigin))
-        }
-        if (el.hasAttribute('poster')) {
-          el.setAttribute('poster', resolveAbsoluteUrl(el.getAttribute('poster'), baseOrigin))
-        }
-        if (el.hasAttribute('action')) {
-          el.setAttribute('action', resolveAbsoluteUrl(el.getAttribute('action'), baseOrigin))
-        }
-      })
+			const elementsWithUrls = doc.querySelectorAll("[src], [href], [poster], [action]");
+			elementsWithUrls.forEach(el => {
+				if (el.hasAttribute("src")) {
+					el.setAttribute("src", resolveAbsoluteUrl(el.getAttribute("src"), baseOrigin));
+				}
+				if (el.hasAttribute("href")) {
+					el.setAttribute("href", resolveAbsoluteUrl(el.getAttribute("href"), baseOrigin));
+				}
+				if (el.hasAttribute("poster")) {
+					el.setAttribute("poster", resolveAbsoluteUrl(el.getAttribute("poster"), baseOrigin));
+				}
+				if (el.hasAttribute("action")) {
+					el.setAttribute("action", resolveAbsoluteUrl(el.getAttribute("action"), baseOrigin));
+				}
+			});
 
-      const hostStyle = document.createElement('style')
-      hostStyle.textContent = `
+			const hostStyle = document.createElement("style");
+			hostStyle.textContent = `
         :host {
           all: initial;
           display: block !important;
@@ -437,187 +429,185 @@
           width: 100% !important;
           height: 100% !important;
         }
-      `
-      currentShadow.appendChild(hostStyle)
+      `;
+			currentShadow.appendChild(hostStyle);
 
-      const fontLinks = doc.querySelectorAll(
-        'link[rel="preconnect"], link[rel="dns-prefetch"], link[href*="fonts.googleapis.com"]'
-      )
-      fontLinks.forEach((link) => {
-        const cloned = link.cloneNode(true)
-        if (document.head && !document.querySelector(`link[href="${cloned.getAttribute('href')}"]`)) {
-          document.head.appendChild(cloned)
-        }
-        currentShadow.appendChild(link.cloneNode(true))
-      })
+			const fontLinks = doc.querySelectorAll('link[rel="preconnect"], link[rel="dns-prefetch"], link[href*="fonts.googleapis.com"]');
+			fontLinks.forEach(link => {
+				const cloned = link.cloneNode(true);
+				if (document.head && !document.querySelector(`link[href="${cloned.getAttribute("href")}"]`)) {
+					document.head.appendChild(cloned);
+				}
+				currentShadow.appendChild(link.cloneNode(true));
+			});
 
-      const preloads = doc.querySelectorAll('link[rel="modulepreload"]')
-      preloads.forEach((preload) => {
-        const href = preload.getAttribute('href')
-        if (href && document.head && !document.querySelector(`link[rel="modulepreload"][href="${href}"]`)) {
-          document.head.appendChild(preload.cloneNode(true))
-        }
-      })
+			const preloads = doc.querySelectorAll('link[rel="modulepreload"]');
+			preloads.forEach(preload => {
+				const href = preload.getAttribute("href");
+				if (href && document.head && !document.querySelector(`link[rel="modulepreload"][href="${href}"]`)) {
+					document.head.appendChild(preload.cloneNode(true));
+				}
+			});
 
-      const stylesheets = doc.querySelectorAll('link[rel="stylesheet"], style')
-      stylesheets.forEach((sheet) => {
-        if (sheet.tagName.toLowerCase() === 'link') {
-          const href = sheet.getAttribute('href')
-          if (href && href.includes('fonts.googleapis.com')) return
-          const link = document.createElement('link')
-          link.rel = 'stylesheet'
-          link.href = href || ''
-          if (sheet.hasAttribute('crossorigin')) {
-            link.setAttribute('crossorigin', sheet.getAttribute('crossorigin') || '')
-          }
-          currentShadow.appendChild(link)
-        } else if (sheet.tagName.toLowerCase() === 'style') {
-          currentShadow.appendChild(sheet.cloneNode(true))
-        }
-      })
+			const stylesheets = doc.querySelectorAll('link[rel="stylesheet"], style');
+			stylesheets.forEach(sheet => {
+				if (sheet.tagName.toLowerCase() === "link") {
+					const href = sheet.getAttribute("href");
+					if (href && href.includes("fonts.googleapis.com")) return;
+					const link = document.createElement("link");
+					link.rel = "stylesheet";
+					link.href = href || "";
+					if (sheet.hasAttribute("crossorigin")) {
+						link.setAttribute("crossorigin", sheet.getAttribute("crossorigin") || "");
+					}
+					currentShadow.appendChild(link);
+				} else if (sheet.tagName.toLowerCase() === "style") {
+					currentShadow.appendChild(sheet.cloneNode(true));
+				}
+			});
 
-      // Code-split routes load their CSS at runtime via
-      // document.head.appendChild(<link>). Styles in the light DOM never
-      // reach the closed shadow root, so mirror every stylesheet that lands
-      // in <head> from now on. Without this, lazy routes render unstyled.
-      mirrorHeadStylesheets()
+			// Code-split routes load their CSS at runtime via
+			// document.head.appendChild(<link>). Styles in the light DOM never
+			// reach the closed shadow root, so mirror every stylesheet that lands
+			// in <head> from now on. Without this, lazy routes render unstyled.
+			mirrorHeadStylesheets();
 
-      const rootDiv = doc.querySelector('#root') || document.createElement('div')
-      if (!rootDiv.id) rootDiv.id = 'root'
-      currentShadow.appendChild(rootDiv)
+			const rootDiv = doc.querySelector("#root") || document.createElement("div");
+			if (!rootDiv.id) rootDiv.id = "root";
+			currentShadow.appendChild(rootDiv);
 
-      Array.from(doc.body.children).forEach((child) => {
-        if (child.id === 'root') return
-        if (child.tagName.toLowerCase() === 'script') return
-        currentShadow.appendChild(child.cloneNode(true))
-      })
+			Array.from(doc.body.children).forEach(child => {
+				if (child.id === "root") return;
+				if (child.tagName.toLowerCase() === "script") return;
+				currentShadow.appendChild(child.cloneNode(true));
+			});
 
-      // Show the overlay + lock outer scroll so the app mounts while visible
-      // (it measures layout on mount). We do NOT mark the overlay loaded yet:
-      // isLoaded stays false until the app has actually mounted, so a failed
-      // import below leaves a recoverable state instead of a permanent blank.
-      lockOuterScroll()
-      currentHost.style.display = 'block'
+			// Show the overlay + lock outer scroll so the app mounts while visible
+			// (it measures layout on mount). We do NOT mark the overlay loaded yet:
+			// isLoaded stays false until the app has actually mounted, so a failed
+			// import below leaves a recoverable state instead of a permanent blank.
+			lockOuterScroll();
+			currentHost.style.display = "block";
 
-      // Classic scripts set window globals the app expects to exist before its
-      // module code runs. Load them in document order, awaiting each, exactly
-      // like a normal page load would — but only now, after Ctrl+E.
-      const classicScripts = doc.querySelectorAll('script[src]:not([type="module"])')
-      for (const oldScript of Array.from(classicScripts)) {
-        const src = oldScript.getAttribute('src')
-        if (!src) continue
-        const scriptUrl = resolveAbsoluteUrl(src, baseOrigin)
-        await new Promise((resolveLoad) => {
-          const script = document.createElement('script')
-          script.src = scriptUrl
-          script.onload = resolveLoad
-          script.onerror = () => {
-            console.error('[uncloak] script failed to load:', scriptUrl)
-            resolveLoad()
-          }
-          document.head.appendChild(script)
-        })
-      }
+			// Classic scripts set window globals the app expects to exist before its
+			// module code runs. Load them in document order, awaiting each, exactly
+			// like a normal page load would — but only now, after Ctrl+E.
+			const classicScripts = doc.querySelectorAll('script[src]:not([type="module"])');
+			for (const oldScript of Array.from(classicScripts)) {
+				const src = oldScript.getAttribute("src");
+				if (!src) continue;
+				const scriptUrl = resolveAbsoluteUrl(src, baseOrigin);
+				await new Promise(resolveLoad => {
+					const script = document.createElement("script");
+					script.src = scriptUrl;
+					script.onload = resolveLoad;
+					script.onerror = () => {
+						console.error("[uncloak] script failed to load:", scriptUrl);
+						resolveLoad();
+					};
+					document.head.appendChild(script);
+				});
+			}
 
-      const inlineScripts = doc.querySelectorAll('script:not([src]):not([type="application/json"])')
-      inlineScripts.forEach((script) => {
-        const code = script.textContent
-        if (code && code.trim()) {
-          try {
-            ;(0, eval)(code)
-          } catch (evalErr) {
-            console.error('[uncloak] inline script error:', evalErr)
-          }
-        }
-      })
+			const inlineScripts = doc.querySelectorAll('script:not([src]):not([type="application/json"])');
+			inlineScripts.forEach(script => {
+				const code = script.textContent;
+				if (code && code.trim()) {
+					try {
+						(0, eval)(code);
+					} catch (evalErr) {
+						console.error("[uncloak] inline script error:", evalErr);
+					}
+				}
+			});
 
-      // Await every module import BEFORE marking the overlay loaded. An import
-      // that throws or rejects now propagates to the catch below (where
-      // isLoaded is still false), instead of leaving a shown-but-blank overlay.
-      const moduleScripts = doc.querySelectorAll('script[type="module"][src]')
-      for (const mod of Array.from(moduleScripts)) {
-        const src = mod.getAttribute('src')
-        if (src) {
-          const modUrl = resolveAbsoluteUrl(src, baseOrigin)
-          await import(modUrl)
-        }
-      }
+			// Await every module import BEFORE marking the overlay loaded. An import
+			// that throws or rejects now propagates to the catch below (where
+			// isLoaded is still false), instead of leaving a shown-but-blank overlay.
+			const moduleScripts = doc.querySelectorAll('script[type="module"][src]');
+			for (const mod of Array.from(moduleScripts)) {
+				const src = mod.getAttribute("src");
+				if (src) {
+					const modUrl = resolveAbsoluteUrl(src, baseOrigin);
+					await import(modUrl);
+				}
+			}
 
-      // The import promise can resolve before React commits. Confirm the app
-      // actually rendered into the shadow #root before declaring success.
-      const mounted = await waitForMount(rootDiv, 5000)
-      if (!mounted) {
-        // Shown overlay with an empty #root is the blank-overlay symptom.
-        // Auto-recover once per session with a clean reload (setUncloaked(true)
-        // makes the reloaded page re-open automatically); if we've already
-        // retried, fall through to the failure path instead of looping.
-        if (canAutoRetry()) {
-          markAutoRetry()
-          location.reload()
-          return
-        }
-        throw new Error('App did not mount into shadow #root')
-      }
+			// The import promise can resolve before React commits. Confirm the app
+			// actually rendered into the shadow #root before declaring success.
+			const mounted = await waitForMount(rootDiv, 5000);
+			if (!mounted) {
+				// Shown overlay with an empty #root is the blank-overlay symptom.
+				// Auto-recover once per session with a clean reload (setUncloaked(true)
+				// makes the reloaded page re-open automatically); if we've already
+				// retried, fall through to the failure path instead of looping.
+				if (canAutoRetry()) {
+					markAutoRetry();
+					location.reload();
+					return;
+				}
+				throw new Error("App did not mount into shadow #root");
+			}
 
-      clearAutoRetry()
-      isOpen = true
-      isLoaded = true
-      opening = false
-    } catch (error) {
-      console.error(error)
-      // Keep a retry path instead of a permanent blank: restore outer scroll,
-      // hide the (unloaded) overlay and clear transient flags so Ctrl+E works again.
-      unlockOuterScroll()
-      opening = false
-      isOpen = false
-      if (currentHost && !isLoaded) {
-        currentHost.style.display = 'none'
-      }
-      if (status) status.textContent = 'Could not open site. Try again.'
-    }
-  }
+			clearAutoRetry();
+			isOpen = true;
+			isLoaded = true;
+			opening = false;
+		} catch (error) {
+			console.error(error);
+			// Keep a retry path instead of a permanent blank: restore outer scroll,
+			// hide the (unloaded) overlay and clear transient flags so Ctrl+E works again.
+			unlockOuterScroll();
+			opening = false;
+			isOpen = false;
+			if (currentHost && !isLoaded) {
+				currentHost.style.display = "none";
+			}
+			if (status) status.textContent = "Could not open site. Try again.";
+		}
+	};
 
-  // Ctrl+E toggles both ways: open the app, or drop back to the decoy and pause media.
-  const onKeyDown = (event) => {
-    if (opening) return
-    const isE = event.key?.toLowerCase() === 'e' || event.code === 'KeyE'
-    if (!isE) return
-    if ((!event.ctrlKey && !event.metaKey) || event.altKey || event.shiftKey) return
+	// Ctrl+E toggles both ways: open the app, or drop back to the decoy and pause media.
+	const onKeyDown = event => {
+		if (opening) return;
+		const isE = event.key?.toLowerCase() === "e" || event.code === "KeyE";
+		if (!isE) return;
+		if ((!event.ctrlKey && !event.metaKey) || event.altKey || event.shiftKey) return;
 
-    if (!isOpen) {
-      const target = (event.composedPath && event.composedPath()[0]) || event.target
-      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
-        return
-      }
-    }
+		if (!isOpen) {
+			const target = (event.composedPath && event.composedPath()[0]) || event.target;
+			if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) {
+				return;
+			}
+		}
 
-    event.preventDefault()
-    event.stopPropagation()
-    if (isOpen) close()
-    else void open()
-  }
+		event.preventDefault();
+		event.stopPropagation();
+		if (isOpen) close();
+		else void open();
+	};
 
-  addEventListener('keydown', onKeyDown, true)
+	addEventListener("keydown", onKeyDown, true);
 
-  // bfcache restore: the page (and this IIFE's in-memory flags) can come back
-  // frozen mid-open. If the overlay isn't actually visible, clear the transient
-  // flags, re-arm Ctrl+E and re-open when still uncloaked, so a back/forward
-  // restore never strands the user on a stale half-open state.
-  addEventListener('pageshow', (event) => {
-    if (!event.persisted) return
-    const visiblyOpen = !!(currentHost && currentHost.parentNode && currentHost.style.display !== 'none')
-    if (visiblyOpen) {
-      isOpen = true
-      return
-    }
-    opening = false
-    isOpen = false
-    if (isUncloaked()) {
-      void open()
-    }
-  })
+	// bfcache restore: the page (and this IIFE's in-memory flags) can come back
+	// frozen mid-open. If the overlay isn't actually visible, clear the transient
+	// flags, re-arm Ctrl+E and re-open when still uncloaked, so a back/forward
+	// restore never strands the user on a stale half-open state.
+	addEventListener("pageshow", event => {
+		if (!event.persisted) return;
+		const visiblyOpen = !!(currentHost && currentHost.parentNode && currentHost.style.display !== "none");
+		if (visiblyOpen) {
+			isOpen = true;
+			return;
+		}
+		opening = false;
+		isOpen = false;
+		if (isUncloaked()) {
+			void open();
+		}
+	});
 
-  if (isUncloaked()) {
-    void open()
-  }
-})()
+	if (isUncloaked()) {
+		void open();
+	}
+})();

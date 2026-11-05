@@ -13,11 +13,7 @@ import { ensureSeedCookie } from "./api-crypto";
 const LEGACY_LOADER_SRC = "/8f3c1a.js";
 
 export function getUncloakScriptContent(hostname: string): string {
-	const candidatePaths = [
-		new URL("./uncloak-client.js", import.meta.url),
-		resolve(process.cwd(), "src/server/uncloak-client.js"),
-		resolve(process.cwd(), "public", "8f3c1a.js"),
-	];
+	const candidatePaths = [new URL("./uncloak-client.js", import.meta.url), resolve(process.cwd(), "src/server/uncloak-client.js"), resolve(process.cwd(), "public", "8f3c1a.js")];
 	for (const candidate of candidatePaths) {
 		if (existsSync(candidate)) {
 			let source = readFileSync(candidate, "utf8");
@@ -77,7 +73,7 @@ export function defaultCloaksDir(): string {
 const directHosts = new Set(
 	(process.env.CLOAK_DIRECT_HOSTS || "fracital.dev,fractial.dev,www.fracital.dev,www.fractial.dev")
 		.split(",")
-		.map((host) => host.trim().toLowerCase())
+		.map(host => host.trim().toLowerCase())
 		.filter(Boolean),
 );
 
@@ -159,11 +155,8 @@ function hostnameOf(rawHostHeader: string): string {
 export function cloakRouting(options?: { cloaksDir?: string }): Plugin {
 	let cloakConfig: CloakSiteConfig;
 
-	const registerMiddleware = (server: {
-		middlewares: ViteDevServer["middlewares"];
-		transformIndexHtml?: ViteDevServer["transformIndexHtml"];
-	}) => {
-		const hostSet = new Set(cloakConfig.hosts.map((h) => h.toLowerCase()));
+	const registerMiddleware = (server: { middlewares: ViteDevServer["middlewares"]; transformIndexHtml?: ViteDevServer["transformIndexHtml"] }) => {
+		const hostSet = new Set(cloakConfig.hosts.map(h => h.toLowerCase()));
 
 		server.middlewares.use(async (request, response, next) => {
 			try {
@@ -212,12 +205,7 @@ export function cloakRouting(options?: { cloaksDir?: string }): Plugin {
 				if (pathname.startsWith("/assets/")) {
 					const distAsset = resolve(process.cwd(), "dist", pathname.replace(/^\/+/, ""));
 					const publicAsset = resolve(process.cwd(), "public", pathname.replace(/^\/+/, ""));
-					const target =
-						existsSync(distAsset) && statSync(distAsset).isFile()
-							? distAsset
-							: existsSync(publicAsset) && statSync(publicAsset).isFile()
-								? publicAsset
-								: null;
+					const target = existsSync(distAsset) && statSync(distAsset).isFile() ? distAsset : existsSync(publicAsset) && statSync(publicAsset).isFile() ? publicAsset : null;
 					if (target) {
 						const ext = extname(target).toLowerCase();
 						const mime = contentTypes[ext] || "application/octet-stream";
@@ -262,26 +250,19 @@ export function cloakRouting(options?: { cloaksDir?: string }): Plugin {
 	return {
 		name: "cloak-routing",
 		configResolved(config) {
-			const configuredDir =
-				options?.cloaksDir || config.env?.CLOAKS_DIR || config.env?.CLOAK_DIR || process.env.CLOAKS_DIR || process.env.CLOAK_DIR;
+			const configuredDir = options?.cloaksDir || config.env?.CLOAKS_DIR || config.env?.CLOAK_DIR || process.env.CLOAKS_DIR || process.env.CLOAK_DIR;
 			cloakConfig = discoverCloakSites(configuredDir);
 		},
 		config(config: UserConfig) {
 			const initialCloak = discoverCloakSites(options?.cloaksDir);
-			const allowed = initialCloak.hosts.flatMap((h) => [h, `www.${h}`]);
+			const allowed = initialCloak.hosts.flatMap(h => [h, `www.${h}`]);
 
 			return {
 				server: {
-					allowedHosts:
-						config.server?.allowedHosts === true
-							? true
-							: [...(Array.isArray(config.server?.allowedHosts) ? config.server.allowedHosts : []), ...allowed],
+					allowedHosts: config.server?.allowedHosts === true ? true : [...(Array.isArray(config.server?.allowedHosts) ? config.server.allowedHosts : []), ...allowed],
 				},
 				preview: {
-					allowedHosts:
-						config.preview?.allowedHosts === true
-							? true
-							: [...(Array.isArray(config.preview?.allowedHosts) ? config.preview.allowedHosts : []), ...allowed],
+					allowedHosts: config.preview?.allowedHosts === true ? true : [...(Array.isArray(config.preview?.allowedHosts) ? config.preview.allowedHosts : []), ...allowed],
 				},
 			};
 		},
@@ -302,7 +283,7 @@ export function cloakRouting(options?: { cloaksDir?: string }): Plugin {
  */
 export function cloakMiddleware(options: { distDir: string; cloaksDir?: string }): MiddlewareHandler {
 	const cloakConfig = discoverCloakSites(options.cloaksDir);
-	const hostSet = new Set(cloakConfig.hosts.map((h) => h.toLowerCase()));
+	const hostSet = new Set(cloakConfig.hosts.map(h => h.toLowerCase()));
 
 	return async (c, next) => {
 		const hostname = hostnameOf(c.req.header("x-forwarded-host") || c.req.header("host") || "");

@@ -1,13 +1,8 @@
 {
-    "title": "Portal: Flash",
-    "description": "Navigate through challenging puzzles using portals in this 2D adaptation of the classic game Portal.",
-    "author": "Hen Mazolski & Ido Tal",
-    "version": "1.0.0",
-    "type": "flash",
-    "tags": [
-        "puzzle",
-        "platformer",
-        "strategy",
-        "flash"
-    ]
+	"title": "Portal: Flash",
+	"description": "Navigate through challenging puzzles using portals in this 2D adaptation of the classic game Portal.",
+	"author": "Hen Mazolski & Ido Tal",
+	"version": "1.0.0",
+	"type": "flash",
+	"tags": ["puzzle", "platformer", "strategy", "flash"]
 }

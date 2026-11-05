@@ -349,11 +349,7 @@ export const MusicLibrary = ({ query }: MusicLibraryProps) => {
 				}
 			};
 			setTag("title", info.title, "title");
-			setTag(
-				"artists",
-				splitArtistCredit(info.artist),
-				"artist",
-			);
+			setTag("artists", splitArtistCredit(info.artist), "artist");
 			setTag("album", info.album, "album");
 			setTag("genre", info.genre, "genre");
 			setTag("year", info.year, "year");
@@ -963,11 +959,7 @@ export const MusicLibrary = ({ query }: MusicLibraryProps) => {
 				}
 			>
 				{library.map((song, i) => (
-					<div
-						key={`${song.id}-${i}`}
-						className={`group flex flex-col gap-1.5 w-32 shrink-0 p-1.5 rounded-lg cursor-pointer duration-150 ${dark ? "hover:bg-[#ffffff10]" : "hover:bg-[#00000008]"}`}
-						onClick={() => currentTrack !== song && playUpload(song)}
-					>
+					<div key={`${song.id}-${i}`} className={`group flex flex-col gap-1.5 w-32 shrink-0 p-1.5 rounded-lg cursor-pointer duration-150 ${dark ? "hover:bg-[#ffffff10]" : "hover:bg-[#00000008]"}`} onClick={() => currentTrack !== song && playUpload(song)}>
 						<div className="relative">
 							{song.cover ? (
 								<img src={song.cover} alt="" className="w-full aspect-square rounded-md object-cover bg-(--tertiary)" loading="lazy" />
@@ -1002,16 +994,7 @@ export const MusicLibrary = ({ query }: MusicLibraryProps) => {
 
 	return (
 		<div className="size-full">
-			<DigitalLibrary
-				query={digiQuery}
-				urlPage="music"
-				urlPrefix="digilib"
-				nav={nav}
-				override={sections}
-				showOverride={page !== "digilib"}
-				onBrowse={() => page !== "digilib" && setpage("digilib")}
-				homeExtra={uploadsShelf}
-			/>
+			<DigitalLibrary query={digiQuery} urlPage="music" urlPrefix="digilib" nav={nav} override={sections} showOverride={page !== "digilib"} onBrowse={() => page !== "digilib" && setpage("digilib")} homeExtra={uploadsShelf} />
 			{contextMenu?.visible && <ContextMenu items={contextMenu.items} position={{ x: contextMenu.x, y: contextMenu.y }} onClose={() => setContextMenu(null)} />}
 		</div>
 	);

@@ -170,7 +170,11 @@ async function apiFetch<T>(path: string, signal?: AbortSignal): Promise<T> {
  * can come first. Keep one per song (in the first one's position), preferring explicit.
  */
 export function preferExplicit<T extends { title: string; artist: string; explicit?: boolean }>(tracks: T[]): T[] {
-	const key = (t: T) => `${t.title.toLowerCase().replace(/\(clean( version)?\)/g, "").replace(/[^\p{L}\p{N}]+/gu, "")}|${t.artist.toLowerCase()}`;
+	const key = (t: T) =>
+		`${t.title
+			.toLowerCase()
+			.replace(/\(clean( version)?\)/g, "")
+			.replace(/[^\p{L}\p{N}]+/gu, "")}|${t.artist.toLowerCase()}`;
 	const best = new Map<string, T>();
 	for (const t of tracks) {
 		const seen = best.get(key(t));
@@ -280,14 +284,11 @@ export const library = {
 	topAlbums: (period: LastfmPeriod) => meJson<{ albums: LibraryAlbum[] }>(`/api/me/library/top-albums?period=${period}&limit=30`),
 	recommendations: () => meJson<{ artists: LibraryArtist[]; tracks: LibraryTrack[] }>("/api/me/recommendations").then(resolveLibrary),
 	savedArtists: () => meJson<{ artists: { id: string; name: string; picture: string }[] }>("/api/me/artists"),
-	saveArtist: (id: string, name: string, picture: string, saved: boolean) =>
-		meJson<{ saved: boolean }>(`/api/me/artists/${encodeURIComponent(id)}`, saved ? { method: "PUT", body: JSON.stringify({ name, picture }) } : { method: "DELETE" }),
+	saveArtist: (id: string, name: string, picture: string, saved: boolean) => meJson<{ saved: boolean }>(`/api/me/artists/${encodeURIComponent(id)}`, saved ? { method: "PUT", body: JSON.stringify({ name, picture }) } : { method: "DELETE" }),
 	saved: () => meJson<{ tracks: MusicTrack[]; albums: MusicAlbum[] }>("/api/me/saved").then(r => ({ ...r, tracks: r.tracks.map(resolveTrackUrls) })),
-	saveItem: (kind: "track" | "album", item: MusicTrack | MusicAlbum, saved: boolean) =>
-		meJson<{ saved: boolean }>(`/api/me/saved/${kind}/${encodeURIComponent(item.id)}`, saved ? { method: "PUT", body: JSON.stringify({ data: item }) } : { method: "DELETE" }),
+	saveItem: (kind: "track" | "album", item: MusicTrack | MusicAlbum, saved: boolean) => meJson<{ saved: boolean }>(`/api/me/saved/${kind}/${encodeURIComponent(item.id)}`, saved ? { method: "PUT", body: JSON.stringify({ data: item }) } : { method: "DELETE" }),
 	/** The user's own plays + loved state per song, keyed by the caller's keys. */
-	trackStats: (tracks: { key: string; title: string; artist: string }[]) =>
-		meJson<Record<string, { userPlays: number; loved: boolean }>>("/api/me/stats/tracks", { method: "POST", body: JSON.stringify({ tracks }) }),
+	trackStats: (tracks: { key: string; title: string; artist: string }[]) => meJson<Record<string, { userPlays: number; loved: boolean }>>("/api/me/stats/tracks", { method: "POST", body: JSON.stringify({ tracks }) }),
 	artistStats: (name: string) => meJson<{ userPlays: number | null }>(`/api/me/stats/artist?name=${encodeURIComponent(name)}`),
 	love: (title: string, artist: string, loved: boolean) => meJson<{ loved: boolean }>("/api/me/love", { method: "POST", body: JSON.stringify({ title, artist, loved }) }),
 };

@@ -3,22 +3,7 @@ import { createId } from "@paralleldrive/cuid2";
 import { useEffect, useRef, useState } from "react";
 import { getMe, type Me } from "../libs/auth";
 import { ProfileEditor, SignIn } from "./Account";
-import {
-	FONT_STACK,
-	GOOGLE_FONTS,
-	TEXT_STACK,
-	loadArtistFont,
-	loadTextFont,
-	panel,
-	type ArtistFont,
-	type ArtistPick,
-	type ArtistProfile,
-	type ArtistStats,
-	type Claim,
-	type Member,
-	type PageRole,
-	type ProfileEdit,
-} from "../libs/artistPanel";
+import { FONT_STACK, GOOGLE_FONTS, TEXT_STACK, loadArtistFont, loadTextFont, panel, type ArtistFont, type ArtistPick, type ArtistProfile, type ArtistStats, type Claim, type Member, type PageRole, type ProfileEdit } from "../libs/artistPanel";
 import { IMAGE_PRESETS } from "../libs/compressImage";
 import { artworkHighRes, formatCount, getArtist, searchTracks, type ArtistDetail, type ArtistLinkKind, type MusicArtist } from "../libs/music-service";
 import { useSettingsStore, useTabsStore } from "../store";
@@ -57,16 +42,7 @@ const Card = ({ children, className = "" }: { children: React.ReactNode; classNa
 
 const Button = ({ children, onClick, kind = "secondary", disabled, title, className = "" }: { children: React.ReactNode; onClick?: () => void; kind?: "primary" | "secondary" | "danger"; disabled?: boolean; title?: string; className?: string }) => {
 	const dark = useDark();
-	const styles =
-		kind === "primary"
-			? dark
-				? "bg-white text-black hover:bg-white/90"
-				: "bg-black text-white hover:bg-black/85"
-			: kind === "danger"
-				? "bg-red-500/15 text-red-400 hover:bg-red-500/25"
-				: dark
-					? "bg-[#ffffff14] hover:bg-[#ffffff24]"
-					: "bg-[#00000010] hover:bg-[#0000001c]";
+	const styles = kind === "primary" ? (dark ? "bg-white text-black hover:bg-white/90" : "bg-black text-white hover:bg-black/85") : kind === "danger" ? "bg-red-500/15 text-red-400 hover:bg-red-500/25" : dark ? "bg-[#ffffff14] hover:bg-[#ffffff24]" : "bg-[#00000010] hover:bg-[#0000001c]";
 	return (
 		<button title={title} disabled={disabled} onClick={onClick} className={`flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-full text-sm font-semibold disabled:opacity-50 cursor-pointer duration-150 ${styles} ${className}`}>
 			{children}
@@ -207,11 +183,7 @@ const Home = ({ invite }: { invite: string | null }) => {
 					) : (
 						<div className="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-3">
 							{data.pages.map(p => (
-								<button
-									key={p.artistId}
-									className={`flex items-center gap-3 p-3 rounded-2xl text-left cursor-pointer duration-150 ${dark ? "bg-[#ffffff0d] hover:bg-[#ffffff18]" : "bg-[#00000008] hover:bg-[#00000012]"}`}
-									onClick={() => setTabUrl(`page=${encodeURIComponent(p.artistId)}`, p.name)}
-								>
+								<button key={p.artistId} className={`flex items-center gap-3 p-3 rounded-2xl text-left cursor-pointer duration-150 ${dark ? "bg-[#ffffff0d] hover:bg-[#ffffff18]" : "bg-[#00000008] hover:bg-[#00000012]"}`} onClick={() => setTabUrl(`page=${encodeURIComponent(p.artistId)}`, p.name)}>
 									{p.image ? <img src={p.image} alt="" className="size-12 rounded-full object-cover" /> : <div className="size-12 rounded-full bg-(--tertiary) flex items-center justify-center font-bold">{p.name?.charAt(0)}</div>}
 									<div className="flex flex-col min-w-0">
 										<span className="font-bold truncate flex items-center gap-1">
@@ -536,25 +508,7 @@ const PageEditor = ({ artistId, initialTab }: { artistId: string; initialTab: Ta
 
 // --- Profile ---
 
-const ImagePicker = ({
-	artistId,
-	label,
-	hint,
-	value,
-	onChange,
-	onError,
-	shape = "wide",
-	preset,
-}: {
-	artistId: string;
-	label: string;
-	hint?: string;
-	value: string;
-	onChange: (url: string) => void;
-	onError: (e: string) => void;
-	shape?: "wide" | "square" | "logo";
-	preset?: keyof typeof IMAGE_PRESETS;
-}) => {
+const ImagePicker = ({ artistId, label, hint, value, onChange, onError, shape = "wide", preset }: { artistId: string; label: string; hint?: string; value: string; onChange: (url: string) => void; onError: (e: string) => void; shape?: "wide" | "square" | "logo"; preset?: keyof typeof IMAGE_PRESETS }) => {
 	const dark = useDark();
 	const input = useRef<HTMLInputElement>(null);
 	const [busy, setBusy] = useState(false);
@@ -685,9 +639,7 @@ const FontPicker = ({ artistId, name, font, onChange, onError }: { artistId: str
 					<ArrowUpTrayIcon className="size-4" />
 				</Button>
 			</div>
-			{selectValue === "__custom" && (
-				<input className={inputCls(dark)} placeholder="Exact Google Fonts name, e.g. Major Mono Display" value={custom} onChange={e => setCustom(e.target.value)} onBlur={() => custom.trim() && onChange({ family: custom.trim(), source: "google" })} />
-			)}
+			{selectValue === "__custom" && <input className={inputCls(dark)} placeholder="Exact Google Fonts name, e.g. Major Mono Display" value={custom} onChange={e => setCustom(e.target.value)} onBlur={() => custom.trim() && onChange({ family: custom.trim(), source: "google" })} />}
 			<input ref={input} type="file" accept=".woff2,.woff,.ttf,.otf" className="hidden" onChange={e => upload(e.target.files?.[0])} />
 			<div className={`mt-1 p-3 rounded-xl ${dark ? "bg-black/30" : "bg-white"}`} style={{ fontFamily: FONT_STACK(font) }}>
 				<div className={`text-3xl leading-tight ${font ? "font-normal" : "font-black"}`}>{name}</div>
@@ -859,21 +811,7 @@ const StatsTab = ({ artistId, catalog }: { artistId: string; catalog: ArtistDeta
 
 // --- Team ---
 
-const TeamTab = ({
-	artistId,
-	role,
-	members,
-	invites,
-	reload,
-	onError,
-}: {
-	artistId: string;
-	role: PageRole;
-	members: Member[];
-	invites: { code: string; role: PageRole; createdAt: string; expiresAt: string }[];
-	reload: () => void;
-	onError: (e: string) => void;
-}) => {
+const TeamTab = ({ artistId, role, members, invites, reload, onError }: { artistId: string; role: PageRole; members: Member[]; invites: { code: string; role: PageRole; createdAt: string; expiresAt: string }[]; reload: () => void; onError: (e: string) => void }) => {
 	const dark = useDark();
 	const [inviteRole, setInviteRole] = useState<"admin" | "editor">("editor");
 	const [copied, setCopied] = useState("");

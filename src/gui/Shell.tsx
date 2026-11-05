@@ -73,9 +73,7 @@ export const UserCard = ({ id, display, handle, avatar }: UserProps) => {
 		window.addEventListener("account-upd", load);
 		return () => window.removeEventListener("account-upd", load);
 	}, []);
-	const menuItemCls =
-		"group flex items-center justify-between gap-5 w-[calc(100%)] p-2 pl-3 pr-2 rounded-md leading-none text-(--text-secondary) hover:text-(--text-primary) duration-100 cursor-pointer " +
-		(settings.brightness === "light" ? "hover:bg-[#00000018]" : "hover:bg-[#ffffff10]");
+	const menuItemCls = "group flex items-center justify-between gap-5 w-[calc(100%)] p-2 pl-3 pr-2 rounded-md leading-none text-(--text-secondary) hover:text-(--text-primary) duration-100 cursor-pointer " + (settings.brightness === "light" ? "hover:bg-[#00000018]" : "hover:bg-[#ffffff10]");
 
 	return (
 		<>

@@ -6,7 +6,7 @@
 		"useIgnoreFile": false
 	},
 	"files": {
-		"includes": ["**", "!**/node_modules/**", "!**/dist/**", "!**/.vscode/**", "!**/.zed/**", "!src/index.css", "!src/assets/default.css", "!public/libs/**"]
+		"includes": ["**", "!**/node_modules/**", "!**/dist/**", "!**/.vscode/**", "!**/.zed/**", "!**/.github/**", "!src/index.css", "!src/assets/default.css", "!public/libs/**"]
 	},
 	"formatter": {
 		"enabled": true,

@@ -132,12 +132,14 @@ async function wikiSummary(title: string): Promise<WikiSummary | null> {
 
 /** A real article about a musical act — not one of their albums, a namesake, or a disambiguation page. */
 const isMusicalAct = (s: WikiSummary | null): s is WikiSummary =>
-	s?.type === "standard" &&
-	!!s.extract &&
-	/\b(band|musician|rapper|singer|songwriter|dj|producer|group|duo|trio|artist|composer|vocalist|guitarist|drummer|pianist|entertainer)\b/i.test(s.description ?? "") &&
-	!/\b(album|song|single|ep|mixtape|soundtrack|film|tour)\b/i.test(s.description ?? "");
+	s?.type === "standard" && !!s.extract && /\b(band|musician|rapper|singer|songwriter|dj|producer|group|duo|trio|artist|composer|vocalist|guitarist|drummer|pianist|entertainer)\b/i.test(s.description ?? "") && !/\b(album|song|single|ep|mixtape|soundtrack|film|tour)\b/i.test(s.description ?? "");
 
-const norm = (s: string) => s.toLowerCase().replace(/\s*\(.*?\)\s*/g, "").replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+const norm = (s: string) =>
+	s
+		.toLowerCase()
+		.replace(/\s*\(.*?\)\s*/g, "")
+		.replace(/[^\p{L}\p{N}]+/gu, " ")
+		.trim();
 
 /** Short Wikipedia bio for an artist (cached; empty string when none exists). */
 export async function artistBio(name: string): Promise<string> {
@@ -224,10 +226,7 @@ export async function findDeezerTrack(title: string, artist: string, apiBase: st
 	else {
 		try {
 			// Deezer's field search sometimes returns unrelated songs, so pool both searches and verify.
-			const [strict, loose] = await Promise.all([
-				dzStrict<{ data?: DeezerTrack[] }>(`/search/track?q=${encodeURIComponent(`artist:"${artist}" track:"${title}"`)}&limit=5`),
-				dzStrict<{ data?: DeezerTrack[] }>(`/search/track?q=${encodeURIComponent(`${artist} ${title}`)}&limit=10`),
-			]);
+			const [strict, loose] = await Promise.all([dzStrict<{ data?: DeezerTrack[] }>(`/search/track?q=${encodeURIComponent(`artist:"${artist}" track:"${title}"`)}&limit=5`), dzStrict<{ data?: DeezerTrack[] }>(`/search/track?q=${encodeURIComponent(`${artist} ${title}`)}&limit=10`)]);
 			track = bestTrackMatch([...(strict.data ?? []), ...(loose.data ?? [])], title, artist);
 		} catch {
 			return null; // transient — don't cache, so the next request retries
@@ -238,7 +237,13 @@ export async function findDeezerTrack(title: string, artist: string, apiBase: st
 }
 
 const plain = (s: string) => s.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "");
-const titleCore = (s: string) => plain(s.replace(/\(.*?\)|\[.*?\]/g, " ").replace(/\s-\s.*$/, " ").replace(/\b(feat|ft)\.?\b.*$/i, " "));
+const titleCore = (s: string) =>
+	plain(
+		s
+			.replace(/\(.*?\)|\[.*?\]/g, " ")
+			.replace(/\s-\s.*$/, " ")
+			.replace(/\b(feat|ft)\.?\b.*$/i, " "),
+	);
 
 /**
  * The candidate that's really this song: the artist must match (any credited artist)
@@ -333,11 +338,7 @@ export async function buildRadio({ artist, title, variety, limit }: RadioOptions
 	const v = Math.min(100, Math.max(0, variety)) / 100;
 	const seedKey = artistKey(seed.name);
 
-	const [seedSong, seedTop, similar] = await Promise.all([
-		title ? findDeezerTrack(title, seed.name, apiBase).catch(() => null) : Promise.resolve(null),
-		dz<{ data?: DeezerTrack[] }>(`/artist/${seed.id}/top?limit=50`),
-		lastfmKey() ? lastfmSimilar(seed.name, title) : Promise.resolve({ artists: [], tracks: [] }),
-	]);
+	const [seedSong, seedTop, similar] = await Promise.all([title ? findDeezerTrack(title, seed.name, apiBase).catch(() => null) : Promise.resolve(null), dz<{ data?: DeezerTrack[] }>(`/artist/${seed.id}/top?limit=50`), lastfmKey() ? lastfmSimilar(seed.name, title) : Promise.resolve({ artists: [], tracks: [] })]);
 
 	// Similar artists: Last.fm (with match scores), else Deezer's related list ranked by position.
 	let similarArtists = similar.artists;

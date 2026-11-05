@@ -108,17 +108,7 @@ export const Tab = ({ title, url, id, icon }: TabProps) => {
 			<div className="flex w-full min-w-0 justify-between items-center gap-1.5 duration-150">
 				{/* min-w-0 + truncate: the title takes whatever width the icon and close button leave. */}
 				<div className="flex flex-1 min-w-0 items-center gap-1.5 *:pointer-events-none *:shrink-0" title={currTitle}>
-					{hasStringIcon ? (
-						iconSrc && !iconFailed ? (
-							<img src={iconSrc} alt={currTitle} className="size-5" onError={handleIconError} />
-						) : (
-							<GlobeAltIcon className="size-5" />
-						)
-					) : currIcon && typeof currIcon !== "string" ? (
-						currIcon
-					) : (
-						<GlobeAltIcon className="size-5" />
-					)}
+					{hasStringIcon ? iconSrc && !iconFailed ? <img src={iconSrc} alt={currTitle} className="size-5" onError={handleIconError} /> : <GlobeAltIcon className="size-5" /> : currIcon && typeof currIcon !== "string" ? currIcon : <GlobeAltIcon className="size-5" />}
 					<span
 						className={
 							"min-w-0 shrink! truncate font-medium select-none" +

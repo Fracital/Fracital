@@ -17,32 +17,32 @@
 //   timing      : performance.now() deltas (HIGH FP risk)    -> FLAG only, OFF
 //   mutationGuard: MutationObserver on shield shadow roots    -> FLAG only, OFF
 export const ANTI_TAMPER_DEFAULTS = {
-  integrity: true,
-  toStringGuard: true,
-  envCheck: true,
-  timing: false,
-  mutationGuard: false,
-  // how often (ms) the toString guard re-verifies on host->VM entry
-  toStringIntervalMs: 2000,
-  // timing: trip only after this many consecutive suspicious samples (lenient)
-  timingWindow: 8,
-  // timing: a single VM step burst slower than this many ms/Mstep is "suspicious"
-  timingMsPerMstep: 2000,
-}
+	integrity: true,
+	toStringGuard: true,
+	envCheck: true,
+	timing: false,
+	mutationGuard: false,
+	// how often (ms) the toString guard re-verifies on host->VM entry
+	toStringIntervalMs: 2000,
+	// timing: trip only after this many consecutive suspicious samples (lenient)
+	timingWindow: 8,
+	// timing: a single VM step burst slower than this many ms/Mstep is "suspicious"
+	timingMsPerMstep: 2000,
+};
 
 export function resolveAntiTamper(opts) {
-  const o = opts || {}
-  return {
-    integrity: o.integrity !== undefined ? !!o.integrity : ANTI_TAMPER_DEFAULTS.integrity,
-    toStringGuard: o.toStringGuard !== undefined ? !!o.toStringGuard : ANTI_TAMPER_DEFAULTS.toStringGuard,
-    envCheck: o.envCheck !== undefined ? !!o.envCheck : ANTI_TAMPER_DEFAULTS.envCheck,
-    timing: o.timing !== undefined ? !!o.timing : ANTI_TAMPER_DEFAULTS.timing,
-    mutationGuard: o.mutationGuard !== undefined ? !!o.mutationGuard : ANTI_TAMPER_DEFAULTS.mutationGuard,
-    // use !== undefined so an explicit 0 (check on every entry) is honoured
-    toStringIntervalMs: o.toStringIntervalMs !== undefined ? o.toStringIntervalMs : ANTI_TAMPER_DEFAULTS.toStringIntervalMs,
-    timingWindow: o.timingWindow !== undefined ? o.timingWindow : ANTI_TAMPER_DEFAULTS.timingWindow,
-    timingMsPerMstep: o.timingMsPerMstep !== undefined ? o.timingMsPerMstep : ANTI_TAMPER_DEFAULTS.timingMsPerMstep,
-  }
+	const o = opts || {};
+	return {
+		integrity: o.integrity !== undefined ? !!o.integrity : ANTI_TAMPER_DEFAULTS.integrity,
+		toStringGuard: o.toStringGuard !== undefined ? !!o.toStringGuard : ANTI_TAMPER_DEFAULTS.toStringGuard,
+		envCheck: o.envCheck !== undefined ? !!o.envCheck : ANTI_TAMPER_DEFAULTS.envCheck,
+		timing: o.timing !== undefined ? !!o.timing : ANTI_TAMPER_DEFAULTS.timing,
+		mutationGuard: o.mutationGuard !== undefined ? !!o.mutationGuard : ANTI_TAMPER_DEFAULTS.mutationGuard,
+		// use !== undefined so an explicit 0 (check on every entry) is honoured
+		toStringIntervalMs: o.toStringIntervalMs !== undefined ? o.toStringIntervalMs : ANTI_TAMPER_DEFAULTS.toStringIntervalMs,
+		timingWindow: o.timingWindow !== undefined ? o.timingWindow : ANTI_TAMPER_DEFAULTS.timingWindow,
+		timingMsPerMstep: o.timingMsPerMstep !== undefined ? o.timingMsPerMstep : ANTI_TAMPER_DEFAULTS.timingMsPerMstep,
+	};
 }
 
 // ---- 1. bytecode integrity hash --------------------------------------------
@@ -57,21 +57,25 @@ export function resolveAntiTamper(opts) {
 // Bypass (documented): patch the hash function itself, or recompute+embed the
 // matching digest after editing bytecode. Cost-raising, not secrecy.
 export function integrityHash(program) {
-  let h = 0x811c9dc5 >>> 0
-  const fns = program.functions
-  for (let i = 0; i < fns.length; i++) {
-    const code = fns[i].code
-    for (let j = 0; j < code.length; j++) {
-      h ^= (code[j] & 0xff)
-      h = Math.imul(h, 0x01000193) >>> 0
-      // fold in the high bits of multi-byte operands so operand edits are seen
-      const hi = (code[j] >>> 8) & 0xffff
-      if (hi) { h ^= hi; h = Math.imul(h, 0x01000193) >>> 0 }
-    }
-    // length boundary between functions (defeats code-array splicing)
-    h ^= code.length; h = Math.imul(h, 0x01000193) >>> 0
-  }
-  return h >>> 0
+	let h = 0x811c9dc5 >>> 0;
+	const fns = program.functions;
+	for (let i = 0; i < fns.length; i++) {
+		const code = fns[i].code;
+		for (let j = 0; j < code.length; j++) {
+			h ^= code[j] & 0xff;
+			h = Math.imul(h, 0x01000193) >>> 0;
+			// fold in the high bits of multi-byte operands so operand edits are seen
+			const hi = (code[j] >>> 8) & 0xffff;
+			if (hi) {
+				h ^= hi;
+				h = Math.imul(h, 0x01000193) >>> 0;
+			}
+		}
+		// length boundary between functions (defeats code-array splicing)
+		h ^= code.length;
+		h = Math.imul(h, 0x01000193) >>> 0;
+	}
+	return h >>> 0;
 }
 
 // ---- 2. VM toString snapshot ------------------------------------------------
@@ -87,16 +91,22 @@ export function integrityHash(program) {
 // dispatcher actually calls (the per-runtime closures, unreachable by name) or
 // neuter this guard before it snapshots at boot.
 export function createToStringGuard(thunks) {
-  const toStr = Function.prototype.toString
-  const snap = []
-  const read = (thunk) => { try { return toStr.call(thunk()) } catch (_) { return '\u0000ERR' } }
-  for (let i = 0; i < thunks.length; i++) snap.push(read(thunks[i]))
-  return {
-    check() {
-      for (let i = 0; i < thunks.length; i++) if (read(thunks[i]) !== snap[i]) return true
-      return false
-    },
-  }
+	const toStr = Function.prototype.toString;
+	const snap = [];
+	const read = thunk => {
+		try {
+			return toStr.call(thunk());
+		} catch (_) {
+			return "\u0000ERR";
+		}
+	};
+	for (let i = 0; i < thunks.length; i++) snap.push(read(thunks[i]));
+	return {
+		check() {
+			for (let i = 0; i < thunks.length; i++) if (read(thunks[i]) !== snap[i]) return true;
+			return false;
+		},
+	};
 }
 
 // ---- 3. timing check (FLAG only, default OFF) -------------------------------
@@ -106,17 +116,18 @@ export function createToStringGuard(thunks) {
 // why it is OFF by default and NEVER wired to the wipe. Bypass: run fast, or
 // patch performance.now.
 export function createTimingMonitor(cfg) {
-  const window = (cfg && cfg.timingWindow) || ANTI_TAMPER_DEFAULTS.timingWindow
-  const limit = (cfg && cfg.timingMsPerMstep) || ANTI_TAMPER_DEFAULTS.timingMsPerMstep
-  let streak = 0
-  return {
-    sample(ms, steps) {
-      if (steps < 100000) return false // too small to judge
-      const msPerMstep = ms / (steps / 1e6)
-      if (msPerMstep > limit) streak++; else streak = 0
-      return streak >= window
-    },
-  }
+	const window = (cfg && cfg.timingWindow) || ANTI_TAMPER_DEFAULTS.timingWindow;
+	const limit = (cfg && cfg.timingMsPerMstep) || ANTI_TAMPER_DEFAULTS.timingMsPerMstep;
+	let streak = 0;
+	return {
+		sample(ms, steps) {
+			if (steps < 100000) return false; // too small to judge
+			const msPerMstep = ms / (steps / 1e6);
+			if (msPerMstep > limit) streak++;
+			else streak = 0;
+			return streak >= window;
+		},
+	};
 }
 
 // ---- 4. environment check (consolidated isLikelyBot; FLAG only) -------------
@@ -130,20 +141,19 @@ export function createTimingMonitor(cfg) {
 // dimensions). It only FLAGS — it must never wipe, brick or block. Bypass:
 // spoof navigator.webdriver/languages and the automation globals.
 export function isLikelyBot(globals) {
-  const g = globals || (typeof globalThis !== 'undefined' ? globalThis : {})
-  const nav = g.navigator
-  if (!nav) return false
-  try {
-    if (nav.webdriver) return true
-    // headless/automation driver globals injected into the page
-    if (g.__nightmare || g._phantom || g.callPhantom || g.__selenium_unwrapped ||
-        g.__webdriver_evaluate || g.__driver_evaluate || g.domAutomation ||
-        (g.document && (g.document.__selenium_unwrapped || g.document.$cdc_asdjflasutopfhvcZLmcfl_))) return true
-    if (Array.isArray(nav.languages) && nav.languages.length === 0) return true
-    if (typeof g.outerWidth === 'number' && typeof g.outerHeight === 'number' &&
-        g.outerWidth === 0 && g.outerHeight === 0) return true
-  } catch (_) { /* a thrown getter is itself mildly suspicious, but don't flag */ }
-  return false
+	const g = globals || (typeof globalThis !== "undefined" ? globalThis : {});
+	const nav = g.navigator;
+	if (!nav) return false;
+	try {
+		if (nav.webdriver) return true;
+		// headless/automation driver globals injected into the page
+		if (g.__nightmare || g._phantom || g.callPhantom || g.__selenium_unwrapped || g.__webdriver_evaluate || g.__driver_evaluate || g.domAutomation || (g.document && (g.document.__selenium_unwrapped || g.document.$cdc_asdjflasutopfhvcZLmcfl_))) return true;
+		if (Array.isArray(nav.languages) && nav.languages.length === 0) return true;
+		if (typeof g.outerWidth === "number" && typeof g.outerHeight === "number" && g.outerWidth === 0 && g.outerHeight === 0) return true;
+	} catch (_) {
+		/* a thrown getter is itself mildly suspicious, but don't flag */
+	}
+	return false;
 }
 
 // ---- 5. mutation guard (FLAG only, default OFF) -----------------------------
@@ -154,9 +164,19 @@ export function isLikelyBot(globals) {
 // FLAG callback — it must not wipe. Bypass: mutate via a path the observer does
 // not cover, or disconnect the observer.
 export function installMutationGuard(roots, onDetect, MO) {
-  const Observer = MO || (typeof MutationObserver !== 'undefined' ? MutationObserver : null)
-  if (!Observer || !roots || !roots.length) return { disconnect() {} }
-  const obs = new Observer((records) => { if (records && records.length) { try { onDetect(records) } catch (_) {} } })
-  for (const r of roots) { try { obs.observe(r, { childList: true, subtree: true, attributes: true, characterData: true }) } catch (_) {} }
-  return obs
+	const Observer = MO || (typeof MutationObserver !== "undefined" ? MutationObserver : null);
+	if (!Observer || !roots || !roots.length) return { disconnect() {} };
+	const obs = new Observer(records => {
+		if (records && records.length) {
+			try {
+				onDetect(records);
+			} catch (_) {}
+		}
+	});
+	for (const r of roots) {
+		try {
+			obs.observe(r, { childList: true, subtree: true, attributes: true, characterData: true });
+		} catch (_) {}
+	}
+	return obs;
 }

@@ -31,14 +31,14 @@ A React component that wraps Ruffle for easy Flash content embedding.
 import { RufflePlayer } from "./components/RufflePlayer";
 
 function MyGame() {
-  return (
-    <RufflePlayer
+return (
+<RufflePlayer
       src="/games/my-game.swf"
       width="800px"
       height="600px"
       autoplay={true}
     />
-  );
+);
 }
 \`\`\`
 
@@ -91,12 +91,12 @@ Games are stored in the Filer virtual filesystem at `/games/`. The system automa
 2. **Create metadata file (optional but recommended):**
    \`\`\`javascript
    await window.fr.fs.promises.writeFile(
-     "/games/my-game.json",
-     JSON.stringify({
-       title: "My Awesome Game",
-       type: "flash",
-       thumbnail: "/path/to/thumbnail.jpg"
-     }, null, 2)
+   "/games/my-game.json",
+   JSON.stringify({
+   title: "My Awesome Game",
+   type: "flash",
+   thumbnail: "/path/to/thumbnail.jpg"
+   }, null, 2)
    );
    \`\`\`
 
@@ -107,9 +107,9 @@ Each game can have an optional JSON metadata file with the same name:
 
 \`\`\`json
 {
-  "title": "Game Title",
-  "type": "flash",
-  "thumbnail": "/path/to/thumbnail.jpg"
+"title": "Game Title",
+"type": "flash",
+"thumbnail": "/path/to/thumbnail.jpg"
 }
 \`\`\`
 
@@ -119,11 +119,11 @@ Games are organized in the Filer virtual filesystem:
 
 \`\`\`
 /games/
-  game1.swf
-  game1.json    # metadata (optional)
-  game2.swf
-  game2.json
-  ...
+game1.swf
+game1.json # metadata (optional)
+game2.swf
+game2.json
+...
 \`\`\`
 
 The games directory is automatically created during initialization, and a default game is copied from `/public/games/` to get you started.
@@ -136,11 +136,11 @@ The Games view is already set up to work with your tab system. To add a "Games" 
 
 \`\`\`tsx
 newTab({
-  id: createId(),
-  title: "Games",
-  url: "about:games",
-  icon: <PlayIcon className="size-5" />,
-  displayUrl: "about:games",
+id: createId(),
+title: "Games",
+url: "about:games",
+icon: <PlayIcon className="size-5" />,
+displayUrl: "about:games",
 });
 \`\`\`
 
@@ -148,7 +148,7 @@ Then in your router, add:
 
 \`\`\`tsx
 if (item.url === "about:games") {
-  return <Games key={viewKey} />;
+return <Games key={viewKey} />;
 }
 \`\`\`
 
@@ -172,16 +172,19 @@ We're using `@ruffle-rs/ruffle` directly instead of `react-ruffle` because:
 ## Troubleshooting
 
 ### Game won't load
+
 - Check the SWF file path is correct
 - Ensure the file is in the `public` directory
 - Check browser console for errors
 
 ### Poor performance
+
 - Try lowering the `quality` prop
 - Use `scale="noScale"` for pixel-perfect games
 - Disable unnecessary features with `allowScriptAccess={false}`
 
 ### Audio issues
+
 - Ensure `unmuteOverlay="visible"` is set
 - Modern browsers require user interaction to play audio
 - The overlay handles this automatically

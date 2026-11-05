@@ -1,5 +1,5 @@
 onlyBuiltDependencies:
-  - '@mercuryworkshop/scramjet'
-  - '@swc/core'
-  - bufferutil
-  - esbuild
+    - "@mercuryworkshop/scramjet"
+    - "@swc/core"
+    - bufferutil
+    - esbuild

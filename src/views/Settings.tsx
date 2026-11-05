@@ -338,7 +338,9 @@ const Settings = ({ className }: SettingsProps) => {
 									}}
 									className="sr-only peer"
 								/>
-								<span className={"relative inline-block w-12 h-7 transition-colors duration-200 rounded-full" + " " + `${(settings[BIG_PLAYER_DEFAULT_SETTING] ?? true) ? "bg-(--accent)" : `${settings.brightness === "dark" ? "bg-[#ffffff10] hover:bg-[#ffffff20]" : "bg-[#00000025] hover:bg-[#00000035]"}`}`}>
+								<span
+									className={"relative inline-block w-12 h-7 transition-colors duration-200 rounded-full" + " " + `${(settings[BIG_PLAYER_DEFAULT_SETTING] ?? true) ? "bg-(--accent)" : `${settings.brightness === "dark" ? "bg-[#ffffff10] hover:bg-[#ffffff20]" : "bg-[#00000025] hover:bg-[#00000035]"}`}`}
+								>
 									<span className={"absolute left-1 top-1 w-5 h-5 bg-white rounded-full shadow transform transition-transform duration-200" + " " + `${(settings[BIG_PLAYER_DEFAULT_SETTING] ?? true) ? "translate-x-5" : ""}`} />
 								</span>
 							</label>

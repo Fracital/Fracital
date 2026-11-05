@@ -1,9 +1,11 @@
 # Game Installer Setup Guide
 
 ## Overview
+
 The Game Installer provides a user-friendly interface for downloading and installing base games into Fracital's virtual filesystem.
 
 ## Features
+
 - ✅ Visual game selection with checkboxes
 - ✅ Individual and overall progress tracking
 - ✅ Skip games you don't want
@@ -107,11 +109,13 @@ Games are stored in `/games/{game-id}/` with this structure:
 ## Example: Adding a New Game
 
 1. **Place game file:**
+
    ```bash
    cp my-awesome-game.swf public/games/
    ```
 
 2. **Edit GameInstaller.tsx:**
+
    ```typescript
    const AVAILABLE_GAMES: BaseGame[] = [
      {
@@ -129,6 +133,7 @@ Games are stored in `/games/{game-id}/` with this structure:
    ```
 
 3. **Rebuild:**
+
    ```bash
    npm run build
    ```

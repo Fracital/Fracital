@@ -46,11 +46,11 @@ only an opt-in `ellipsis` prop was added.
 Signature (additions in **bold**):
 ```ts
 interface HolyTextProps extends React.HTMLAttributes<HTMLElement> {
-  text?: string
-  children?: React.ReactNode   // string children supported
-  encrypted?: string
-  as?: React.ElementType       // default 'span'
-  ellipsis?: boolean           // NEW, default false — see §3
+	text?: string;
+	children?: React.ReactNode; // string children supported
+	encrypted?: string;
+	as?: React.ElementType; // default 'span'
+	ellipsis?: boolean; // NEW, default false — see §3
 }
 ```
 Mechanism: renders `makeDashPlaceholder(content)`, then on mount reveals into a
@@ -113,7 +113,7 @@ sides:
   truncation props applied via its `style`.
 
 ```tsx
-<HolyText text={longTitle} ellipsis style={{ maxWidth: 180 }} />
+<HolyText text={longTitle} ellipsis style={{ maxWidth: 180 }} />;
 ```
 Opt-in; default off, so no existing caller's layout changes. Pass a width
 constraint (`maxWidth`, or a sized flex/grid cell) as usual — ellipsis needs a
@@ -164,6 +164,7 @@ the real text is never in the shipped HTML. A **layout effect** (synchronous
 after mount, before paint) decrypts and `setAttribute`s the real value.
 
 > ### ⚠️ Accessibility tradeoff — read before using on a control
+>
 > During the pre-JS / pre-hydration window a **screen reader sees the dash
 > placeholder, not the real label.** Reveal runs in a layout effect to keep that
 > window as short as possible, but it is non-zero. For decorative/supplementary
@@ -191,18 +192,18 @@ this variant never uses one.
 Signature:
 ```ts
 interface HolyProseProps extends React.HTMLAttributes<HTMLElement> {
-  text?: string
-  children?: string
-  encrypted?: string
-  as?: React.ElementType          // default 'span'
-  mode?: 'light' | 'shadow'       // default 'light'
+	text?: string;
+	children?: string;
+	encrypted?: string;
+	as?: React.ElementType; // default 'span'
+	mode?: "light" | "shadow"; // default 'light'
 }
 ```
 
-| mode | mechanism | selectable/copyable | hidden from `host.textContent` after JS? |
-|------|-----------|---------------------|------------------------------------------|
-| `light` (default) | reconstruct real text in the **light DOM** (`host.textContent = plaintext`) | yes, natively | **no** — reconstructed text is a normal node |
-| `shadow` | reveal into an **open** shadow root | yes in-browser; copy reliability across the shadow boundary varies by browser | **yes** — host's own `textContent`/`outerHTML` stay empty of it |
+| mode              | mechanism                                                                   | selectable/copyable                                                           | hidden from `host.textContent` after JS?                        |
+| ----------------- | --------------------------------------------------------------------------- | ----------------------------------------------------------------------------- | --------------------------------------------------------------- |
+| `light` (default) | reconstruct real text in the **light DOM** (`host.textContent = plaintext`) | yes, natively                                                                 | **no** — reconstructed text is a normal node                    |
+| `shadow`          | reveal into an **open** shadow root                                         | yes in-browser; copy reliability across the shadow boundary varies by browser | **yes** — host's own `textContent`/`outerHTML` stay empty of it |
 
 **Protection (honest).** In both modes the real text is absent from the shipped
 static HTML (dashes) and from the shipped JS (shield-encrypted bundle); it is
@@ -217,13 +218,13 @@ read on the host, at the cost of less reliable copy on some browsers — prefer
 
 ## Which to use when
 
-| You have… | Use |
-|-----------|-----|
-| One static label / string | `<HolyText text=… />` (unchanged) |
-| A single-line label that must truncate with `…` | `<HolyText text=… ellipsis />` (§3) |
-| Static text mixed with icons, inline links, or `{dynamic}` values | `<HolyRich>…</HolyRich>`, wrapping dynamics in `<HolyDynamic>`/an element (§2) |
-| Text in `aria-label` / `title` / `placeholder` / `alt` | `useHolyAttr(...)`, or `<HolyInput>` for inputs (§4) — mind the a11y tradeoff |
-| Legal prose that must stay selectable/copyable | `<HolyProse text=… />` (`light`), or `mode="shadow"` to also hide from `textContent` (§5) |
+| You have…                                                         | Use                                                                                       |
+| ----------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| One static label / string                                         | `<HolyText text=… />` (unchanged)                                                         |
+| A single-line label that must truncate with `…`                   | `<HolyText text=… ellipsis />` (§3)                                                       |
+| Static text mixed with icons, inline links, or `{dynamic}` values | `<HolyRich>…</HolyRich>`, wrapping dynamics in `<HolyDynamic>`/an element (§2)            |
+| Text in `aria-label` / `title` / `placeholder` / `alt`            | `useHolyAttr(...)`, or `<HolyInput>` for inputs (§4) — mind the a11y tradeoff             |
+| Legal prose that must stay selectable/copyable                    | `<HolyProse text=… />` (`light`), or `mode="shadow"` to also hide from `textContent` (§5) |
 
 Notes for the page-application wave:
 - Per-string ciphertext is unchanged: register strings as today; unregistered

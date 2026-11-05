@@ -37,107 +37,100 @@ declare global {
 
 let serviceWorkerInit: Promise<void> | undefined;
 
-const waitForServiceWorker = async (
-    scope: string,
-    scriptURL: string
-): Promise<ServiceWorker> => {
-    let registration = await navigator.serviceWorker.getRegistration(scope);
+const waitForServiceWorker = async (scope: string, scriptURL: string): Promise<ServiceWorker> => {
+	let registration = await navigator.serviceWorker.getRegistration(scope);
 
-    if (!registration) {
-        registration = await navigator.serviceWorker.register(scriptURL, { scope });
-    }
+	if (!registration) {
+		registration = await navigator.serviceWorker.register(scriptURL, { scope });
+	}
 
-    registration.update().catch(() => undefined);
+	registration.update().catch(() => undefined);
 
-    // Prefer the already-active worker. An updated worker can't activate while the old one still has fetch
-    // events in flight (e.g. stalled proxy requests), so waiting on it would time out and break the proxy.
-    // The update takes over on its own once the old worker goes idle.
-    let worker =
-        registration.active ??
-        registration.waiting ??
-        registration.installing;
+	// Prefer the already-active worker. An updated worker can't activate while the old one still has fetch
+	// events in flight (e.g. stalled proxy requests), so waiting on it would time out and break the proxy.
+	// The update takes over on its own once the old worker goes idle.
+	let worker = registration.active ?? registration.waiting ?? registration.installing;
 
-    if (!worker) {
-        throw new Error(`No service worker found: ${scope}`);
-    }
+	if (!worker) {
+		throw new Error(`No service worker found: ${scope}`);
+	}
 
-    if (worker.state !== "activated") {
-        await new Promise<void>((resolve, reject) => {
-            const timeout = window.setTimeout(() => {
-                cleanup();
-                reject(new Error(`Service worker activation timed out: ${scope}`));
-            }, 15_000);
+	if (worker.state !== "activated") {
+		await new Promise<void>((resolve, reject) => {
+			const timeout = window.setTimeout(() => {
+				cleanup();
+				reject(new Error(`Service worker activation timed out: ${scope}`));
+			}, 15_000);
 
-            const finish = () => {
-                if (worker!.state === "activated") {
-                    cleanup();
-                    resolve();
-                } else if (worker!.state === "redundant") {
-                    cleanup();
-                    reject(new Error(`Service worker became redundant: ${scope}`));
-                }
-            };
+			const finish = () => {
+				if (worker!.state === "activated") {
+					cleanup();
+					resolve();
+				} else if (worker!.state === "redundant") {
+					cleanup();
+					reject(new Error(`Service worker became redundant: ${scope}`));
+				}
+			};
 
-            const cleanup = () => {
-                window.clearTimeout(timeout);
-                worker!.removeEventListener("statechange", finish);
-            };
+			const cleanup = () => {
+				window.clearTimeout(timeout);
+				worker!.removeEventListener("statechange", finish);
+			};
 
-            worker!.addEventListener("statechange", finish);
-            finish();
-        });
-    }
+			worker!.addEventListener("statechange", finish);
+			finish();
+		});
+	}
 
-    const expectedScript = new URL(scriptURL, location.href).href;
+	const expectedScript = new URL(scriptURL, location.href).href;
 
-    const isExpectedController = () =>
-        navigator.serviceWorker.controller?.scriptURL === expectedScript;
+	const isExpectedController = () => navigator.serviceWorker.controller?.scriptURL === expectedScript;
 
-    if (!isExpectedController()) {
-        const reloadKey = "fracital-sw-controller-reload";
-        const previousReload = sessionStorage.getItem(reloadKey);
+	if (!isExpectedController()) {
+		const reloadKey = "fracital-sw-controller-reload";
+		const previousReload = sessionStorage.getItem(reloadKey);
 
-        if (previousReload !== expectedScript) {
-            sessionStorage.setItem(reloadKey, expectedScript);
-            window.location.reload();
+		if (previousReload !== expectedScript) {
+			sessionStorage.setItem(reloadKey, expectedScript);
+			window.location.reload();
 
-            await new Promise<never>(() => undefined);
-        }
-    }
+			await new Promise<never>(() => undefined);
+		}
+	}
 
-    await new Promise<void>((resolve, reject) => {
-        if (isExpectedController()) {
-            sessionStorage.removeItem("fracital-sw-controller-reload");
-            resolve();
-            return;
-        }
+	await new Promise<void>((resolve, reject) => {
+		if (isExpectedController()) {
+			sessionStorage.removeItem("fracital-sw-controller-reload");
+			resolve();
+			return;
+		}
 
-        const timeout = window.setTimeout(() => {
-            cleanup();
-            reject(new Error(`Service worker did not take control: ${scope}`));
-        }, 15_000);
+		const timeout = window.setTimeout(() => {
+			cleanup();
+			reject(new Error(`Service worker did not take control: ${scope}`));
+		}, 15_000);
 
-        const finish = () => {
-            if (!isExpectedController()) return;
+		const finish = () => {
+			if (!isExpectedController()) return;
 
-            cleanup();
-            sessionStorage.removeItem("fracital-sw-controller-reload");
-            resolve();
-        };
+			cleanup();
+			sessionStorage.removeItem("fracital-sw-controller-reload");
+			resolve();
+		};
 
-        const cleanup = () => {
-            window.clearTimeout(timeout);
-            navigator.serviceWorker.removeEventListener("controllerchange", finish);
-        };
+		const cleanup = () => {
+			window.clearTimeout(timeout);
+			navigator.serviceWorker.removeEventListener("controllerchange", finish);
+		};
 
-        navigator.serviceWorker.addEventListener("controllerchange", finish);
-        finish();
-    });
+		navigator.serviceWorker.addEventListener("controllerchange", finish);
+		finish();
+	});
 
-    // Return the worker that actually controls the page.
-    worker = registration.active ?? worker;
+	// Return the worker that actually controls the page.
+	worker = registration.active ?? worker;
 
-    return worker;
+	return worker;
 };
 
 const regSw = async () => {
@@ -147,7 +140,7 @@ const regSw = async () => {
 		serviceworker: serviceWorker,
 		transport: new LibcurlTransport({
 			wisp: wispURL,
-		})
+		}),
 	});
 	// The SW only routes a frame's requests after the controller handshake finishes.
 	await scramjet.wait();
@@ -349,22 +342,22 @@ const App = () => {
 		}
 	}, [location.pathname]);
 
-        // The shipped shell's title is neutralized at build time; restore the
-        // brand title once the app boots. The literal is encrypted in the
-        // bundle, so the brand never appears in shipped plaintext.
-        useEffect(() => {
-                document.title = "Fracital";
-        }, []);
+	// The shipped shell's title is neutralized at build time; restore the
+	// brand title once the app boots. The literal is encrypted in the
+	// bundle, so the brand never appears in shipped plaintext.
+	useEffect(() => {
+		document.title = "Fracital";
+	}, []);
 
-        useEffect(() => {
-                const handleKeys = (e: KeyboardEvent) => {
-                        const key = e.key.toLowerCase();
+	useEffect(() => {
+		const handleKeys = (e: KeyboardEvent) => {
+			const key = e.key.toLowerCase();
 
-                        if (platform.includes("Mac")) {
-                                if (e.shiftKey && e.ctrlKey && key === "s") {
-                                        newTab({
-                                                id: createId(),
-                                                title: "Settings",
+			if (platform.includes("Mac")) {
+				if (e.shiftKey && e.ctrlKey && key === "s") {
+					newTab({
+						id: createId(),
+						title: "Settings",
 						url: "settings",
 						icon: <Cog6ToothIcon className="size-5" />,
 						displayUrl: "settings",
@@ -774,11 +767,7 @@ function SideAd() {
 	return (
 		<div ref={panelRef} className="hidden lg:flex flex-col shrink-0 rounded-2xl bg-(--secondary) inset-shadow-(--inset-shadow-primary) overflow-y-auto overflow-x-hidden [scrollbar-width:none]">
 			<div className="sticky top-0 z-10 m-2 p-2 pb-1.5 bg-(--secondary)">
-				<button
-					className="flex items-center gap-1.5 w-full justify-center px-2 py-1 rounded-lg text-xs font-medium text-(--text-secondary) hover:text-(--text-primary) hover:bg-[#ffffff14] duration-150"
-					title="Close ads"
-					onClick={() => setClosed(true)}
-				>
+				<button className="flex items-center gap-1.5 w-full justify-center px-2 py-1 rounded-lg text-xs font-medium text-(--text-secondary) hover:text-(--text-primary) hover:bg-[#ffffff14] duration-150" title="Close ads" onClick={() => setClosed(true)}>
 					<XMarkIcon className="size-3.5" />
 					Close
 				</button>

@@ -9,32 +9,40 @@
  * Runs as the first step of `npm run protect`.
  */
 
-import { readdirSync, statSync, rmSync } from 'node:fs'
-import { join, dirname, resolve } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { readdirSync, statSync, rmSync } from "node:fs";
+import { join, dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
-const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
-const DIST = join(ROOT, 'dist')
+const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const DIST = join(ROOT, "dist");
 
-const PRUNE_DIRS = new Set(['temp-types-build', 'types'])
-const isPrunable = (name) => name.endsWith('.map') || name.endsWith('.d.ts')
+const PRUNE_DIRS = new Set(["temp-types-build", "types"]);
+const isPrunable = name => name.endsWith(".map") || name.endsWith(".d.ts");
 
-let removed = 0
+let removed = 0;
 function walk(dir) {
-  let entries
-  try { entries = readdirSync(dir) } catch { return }
-  for (const name of entries) {
-    const full = join(dir, name)
-    const st = statSync(full)
-    if (st.isDirectory()) {
-      if (PRUNE_DIRS.has(name)) { rmSync(full, { recursive: true, force: true }); removed++; continue }
-      walk(full)
-    } else if (isPrunable(name)) {
-      rmSync(full, { force: true })
-      removed++
-    }
-  }
+	let entries;
+	try {
+		entries = readdirSync(dir);
+	} catch {
+		return;
+	}
+	for (const name of entries) {
+		const full = join(dir, name);
+		const st = statSync(full);
+		if (st.isDirectory()) {
+			if (PRUNE_DIRS.has(name)) {
+				rmSync(full, { recursive: true, force: true });
+				removed++;
+				continue;
+			}
+			walk(full);
+		} else if (isPrunable(name)) {
+			rmSync(full, { force: true });
+			removed++;
+		}
+	}
 }
 
-walk(DIST)
-console.log(`prune-dist: removed ${removed} sourcemap/type artifacts`)
+walk(DIST);
+console.log(`prune-dist: removed ${removed} sourcemap/type artifacts`);

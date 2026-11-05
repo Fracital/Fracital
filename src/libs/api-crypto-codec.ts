@@ -30,79 +30,73 @@
 // same JSON differ. The version lives in the negotiation header / content-type
 // (see api-crypto.ts), not in a plaintext magic byte.
 
-import { extract, expand } from '@noble/hashes/hkdf.js'
-import { sha256 } from '@noble/hashes/sha2.js'
-import {
-  seal,
-  open,
-  decodeSeed,
-  WCS_COOKIE_NAME,
-  KEY_LEN,
-} from './seal-codec.ts'
+import { extract, expand } from "@noble/hashes/hkdf.js";
+import { sha256 } from "@noble/hashes/sha2.js";
+import { seal, open, decodeSeed, WCS_COOKIE_NAME, KEY_LEN } from "./seal-codec.ts";
 
 /** Wire/scheme version. Bump only for an incompatible protocol change. */
-export const API_CRYPTO_VERSION = 1
+export const API_CRYPTO_VERSION = 1;
 /** Token carried in the negotiation header and echoed to mark a sealed body. */
-export const API_CRYPTO_TOKEN = `v${API_CRYPTO_VERSION}`
+export const API_CRYPTO_TOKEN = `v${API_CRYPTO_VERSION}`;
 /**
  * Request header: client sends it to signal "I accept sealed responses".
  * Response header: server echoes it to mark the body as sealed. Lower-case so
  * it matches Node's normalised `request.headers` keys directly.
  */
-export const API_CRYPTO_HEADER = 'x-frx-crypto'
+export const API_CRYPTO_HEADER = "x-frx-crypto";
 /** Content-Type for a sealed body (opaque octets; nothing says "json"). */
-export const API_CRYPTO_CONTENT_TYPE = 'application/frx-sealed'
+export const API_CRYPTO_CONTENT_TYPE = "application/frx-sealed";
 
-const SALT_STRING = 'frx-api-cloak/v1'
-const utf8 = new TextEncoder()
-const utf8dec = new TextDecoder()
-const SALT = utf8.encode(SALT_STRING)
-const INFO_REQ = utf8.encode('req')
-const INFO_RES = utf8.encode('res')
+const SALT_STRING = "frx-api-cloak/v1";
+const utf8 = new TextEncoder();
+const utf8dec = new TextDecoder();
+const SALT = utf8.encode(SALT_STRING);
+const INFO_REQ = utf8.encode("req");
+const INFO_RES = utf8.encode("res");
 
 export interface ApiKeys {
-  /** Client -> server direction key (request bodies; reserved for later). */
-  keyReq: Uint8Array
-  /** Server -> client direction key (responses). */
-  keyRes: Uint8Array
+	/** Client -> server direction key (request bodies; reserved for later). */
+	keyReq: Uint8Array;
+	/** Server -> client direction key (responses). */
+	keyRes: Uint8Array;
 }
 
 /** Derive the directional API keys from a 32-byte `wcs` seed. */
 export function deriveApiKeys(seed: Uint8Array): ApiKeys {
-  const master = extract(sha256, seed, SALT)
-  return {
-    keyReq: expand(sha256, master, INFO_REQ, KEY_LEN),
-    keyRes: expand(sha256, master, INFO_RES, KEY_LEN),
-  }
+	const master = extract(sha256, seed, SALT);
+	return {
+		keyReq: expand(sha256, master, INFO_REQ, KEY_LEN),
+		keyRes: expand(sha256, master, INFO_RES, KEY_LEN),
+	};
 }
 
 /** Parse + decode the `wcs` seed from a raw Cookie header (server side). */
 export function seedFromCookieHeader(cookieHeader: string | null | undefined): Uint8Array | null {
-  if (!cookieHeader) return null
-  for (const part of cookieHeader.split(';')) {
-    const eq = part.indexOf('=')
-    if (eq < 0) continue
-    if (part.slice(0, eq).trim() !== WCS_COOKIE_NAME) continue
-    return decodeSeed(part.slice(eq + 1).trim())
-  }
-  return null
+	if (!cookieHeader) return null;
+	for (const part of cookieHeader.split(";")) {
+		const eq = part.indexOf("=");
+		if (eq < 0) continue;
+		if (part.slice(0, eq).trim() !== WCS_COOKIE_NAME) continue;
+		return decodeSeed(part.slice(eq + 1).trim());
+	}
+	return null;
 }
 
 /** Read + decode the `wcs` seed from `document.cookie` (browser side). */
 export function seedFromDocumentCookie(): Uint8Array | null {
-  const g = globalThis as { document?: { cookie?: string } }
-  if (!g.document || typeof g.document.cookie !== 'string') return null
-  return seedFromCookieHeader(g.document.cookie)
+	const g = globalThis as { document?: { cookie?: string } };
+	if (!g.document || typeof g.document.cookie !== "string") return null;
+	return seedFromCookieHeader(g.document.cookie);
 }
 
 /** Seal an already-serialised JSON/text body into a sealed frame. */
 export function sealText(keyRes: Uint8Array, text: string): Uint8Array {
-  return seal(keyRes, utf8.encode(text))
+	return seal(keyRes, utf8.encode(text));
 }
 
 /** Seal a value by JSON-stringifying it first. */
 export function sealJson(keyRes: Uint8Array, value: unknown): Uint8Array {
-  return sealText(keyRes, JSON.stringify(value))
+	return sealText(keyRes, JSON.stringify(value));
 }
 
 /**
@@ -111,7 +105,7 @@ export function sealJson(keyRes: Uint8Array, value: unknown): Uint8Array {
  * failed request (no error oracle beyond that).
  */
 export function openToText(keyRes: Uint8Array, frame: Uint8Array | ArrayBuffer): string | null {
-  const pt = open(keyRes, frame)
-  if (!pt) return null
-  return utf8dec.decode(pt)
+	const pt = open(keyRes, frame);
+	if (!pt) return null;
+	return utf8dec.decode(pt);
 }

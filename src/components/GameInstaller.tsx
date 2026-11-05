@@ -111,8 +111,7 @@ export const GameInstaller = ({ onComplete }: GameInstallerProps) => {
 							if (metadata.title) {
 								installedGameTitles.add(metadata.title);
 							}
-						} catch (err) {
-						}
+						} catch (err) {}
 					}
 				} catch (err) {
 					console.log("Games folder not found, will be created on first install");
@@ -230,26 +229,21 @@ export const GameInstaller = ({ onComplete }: GameInstallerProps) => {
 
 			await window.fr.fs.promises.writeFile(`${folderPath}/index.json`, JSON.stringify(metadata, null, 2));
 
-		setProgress(prev => ({ ...prev, [game.id]: 100 }));
-		setCompleted(prev => new Set([...prev, game.id]));
-		setCurrentGame(null);
-		setInstalling(false);
-		onComplete();
-	} catch (err) {
-		console.error(`Failed to install ${game.title}:`, err);
-		setErrors(prev => ({ ...prev, [game.id]: err instanceof Error ? err.message : "Installation failed" }));
-		setCurrentGame(null);
-		setInstalling(false);
-	}
-};
+			setProgress(prev => ({ ...prev, [game.id]: 100 }));
+			setCompleted(prev => new Set([...prev, game.id]));
+			setCurrentGame(null);
+			setInstalling(false);
+			onComplete();
+		} catch (err) {
+			console.error(`Failed to install ${game.title}:`, err);
+			setErrors(prev => ({ ...prev, [game.id]: err instanceof Error ? err.message : "Installation failed" }));
+			setCurrentGame(null);
+			setInstalling(false);
+		}
+	};
 	const filteredGames = availableGames.filter(game => {
-		const matchesSearch = !searchQuery ||
-			game.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-			game.description?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-			game.tags?.some(tag => tag.toLowerCase().includes(searchQuery.toLowerCase()));
-		const matchesStore = selectedStore === "all" || 
-			(selectedStore === "base" && game.source === "base") ||
-			(game.storeName === selectedStore);
+		const matchesSearch = !searchQuery || game.title.toLowerCase().includes(searchQuery.toLowerCase()) || game.description?.toLowerCase().includes(searchQuery.toLowerCase()) || game.tags?.some(tag => tag.toLowerCase().includes(searchQuery.toLowerCase()));
+		const matchesStore = selectedStore === "all" || (selectedStore === "base" && game.source === "base") || game.storeName === selectedStore;
 		return matchesSearch && matchesStore;
 	});
 
@@ -270,19 +264,9 @@ export const GameInstaller = ({ onComplete }: GameInstallerProps) => {
 				<div className="flex gap-3">
 					<div className="relative flex-1">
 						<MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 size-5 opacity-50" />
-						<input
-							type="text"
-							placeholder="Search games..."
-							value={searchQuery}
-							onChange={(e) => setSearchQuery(e.target.value)}
-							className="w-full pl-10 pr-4 py-2 bg-(--hover) rounded-lg border border-(--border) focus:border-(--accent) outline-none duration-150"
-						/>
+						<input type="text" placeholder="Search games..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="w-full pl-10 pr-4 py-2 bg-(--hover) rounded-lg border border-(--border) focus:border-(--accent) outline-none duration-150" />
 					</div>
-					<select
-						value={selectedStore}
-						onChange={(e) => setSelectedStore(e.target.value)}
-						className="px-4 py-2 bg-(--hover) rounded-lg border border-(--border) focus:border-(--accent) outline-none cursor-pointer"
-					>
+					<select value={selectedStore} onChange={e => setSelectedStore(e.target.value)} className="px-4 py-2 bg-(--hover) rounded-lg border border-(--border) focus:border-(--accent) outline-none cursor-pointer">
 						{stores.map(store => (
 							<option key={store} value={store}>
 								{store === "all" ? "All Sources" : store === "base" ? "Base Games" : store}
@@ -319,15 +303,13 @@ export const GameInstaller = ({ onComplete }: GameInstallerProps) => {
 						</div>
 					) : (
 						<div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 auto-rows-min gap-3 md:gap-4">
-						{filteredGames.map(game => {
-							const isInstalling = currentGame === game.id;
-							const isCompleted = completed.has(game.id) || game.installed;
-							const hasError = errors[game.id];
-							const gameProgress = progress[game.id] || 0;								return (
-									<div
-										key={game.id}
-										className={`group flex flex-col gap-3 p-3 md:p-4 rounded-xl md:rounded-2xl duration-150 ${settings.brightness === "dark" ? "bg-[#ffffff10] hover:bg-[#ffffff18]" : "bg-[#00000010] hover:bg-[#00000018]"}`}
-									>
+							{filteredGames.map(game => {
+								const isInstalling = currentGame === game.id;
+								const isCompleted = completed.has(game.id) || game.installed;
+								const hasError = errors[game.id];
+								const gameProgress = progress[game.id] || 0;
+								return (
+									<div key={game.id} className={`group flex flex-col gap-3 p-3 md:p-4 rounded-xl md:rounded-2xl duration-150 ${settings.brightness === "dark" ? "bg-[#ffffff10] hover:bg-[#ffffff18]" : "bg-[#00000010] hover:bg-[#00000018]"}`}>
 										{/* Thumbnail */}
 										<div className="relative aspect-video bg-(--primary) rounded-lg overflow-hidden shrink-0">
 											{/* Source Badge */}
@@ -368,10 +350,7 @@ export const GameInstaller = ({ onComplete }: GameInstallerProps) => {
 										{/* Download Button */}
 										<div className="flex items-center justify-between gap-1.5 md:gap-2 pt-1 mt-auto">
 											{isCompleted ? (
-												<button
-													disabled
-													className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-green-500/20 text-green-400 rounded-md text-sm font-semibold cursor-not-allowed"
-												>
+												<button disabled className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-green-500/20 text-green-400 rounded-md text-sm font-semibold cursor-not-allowed">
 													<CheckIcon className="size-4" />
 													<span className="hidden sm:inline">Installed</span>
 												</button>
@@ -402,11 +381,11 @@ export const GameInstaller = ({ onComplete }: GameInstallerProps) => {
 														<div className="h-full bg-(--accent) transition-all duration-300" style={{ width: `${gameProgress}%` }} />
 													</div>
 												</div>
-										) : (
-											<button
-												onClick={() => installGame(game)}
-												disabled={installing || game.installed}
-												className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-md text-sm font-semibold duration-150 ${settings.brightness === "dark" ? "bg-[#ffffff10] hover:bg-[#ffffff18] text-(--text-primary)" : "bg-[#00000010] hover:bg-[#00000018] text-(--text-primary)"} disabled:opacity-50 disabled:cursor-not-allowed`}
+											) : (
+												<button
+													onClick={() => installGame(game)}
+													disabled={installing || game.installed}
+													className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-md text-sm font-semibold duration-150 ${settings.brightness === "dark" ? "bg-[#ffffff10] hover:bg-[#ffffff18] text-(--text-primary)" : "bg-[#00000010] hover:bg-[#00000018] text-(--text-primary)"} disabled:opacity-50 disabled:cursor-not-allowed`}
 												>
 													<ArrowDownTrayIcon className="size-4" />
 													<span className="hidden sm:inline">Download</span>

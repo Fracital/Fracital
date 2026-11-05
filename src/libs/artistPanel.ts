@@ -154,11 +154,9 @@ export const GOOGLE_FONTS = [
 
 export const panel = {
 	overview: () => meFetch<{ isAdmin: boolean; pages: { artistId: string; role: PageRole; name: string; verified: boolean; image: string | null }[]; claims: Claim[] }>("/api/me/artist-panel"),
-	claim: (body: { artistId: string; artistName: string; roleTitle: string; contactEmail: string; proofLinks: string[]; message: string }) =>
-		meFetch<{ ok: boolean }>("/api/me/claims", { method: "POST", body: JSON.stringify(body) }),
+	claim: (body: { artistId: string; artistName: string; roleTitle: string; contactEmail: string; proofLinks: string[]; message: string }) => meFetch<{ ok: boolean }>("/api/me/claims", { method: "POST", body: JSON.stringify(body) }),
 	cancelClaim: (id: number) => meFetch(`/api/me/claims/${id}`, { method: "DELETE" }),
-	page: (artistId: string) =>
-		meFetch<{ role: PageRole; profile: ArtistProfile | null; members: Member[]; invites: { code: string; role: PageRole; createdAt: string; expiresAt: string }[] }>(`/api/me/artist-panel/${encodeURIComponent(artistId)}`),
+	page: (artistId: string) => meFetch<{ role: PageRole; profile: ArtistProfile | null; members: Member[]; invites: { code: string; role: PageRole; createdAt: string; expiresAt: string }[] }>(`/api/me/artist-panel/${encodeURIComponent(artistId)}`),
 	save: (artistId: string, edit: ProfileEdit) =>
 		meFetch<{ profile: ArtistProfile }>(`/api/me/artist-panel/${encodeURIComponent(artistId)}/profile`, { method: "PUT", body: JSON.stringify(edit) }).then(r => {
 			profileCache.delete(artistId);

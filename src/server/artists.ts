@@ -119,10 +119,7 @@ const adminEmails = () =>
 		.filter(Boolean);
 
 export async function userMeta(pool: Pool, user: { id: string; email: string }) {
-	const { rows } = await pool.query<{ role: string; banned_at: Date | null; ban_reason: string | null; username: string | null; premium: boolean }>(
-		"select role, banned_at, ban_reason, username, premium from fracital_user_meta where user_id = $1",
-		[user.id],
-	);
+	const { rows } = await pool.query<{ role: string; banned_at: Date | null; ban_reason: string | null; username: string | null; premium: boolean }>("select role, banned_at, ban_reason, username, premium from fracital_user_meta where user_id = $1", [user.id]);
 	const meta = rows[0];
 	return {
 		isAdmin: meta?.role === "admin" || adminEmails().includes(user.email.toLowerCase()),
@@ -143,7 +140,10 @@ const ROLE_RANK: Record<Role, number> = { editor: 1, admin: 2, owner: 3 };
 
 const LINK_KINDS = ["instagram", "spotify", "youtube", "tidal", "apple", "soundcloud", "x", "tiktok", "facebook", "bandcamp", "deezer", "website"] as const;
 
-const mediaUrl = z.string().max(2000).refine(v => v === "" || v.startsWith("/api/artist-media/") || /^https:\/\//.test(v), "Must be an uploaded file or an https:// URL");
+const mediaUrl = z
+	.string()
+	.max(2000)
+	.refine(v => v === "" || v.startsWith("/api/artist-media/") || /^https:\/\//.test(v), "Must be an uploaded file or an https:// URL");
 
 const profileInput = z.object({
 	bio: z.string().max(4000).nullable().optional(),
@@ -151,11 +151,28 @@ const profileInput = z.object({
 	photos: z.array(mediaUrl).max(6).optional(),
 	logo: mediaUrl.nullable().optional(),
 	font: z
-		.object({ family: z.string().min(1).max(80).regex(/^[\p{L}\p{N} '-]+$/u, "Invalid font name"), source: z.enum(["google", "upload"]), url: mediaUrl.optional() })
+		.object({
+			family: z
+				.string()
+				.min(1)
+				.max(80)
+				.regex(/^[\p{L}\p{N} '-]+$/u, "Invalid font name"),
+			source: z.enum(["google", "upload"]),
+			url: mediaUrl.optional(),
+		})
 		.nullable()
 		.optional(),
 	links: z
-		.array(z.object({ kind: z.enum(LINK_KINDS), url: z.string().url().max(500).refine(u => /^https:\/\//.test(u), "Links must use https") }))
+		.array(
+			z.object({
+				kind: z.enum(LINK_KINDS),
+				url: z
+					.string()
+					.url()
+					.max(500)
+					.refine(u => /^https:\/\//.test(u), "Links must use https"),
+			}),
+		)
 		.max(12)
 		.nullable()
 		.optional(),
@@ -246,9 +263,7 @@ export function registerArtistRoutes(app: Hono<Env>, { init, requireUser }: Deps
 	app.post("/api/play-event", async c => {
 		const ctx = await init();
 		if (!ctx) return c.json({ ok: false });
-		const body = z
-			.object({ artist: z.string().min(1).max(300), title: z.string().min(1).max(300), listener: z.string().min(8).max(64) })
-			.safeParse(await c.req.json().catch(() => null));
+		const body = z.object({ artist: z.string().min(1).max(300), title: z.string().min(1).max(300), listener: z.string().min(8).max(64) }).safeParse(await c.req.json().catch(() => null));
 		if (!body.success) return c.json({ error: "Invalid request" }, 400);
 		const session = await ctx.auth.api.getSession({ headers: c.req.raw.headers }).catch(() => null);
 		const { artist, title, listener } = body.data;
@@ -312,14 +327,8 @@ export function registerArtistRoutes(app: Hono<Env>, { init, requireUser }: Deps
 				from music_play_events where artist_key = $1`,
 				[key],
 			),
-			pool.query<{ title: string; plays: string; listeners: string }>(
-				"select min(title) title, count(*) plays, count(distinct listener) listeners from music_play_events where artist_key = $1 and at > now() - interval '28 days' group by lower(title) order by count(*) desc limit 10",
-				[key],
-			),
-			pool.query<{ day: string; plays: string }>(
-				"select to_char(d, 'YYYY-MM-DD') as day, coalesce(count(e.id), 0) plays from generate_series(current_date - 27, current_date, interval '1 day') d left join music_play_events e on e.artist_key = $1 and e.at::date = d::date group by d order by d",
-				[key],
-			),
+			pool.query<{ title: string; plays: string; listeners: string }>("select min(title) title, count(*) plays, count(distinct listener) listeners from music_play_events where artist_key = $1 and at > now() - interval '28 days' group by lower(title) order by count(*) desc limit 10", [key]),
+			pool.query<{ day: string; plays: string }>("select to_char(d, 'YYYY-MM-DD') as day, coalesce(count(e.id), 0) plays from generate_series(current_date - 27, current_date, interval '1 day') d left join music_play_events e on e.artist_key = $1 and e.at::date = d::date group by d order by d", [key]),
 			pool.query<{ n: string }>("select count(*) n from fracital_saved_artists where artist_id = $1", [artistId]),
 		]);
 		const t = totals.rows[0];
@@ -400,10 +409,7 @@ export function registerArtistRoutes(app: Hono<Env>, { init, requireUser }: Deps
 		const pool = c.get("pool");
 		const userId = c.get("user").id;
 		const [pages, claims] = await Promise.all([
-			pool.query(
-				"select m.artist_id, m.role, p.name, p.verified, p.logo, p.banner, p.photos from artist_members m left join artist_profiles p on p.artist_id = m.artist_id where m.user_id = $1 order by p.name",
-				[userId],
-			),
+			pool.query("select m.artist_id, m.role, p.name, p.verified, p.logo, p.banner, p.photos from artist_members m left join artist_profiles p on p.artist_id = m.artist_id where m.user_id = $1 order by p.name", [userId]),
 			pool.query("select id, artist_id, artist_name, status, role_title, admin_note, created_at, reviewed_at from artist_claims where user_id = $1 order by created_at desc limit 50", [userId]),
 		]);
 		return c.json({
@@ -434,10 +440,7 @@ export function registerArtistRoutes(app: Hono<Env>, { init, requireUser }: Deps
 		if (pending.rows.length) return c.json({ error: "You already have a pending claim for this artist" }, 409);
 		const recent = await pool.query("select count(*)::int n from artist_claims where user_id = $1 and created_at > now() - interval '1 day'", [userId]);
 		if ((recent.rows[0]?.n ?? 0) >= 5) return c.json({ error: "Too many claims today — try again tomorrow" }, 429);
-		const { rows } = await pool.query(
-			"insert into artist_claims (artist_id, artist_name, user_id, role_title, contact_email, proof_links, message) values ($1, $2, $3, $4, $5, $6, $7) returning id",
-			[d.artistId, d.artistName, userId, d.roleTitle, d.contactEmail, JSON.stringify(d.proofLinks), d.message],
-		);
+		const { rows } = await pool.query("insert into artist_claims (artist_id, artist_name, user_id, role_title, contact_email, proof_links, message) values ($1, $2, $3, $4, $5, $6, $7) returning id", [d.artistId, d.artistName, userId, d.roleTitle, d.contactEmail, JSON.stringify(d.proofLinks), d.message]);
 		return c.json({ ok: true, id: rows[0].id });
 	});
 
@@ -520,9 +523,7 @@ export function registerArtistRoutes(app: Hono<Env>, { init, requireUser }: Deps
 	});
 
 	app.get("/api/me/artist-invites/:code", async c => {
-		const { rows } = await c
-			.get("pool")
-			.query("select i.artist_id, i.role, p.name from artist_invites i left join artist_profiles p on p.artist_id = i.artist_id where i.code = $1 and i.used_by is null and i.expires_at > now()", [c.req.param("code")]);
+		const { rows } = await c.get("pool").query("select i.artist_id, i.role, p.name from artist_invites i left join artist_profiles p on p.artist_id = i.artist_id where i.code = $1 and i.used_by is null and i.expires_at > now()", [c.req.param("code")]);
 		if (!rows[0]) return c.json({ error: "This invite is invalid or expired" }, 404);
 		return c.json({ artistId: rows[0].artist_id, artistName: rows[0].name, role: rows[0].role });
 	});
@@ -557,9 +558,7 @@ export function registerArtistRoutes(app: Hono<Env>, { init, requireUser }: Deps
 			(select count(distinct listener) from music_play_events where at > now() - interval '7 days')::int listeners7,
 			(select count(*) from fracital_user_meta where banned_at is not null)::int banned`);
 		const top = await pool.query("select min(artist) artist, count(*)::int plays from music_play_events where at > now() - interval '7 days' group by artist_key order by plays desc limit 10");
-		const daily = await pool.query(
-			"select to_char(d, 'YYYY-MM-DD') as day, coalesce(count(e.id), 0)::int plays from generate_series(current_date - 27, current_date, interval '1 day') d left join music_play_events e on e.at::date = d::date group by d order by d",
-		);
+		const daily = await pool.query("select to_char(d, 'YYYY-MM-DD') as day, coalesce(count(e.id), 0)::int plays from generate_series(current_date - 27, current_date, interval '1 day') d left join music_play_events e on e.at::date = d::date group by d order by d");
 		return c.json({ ...rows[0], topArtists: top.rows, daily: daily.rows });
 	});
 
@@ -595,25 +594,19 @@ export function registerArtistRoutes(app: Hono<Env>, { init, requireUser }: Deps
 		if (!body.success) return c.json({ error: "Invalid request" }, 400);
 		const pool = c.get("pool");
 		const adminId = c.get("user").id;
-		const { rows } = await pool.query(
-			"update artist_claims set status = $2, admin_note = $3, reviewed_by = $4, reviewed_at = now() where id = $1 and status = 'pending' returning artist_id, artist_name, user_id",
-			[Number(c.req.param("id")) || 0, body.data.action === "approve" ? "approved" : "rejected", body.data.note || null, adminId],
-		);
+		const { rows } = await pool.query("update artist_claims set status = $2, admin_note = $3, reviewed_by = $4, reviewed_at = now() where id = $1 and status = 'pending' returning artist_id, artist_name, user_id", [
+			Number(c.req.param("id")) || 0,
+			body.data.action === "approve" ? "approved" : "rejected",
+			body.data.note || null,
+			adminId,
+		]);
 		const claim = rows[0];
 		if (!claim) return c.json({ error: "Claim not found or already reviewed" }, 404);
 		if (body.data.action === "approve") {
-			await pool.query(
-				"insert into artist_profiles (artist_id, name, verified, verified_at) values ($1, $2, true, now()) on conflict (artist_id) do update set verified = true, verified_at = coalesce(artist_profiles.verified_at, now())",
-				[claim.artist_id, claim.artist_name],
-			);
+			await pool.query("insert into artist_profiles (artist_id, name, verified, verified_at) values ($1, $2, true, now()) on conflict (artist_id) do update set verified = true, verified_at = coalesce(artist_profiles.verified_at, now())", [claim.artist_id, claim.artist_name]);
 			// The first approved claimant owns the page; later ones join as admins.
 			const owner = await pool.query("select 1 from artist_members where artist_id = $1 and role = 'owner'", [claim.artist_id]);
-			await pool.query("insert into artist_members (artist_id, user_id, role, invited_by) values ($1, $2, $3, $4) on conflict (artist_id, user_id) do update set role = excluded.role", [
-				claim.artist_id,
-				claim.user_id,
-				owner.rows.length ? "admin" : "owner",
-				adminId,
-			]);
+			await pool.query("insert into artist_members (artist_id, user_id, role, invited_by) values ($1, $2, $3, $4) on conflict (artist_id, user_id) do update set role = excluded.role", [claim.artist_id, claim.user_id, owner.rows.length ? "admin" : "owner", adminId]);
 		}
 		return c.json({ ok: true });
 	});

@@ -59,7 +59,11 @@ useRadioStore.subscribe(s => {
 });
 
 const primaryArtist = (t: Track) => (Array.isArray(t.artists) ? t.artists[0] : t.artists) || "";
-const songKey = (title: string, artist: string) => `${artist}|${title}`.toLowerCase().replace(/\(.*?\)|\[.*?\]/g, "").replace(/[^\p{L}\p{N}|]+/gu, "");
+const songKey = (title: string, artist: string) =>
+	`${artist}|${title}`
+		.toLowerCase()
+		.replace(/\(.*?\)|\[.*?\]/g, "")
+		.replace(/[^\p{L}\p{N}|]+/gu, "");
 
 /** Increments on every request so a slow, stale response never overwrites a newer one. */
 let generation = 0;

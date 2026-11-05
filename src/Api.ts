@@ -81,10 +81,7 @@ export const Api = async () => {
 
 	if (!window.loadLock) {
 		window.loadLock = true;
-		void libcurl
-			.load_wasm("https://cdn.jsdelivr.net/npm/libcurl.js@latest/libcurl.wasm")
-			.then(() => libcurl.set_websocket(wispURL as `ws://${string}` | `wss://${string}`))
-			.catch(error => console.error("Failed to load libcurl WASM:", error));
+		void libcurl.load_wasm("/vendor/net.wasm").catch(error => console.error("Failed to load libcurl WASM:", error));
 
 		startScrobbler();
 		initRadio();

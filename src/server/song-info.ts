@@ -222,9 +222,7 @@ export async function albumInfo(id: string | undefined, rawTitle: string, artist
 	const collection = itunesRes?.results?.[0];
 
 	// The official release with the closest track count; one request then brings every track's credits.
-	const candidates = (mbSearch?.releases ?? [])
-		.filter(r => (r.score ?? 0) >= 85 && norm(r.title) === norm(title))
-		.sort((a, b) => Number(b.status === "Official") - Number(a.status === "Official") || Math.abs((a["track-count"] ?? 0) - (trackCount ?? 0)) - Math.abs((b["track-count"] ?? 0) - (trackCount ?? 0)));
+	const candidates = (mbSearch?.releases ?? []).filter(r => (r.score ?? 0) >= 85 && norm(r.title) === norm(title)).sort((a, b) => Number(b.status === "Official") - Number(a.status === "Official") || Math.abs((a["track-count"] ?? 0) - (trackCount ?? 0)) - Math.abs((b["track-count"] ?? 0) - (trackCount ?? 0)));
 	let failed = !mbSearch;
 	let release: MbRelease | null = null;
 	if (candidates[0]) {
@@ -240,7 +238,10 @@ export async function albumInfo(id: string | undefined, rawTitle: string, artist
 		people.set(name, person);
 		if (!person.roles.includes(role)) person.roles.push(role);
 	};
-	const recordings = (release?.media ?? []).flatMap(m => m.tracks ?? []).map(t => t.recording).filter((r): r is MbRecording => !!r);
+	const recordings = (release?.media ?? [])
+		.flatMap(m => m.tracks ?? [])
+		.map(t => t.recording)
+		.filter((r): r is MbRecording => !!r);
 	const rels = [...(release?.relations ?? []), ...recordings.flatMap(r => r.relations ?? [])];
 	for (const rel of [...rels, ...rels.flatMap(r => r.work?.relations ?? [])]) {
 		if (rel["target-type"] !== "artist" || !rel.artist) continue;
@@ -250,7 +251,9 @@ export async function albumInfo(id: string | undefined, rawTitle: string, artist
 	// Who plays what on each song is long for albums; keep the people, not every track's line-up.
 	const order = ["Produced by", "Written by", "Engineering", "Performers"];
 
-	const tags = asTags(lfm?.tags?.tag).filter(t => !/^(albums? i own|seen live|favou?rite)/i.test(t)).slice(0, 5);
+	const tags = asTags(lfm?.tags?.tag)
+		.filter(t => !/^(albums? i own|seen live|favou?rite)/i.test(t))
+		.slice(0, 5);
 	const full = cleanWiki(lfm?.wiki?.content);
 	const value: AlbumInfo = {
 		releaseDate: collection?.releaseDate ?? null,

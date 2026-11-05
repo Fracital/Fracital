@@ -1,15 +1,8 @@
 {
-    "title": "Papa's Freezeria",
-    "description": "Serve delicious frozen treats to your customers in Papa's Freezeria!",
-    "author": "Flipline Studios",
-    "version": "1.0.0",
-    "type": "flash",
-    "tags": [
-        "time-management",
-        "cooking",
-        "restaurant",
-        "flash",
-        "simulator",
-        "og"
-    ]
+	"title": "Papa's Freezeria",
+	"description": "Serve delicious frozen treats to your customers in Papa's Freezeria!",
+	"author": "Flipline Studios",
+	"version": "1.0.0",
+	"type": "flash",
+	"tags": ["time-management", "cooking", "restaurant", "flash", "simulator", "og"]
 }

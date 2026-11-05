@@ -329,11 +329,7 @@ const CreditsPanel = ({ track }: { track: Track }) => {
 							{section.credits.map(c => (
 								<div key={c.name} className="flex flex-col leading-tight">
 									{linkable ? (
-										<button
-											className="w-max max-w-full truncate text-left font-semibold hover:underline cursor-pointer"
-											title={`Go to ${c.name}`}
-											onClick={() => (section.title === "Performed by" && trackArtists(track).includes(c.name) ? openTrackArtist(track, c.name) : openArtistByName(c.name))}
-										>
+										<button className="w-max max-w-full truncate text-left font-semibold hover:underline cursor-pointer" title={`Go to ${c.name}`} onClick={() => (section.title === "Performed by" && trackArtists(track).includes(c.name) ? openTrackArtist(track, c.name) : openArtistByName(c.name))}>
 											{c.name}
 										</button>
 									) : (
@@ -346,10 +342,7 @@ const CreditsPanel = ({ track }: { track: Track }) => {
 					))}
 					{!found && <p className="text-sm text-(--text-tertiary)">No detailed credits for this song yet.</p>}
 					{data?.url && (
-						<button
-							className="w-max text-xs text-(--text-tertiary) hover:text-(--text-secondary) hover:underline cursor-pointer"
-							onClick={() => useTabsStore.getState().newTab({ id: crypto.randomUUID(), url: data.url!, displayUrl: data.url!, title: "MusicBrainz", icon: null, current: true })}
-						>
+						<button className="w-max text-xs text-(--text-tertiary) hover:text-(--text-secondary) hover:underline cursor-pointer" onClick={() => useTabsStore.getState().newTab({ id: crypto.randomUUID(), url: data.url!, displayUrl: data.url!, title: "MusicBrainz", icon: null, current: true })}>
 							Source: MusicBrainz
 						</button>
 					)}
@@ -379,11 +372,7 @@ const QueuePanel = () => {
 			<RadioStatus className="mb-2" />
 			<div className="flex items-center justify-between gap-2 px-2 pb-2">
 				<h2 className="text-2xl font-bold">Up next</h2>
-				<button
-					className="flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold text-(--text-secondary) hover:text-(--text-primary) bg-[#ffffff18] hover:bg-[#ffffff28] cursor-pointer duration-150"
-					title={`Remove all ${queue.length} songs from the queue`}
-					onClick={clearQueue}
-				>
+				<button className="flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold text-(--text-secondary) hover:text-(--text-primary) bg-[#ffffff18] hover:bg-[#ffffff28] cursor-pointer duration-150" title={`Remove all ${queue.length} songs from the queue`} onClick={clearQueue}>
 					Clear queue
 				</button>
 			</div>
@@ -497,7 +486,10 @@ export const MusicPlayer = ({ query, className, onClose }: MusicPlayerProps) => 
 					<div className={`flex flex-1 min-h-0 overflow-y-auto gap-8 px-8 ${onClose ? "pb-5" : "pb-8"} ${sidePanel ? "flex-col md:flex-row" : "flex-col"}`}>
 						<div className={`flex min-h-0 flex-col items-center justify-center gap-6 ${sidePanel ? "md:w-[42%] shrink-0" : "flex-1"}`}>
 							<div className="relative w-full flex justify-center items-center">
-								<Cover track={currentTrack} className={`rounded-2xl shadow-[0_10px_40px_0px_#00000090] duration-300 ${isPlaying ? "scale-100" : "scale-95"} ${sidePanel ? (onClose ? "w-full max-w-[min(100%,40vh)]" : "w-full max-w-[min(100%,48vh)]") : onClose ? "w-[min(60%,44vh)]" : "w-[min(70%,56vh)]"}`} />
+								<Cover
+									track={currentTrack}
+									className={`rounded-2xl shadow-[0_10px_40px_0px_#00000090] duration-300 ${isPlaying ? "scale-100" : "scale-95"} ${sidePanel ? (onClose ? "w-full max-w-[min(100%,40vh)]" : "w-full max-w-[min(100%,48vh)]") : onClose ? "w-[min(60%,44vh)]" : "w-[min(70%,56vh)]"}`}
+								/>
 								{showVisualizer && (
 									<div className="absolute bottom-4 left-1/2 -translate-x-1/2 pointer-events-none drop-shadow-xl">
 										<AudvisVisualizer analyser={analyser} isPlaying={isPlaying} width={220} height={40} color={dark ? "#FFFFFF" : "#000000"} opacity={0.85} />
@@ -539,11 +531,7 @@ export const MusicPlayer = ({ query, className, onClose }: MusicPlayerProps) => 
 									);
 								})()}
 								<div className="flex items-center gap-2.5 mt-1">
-									{failed ? (
-										<span className="text-sm font-semibold text-[#ff6b6b]">Couldn't play this song</span>
-									) : (
-										<PlayCount title={currentTrack.title} artist={currentTrack.artists} skeleton={false} className="text-sm font-medium text-(--text-tertiary)" />
-									)}
+									{failed ? <span className="text-sm font-semibold text-[#ff6b6b]">Couldn't play this song</span> : <PlayCount title={currentTrack.title} artist={currentTrack.artists} skeleton={false} className="text-sm font-medium text-(--text-tertiary)" />}
 									<button
 										className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold cursor-pointer duration-150 ${mode === "credits" ? (dark ? "bg-white text-black" : "bg-black text-white") : dark ? "bg-[#ffffff1f] hover:bg-[#ffffff33]" : "bg-[#00000012] hover:bg-[#00000022]"}`}
 										title={mode === "credits" ? "Hide credits" : "Show song credits"}

@@ -69,8 +69,7 @@ export const AdminDashboard = ({ query }: { query?: string }) => {
 const Panel = ({ dark, children, className = "" }: { dark: boolean; children: React.ReactNode; className?: string }) => <div className={`rounded-2xl p-4 ${dark ? "bg-[#ffffff0d]" : "bg-[#00000008]"} ${className}`}>{children}</div>;
 
 const Btn = ({ children, onClick, kind = "secondary", disabled, title }: { children: React.ReactNode; onClick: () => void; kind?: "primary" | "secondary" | "danger" | "good"; disabled?: boolean; title?: string }) => {
-	const cls =
-		kind === "primary" ? "bg-white text-black hover:bg-white/90" : kind === "danger" ? "bg-red-500/15 text-red-400 hover:bg-red-500/25" : kind === "good" ? "bg-green-500/15 text-green-400 hover:bg-green-500/25" : "bg-[#ffffff14] hover:bg-[#ffffff24]";
+	const cls = kind === "primary" ? "bg-white text-black hover:bg-white/90" : kind === "danger" ? "bg-red-500/15 text-red-400 hover:bg-red-500/25" : kind === "good" ? "bg-green-500/15 text-green-400 hover:bg-green-500/25" : "bg-[#ffffff14] hover:bg-[#ffffff24]";
 	return (
 		<button title={title} disabled={disabled} onClick={onClick} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold disabled:opacity-50 cursor-pointer duration-150 ${cls}`}>
 			{children}
@@ -228,12 +227,7 @@ const Claims = ({ dark, chip }: { dark: boolean; chip: (a: boolean) => string })
 						</div>
 						{c.status === "pending" && (
 							<div className="flex flex-wrap items-center gap-2">
-								<input
-									className={`flex-1 min-w-48 px-3 py-1.5 rounded-full text-sm outline-none ${dark ? "bg-[#ffffff10]" : "bg-[#00000008]"}`}
-									placeholder="Note to the claimant (optional)"
-									value={notes[c.id] ?? ""}
-									onChange={e => setNotes(n => ({ ...n, [c.id]: e.target.value }))}
-								/>
+								<input className={`flex-1 min-w-48 px-3 py-1.5 rounded-full text-sm outline-none ${dark ? "bg-[#ffffff10]" : "bg-[#00000008]"}`} placeholder="Note to the claimant (optional)" value={notes[c.id] ?? ""} onChange={e => setNotes(n => ({ ...n, [c.id]: e.target.value }))} />
 								<Btn kind="good" onClick={() => review(c, "approve")}>
 									<CheckIcon className="size-4" /> Approve
 								</Btn>

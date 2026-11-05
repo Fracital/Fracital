@@ -1,14 +1,8 @@
 {
-    "title": "Run 3",
-    "description": "Run, jump, and navigate through a series of challenging tunnels in space in this addictive endless runner game.",
-    "author": "Joseph Cloutier",
-    "version": "1.0.0",
-    "type": "flash",
-    "tags": [
-        "endless-runner",
-        "platformer",
-        "arcade",
-        "flash",
-        "og"
-    ]
+	"title": "Run 3",
+	"description": "Run, jump, and navigate through a series of challenging tunnels in space in this addictive endless runner game.",
+	"author": "Joseph Cloutier",
+	"version": "1.0.0",
+	"type": "flash",
+	"tags": ["endless-runner", "platformer", "arcade", "flash", "og"]
 }

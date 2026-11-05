@@ -38,7 +38,9 @@ export function signParams(params: Record<string, string>, secret: string): stri
 		.sort()
 		.map(k => `${k}${params[k]}`)
 		.join("");
-	return createHash("md5").update(base + secret, "utf8").digest("hex");
+	return createHash("md5")
+		.update(base + secret, "utf8")
+		.digest("hex");
 }
 
 /**

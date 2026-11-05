@@ -16,12 +16,7 @@ interface AccountProps {
 const LASTFM_RED = "#d51007";
 
 const LastfmButton = ({ label, busy, onClick }: { label: string; busy?: boolean; onClick: () => void }) => (
-	<button
-		className="flex items-center justify-center gap-2 w-full p-2.5 rounded-lg font-semibold text-white hover:brightness-110 disabled:opacity-60 duration-150 cursor-pointer"
-		style={{ backgroundColor: LASTFM_RED }}
-		disabled={busy}
-		onClick={onClick}
-	>
+	<button className="flex items-center justify-center gap-2 w-full p-2.5 rounded-lg font-semibold text-white hover:brightness-110 disabled:opacity-60 duration-150 cursor-pointer" style={{ backgroundColor: LASTFM_RED }} disabled={busy} onClick={onClick}>
 		<FontAwesomeIcon icon={faLastfm} className="size-5" />
 		{busy ? "Waiting for Last.fm…" : label}
 	</button>
@@ -81,10 +76,7 @@ export const SignIn = ({ initialPage, onSignedIn, branding = DEFAULT_BRANDING }:
 		setError("");
 		if (!email || !password || (page === "register" && !name)) return setError("Please fill in all fields");
 		setLoading(true);
-		const res =
-			page === "login"
-				? await signIn.email({ email, password })
-				: await signUp.email({ name, email, password });
+		const res = page === "login" ? await signIn.email({ email, password }) : await signUp.email({ name, email, password });
 		setLoading(false);
 		if (res.error) return setError(res.error.message || (page === "login" ? "Sign-in failed" : "Registration failed"));
 		await finish();
@@ -109,8 +101,12 @@ export const SignIn = ({ initialPage, onSignedIn, branding = DEFAULT_BRANDING }:
 		<div className="flex flex-col items-center justify-center size-full gap-5">
 			<div className="flex flex-col items-center gap-2">
 				{branding.icon ?? <img src="/icon.svg" alt="" className="size-14" />}
-				<h1 className="text-2xl font-bold"><HolyText text={page === "login" ? branding.loginTitle : branding.registerTitle} /></h1>
-				<p className="text-sm text-(--text-tertiary) text-center max-w-sm"><HolyText text={branding.subtitle} /></p>
+				<h1 className="text-2xl font-bold">
+					<HolyText text={page === "login" ? branding.loginTitle : branding.registerTitle} />
+				</h1>
+				<p className="text-sm text-(--text-tertiary) text-center max-w-sm">
+					<HolyText text={branding.subtitle} />
+				</p>
 			</div>
 			<div className="flex flex-col items-center gap-3 w-full max-w-sm">
 				{error && <div className="w-full p-2 bg-red-500/20 border border-red-500/50 rounded-md text-sm text-red-300">{error}</div>}
@@ -190,10 +186,7 @@ const Manage = ({ me, onChange }: { me: Me; onChange: (me: Me | null) => void })
 									<span className="flex items-center gap-1.5 font-semibold">
 										Last.fm <CheckCircleIcon className="size-4 text-green-500" />
 									</span>
-									<button
-										className="text-left text-sm text-(--text-tertiary) hover:underline truncate cursor-pointer"
-										onClick={() => newTab({ id: createId(), title: "Last.fm", url: me.lastfm!.url, displayUrl: me.lastfm!.url, icon: null, current: true })}
-									>
+									<button className="text-left text-sm text-(--text-tertiary) hover:underline truncate cursor-pointer" onClick={() => newTab({ id: createId(), title: "Last.fm", url: me.lastfm!.url, displayUrl: me.lastfm!.url, icon: null, current: true })}>
 										@{me.lastfm.username} · {formatCount(me.lastfm.playcount)} scrobbles
 									</button>
 								</div>

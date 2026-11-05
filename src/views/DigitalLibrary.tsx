@@ -183,9 +183,7 @@ const MediaModal = ({ title, titleFont, photos, covers, index, onIndex, onClose 
 					<span className="text-2xl leading-tight truncate" style={{ fontFamily: titleFont }}>
 						{title}
 					</span>
-					<span className="text-xs text-white/60">
-						{current ? `${index! + 1} of ${all.length}${current.label ? ` · ${current.label}` : ""}` : `${photos.length} photo${photos.length === 1 ? "" : "s"} · ${covers.length} release${covers.length === 1 ? "" : "s"}`}
-					</span>
+					<span className="text-xs text-white/60">{current ? `${index! + 1} of ${all.length}${current.label ? ` · ${current.label}` : ""}` : `${photos.length} photo${photos.length === 1 ? "" : "s"} · ${covers.length} release${covers.length === 1 ? "" : "s"}`}</span>
 				</div>
 				<button className="ml-auto p-2 rounded-full hover:bg-white/10 cursor-pointer" title="Close (Esc)" onClick={onClose}>
 					<XMarkIcon className="size-6" />
@@ -396,7 +394,12 @@ export const DigitalLibrary = ({ query, urlPage = "library", urlPrefix, nav, ove
 	};
 
 	const doSearch = async (q: string, sync = true) => {
-		if (!q.trim()) { setTracks([]); setAlbums([]); setPage("home"); return; }
+		if (!q.trim()) {
+			setTracks([]);
+			setAlbums([]);
+			setPage("home");
+			return;
+		}
 		searchAbort.current?.abort();
 		const ctrl = new AbortController();
 		searchAbort.current = ctrl;
@@ -410,7 +413,10 @@ export const DigitalLibrary = ({ query, urlPage = "library", urlPrefix, nav, ove
 			setArtists(res.artists || []);
 			if (sync) syncUrl(`q=${encodeURIComponent(q)}`, `${q} — Library`);
 		} catch (err: any) {
-			if (err?.name !== "AbortError") { console.error("Search error:", err); setError("Search failed — is the music server running?"); }
+			if (err?.name !== "AbortError") {
+				console.error("Search error:", err);
+				setError("Search failed — is the music server running?");
+			}
 		} finally {
 			setLoading(false);
 		}
@@ -522,8 +528,14 @@ export const DigitalLibrary = ({ query, urlPage = "library", urlPrefix, nav, ove
 		// Name-based links (e.g. from the quick player) resolve to an id, then rewrite the URL.
 		else if (artistName) openArtistByName(artistName);
 		else if (trackTitle) openAlbumForTrack(trackTitle, params.get("by") || "");
-		else if (q) { setSearchQuery(q); doSearch(q, false); }
-		else { setPage("home"); setAlbumDetail(null); setArtistDetail(null); }
+		else if (q) {
+			setSearchQuery(q);
+			doSearch(q, false);
+		} else {
+			setPage("home");
+			setAlbumDetail(null);
+			setArtistDetail(null);
+		}
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [query, configured]);
 
@@ -531,7 +543,11 @@ export const DigitalLibrary = ({ query, urlPage = "library", urlPrefix, nav, ove
 	const handlePlay = (track: MusicTrack, list?: MusicTrack[]) => {
 		const playable = (list ?? [track]).filter(t => t === track || t.streamUrl || t.previewUrl);
 		const index = Math.max(0, playable.indexOf(track));
-		if (playable.length > 1) playList(playable.map(t => ({ ...trackToFracital(t), id: createId() })), index);
+		if (playable.length > 1)
+			playList(
+				playable.map(t => ({ ...trackToFracital(t), id: createId() })),
+				index,
+			);
 		else playTrack({ ...trackToFracital(track), id: createId() });
 		// Warm the next track so it starts instantly.
 		const next = playable[index + 1];
@@ -566,10 +582,7 @@ export const DigitalLibrary = ({ query, urlPage = "library", urlPrefix, nav, ove
 
 	/** `list` is what clicking the row plays from (the album, search results, chart…). */
 	const TrackRow = ({ track, index, list }: { track: MusicTrack; index?: number; list?: MusicTrack[] }) => (
-		<div
-			className={`group flex items-center gap-3 p-2 px-3 rounded-lg cursor-pointer duration-150 ${brightness === "dark" ? "hover:bg-[#ffffff12]" : "hover:bg-[#00000008]"}`}
-			onClick={() => handlePlay(track, list)}
-		>
+		<div className={`group flex items-center gap-3 p-2 px-3 rounded-lg cursor-pointer duration-150 ${brightness === "dark" ? "hover:bg-[#ffffff12]" : "hover:bg-[#00000008]"}`} onClick={() => handlePlay(track, list)}>
 			{index !== undefined && <span className="w-6 text-right text-sm text-(--text-tertiary) group-hover:hidden">{index + 1}</span>}
 			{index !== undefined && <PlayIcon className="hidden group-hover:block size-4 w-6 text-(--text-primary)" />}
 			<img src={track.artwork} alt="" className="size-10 rounded object-cover bg-(--tertiary)" loading="lazy" />
@@ -602,7 +615,10 @@ export const DigitalLibrary = ({ query, urlPage = "library", urlPrefix, nav, ove
 				<span
 					title={track.album}
 					className="text-xs text-(--text-tertiary) truncate max-w-32 cursor-pointer hover:underline hidden sm:block"
-					onClick={e => { e.stopPropagation(); if (track.albumId) openAlbum(track.albumId); }}
+					onClick={e => {
+						e.stopPropagation();
+						if (track.albumId) openAlbum(track.albumId);
+					}}
 				>
 					{track.album}
 				</span>
@@ -612,21 +628,30 @@ export const DigitalLibrary = ({ query, urlPage = "library", urlPrefix, nav, ove
 			<button
 				className={`${isTrackSaved(track.id) ? "" : "opacity-0 group-hover:opacity-100"} p-1 rounded-full hover:bg-[#ffffff20] duration-150`}
 				title={isTrackSaved(track.id) ? "Remove from Library" : "Add to Library"}
-				onClick={e => { e.stopPropagation(); toggleTrack(track); }}
+				onClick={e => {
+					e.stopPropagation();
+					toggleTrack(track);
+				}}
 			>
 				{isTrackSaved(track.id) ? <CheckCircleIcon className="size-4 text-[#3d91ff]" /> : <PlusCircleIcon className="size-4 text-(--text-secondary)" />}
 			</button>
 			<button
 				className="opacity-0 group-hover:opacity-100 p-1 rounded-full hover:bg-[#ffffff20] duration-150"
 				title="Start radio from this song"
-				onClick={e => { e.stopPropagation(); startRadio(track.artist, track.title); }}
+				onClick={e => {
+					e.stopPropagation();
+					startRadio(track.artist, track.title);
+				}}
 			>
 				<RadioIcon className="size-4 text-(--text-secondary)" />
 			</button>
 			<button
 				className="opacity-0 group-hover:opacity-100 p-1 rounded-full hover:bg-[#ffffff20] duration-150"
 				title="Add to queue"
-				onClick={e => { e.stopPropagation(); handleQueue(track); }}
+				onClick={e => {
+					e.stopPropagation();
+					handleQueue(track);
+				}}
 			>
 				<PlusIcon className="size-4 text-(--text-secondary)" />
 			</button>
@@ -637,14 +662,15 @@ export const DigitalLibrary = ({ query, urlPage = "library", urlPrefix, nav, ove
 		const year = album.releaseDate ? new Date(album.releaseDate).getFullYear() : null;
 		const kind = album.type === "single" ? "Single" : album.type === "ep" ? "EP" : "Album";
 		return (
-			<div
-				className={`flex flex-col gap-2 p-2 rounded-xl cursor-pointer duration-150 ${brightness === "dark" ? "hover:bg-[#ffffff10]" : "hover:bg-[#00000008]"}`}
-				onClick={() => openAlbum(album.id)}
-			>
+			<div className={`flex flex-col gap-2 p-2 rounded-xl cursor-pointer duration-150 ${brightness === "dark" ? "hover:bg-[#ffffff10]" : "hover:bg-[#00000008]"}`} onClick={() => openAlbum(album.id)}>
 				<img src={artworkHighRes(album.artwork)} alt="" className="w-full aspect-square rounded-lg object-cover bg-(--tertiary)" loading="lazy" />
 				<div className="flex flex-col min-w-0 px-0.5">
-					<span title={cleanAlbumTitle(album.title)} className="text-sm font-medium truncate">{cleanAlbumTitle(album.title)}</span>
-					<span title={showMeta ? undefined : album.artist} className="text-xs text-(--text-tertiary) truncate">{showMeta ? [year, kind].filter(Boolean).join(" · ") : album.artist}</span>
+					<span title={cleanAlbumTitle(album.title)} className="text-sm font-medium truncate">
+						{cleanAlbumTitle(album.title)}
+					</span>
+					<span title={showMeta ? undefined : album.artist} className="text-xs text-(--text-tertiary) truncate">
+						{showMeta ? [year, kind].filter(Boolean).join(" · ") : album.artist}
+					</span>
 				</div>
 			</div>
 		);
@@ -654,13 +680,12 @@ export const DigitalLibrary = ({ query, urlPage = "library", urlPrefix, nav, ove
 	const ReleaseTile = ({ album }: { album: MusicAlbum }) => {
 		const year = album.releaseDate ? new Date(album.releaseDate).getFullYear() : null;
 		return (
-			<div
-				className={`flex flex-col gap-1.5 w-32 shrink-0 p-1.5 rounded-lg cursor-pointer duration-150 ${brightness === "dark" ? "hover:bg-[#ffffff10]" : "hover:bg-[#00000008]"}`}
-				onClick={() => openAlbum(album.id)}
-			>
+			<div className={`flex flex-col gap-1.5 w-32 shrink-0 p-1.5 rounded-lg cursor-pointer duration-150 ${brightness === "dark" ? "hover:bg-[#ffffff10]" : "hover:bg-[#00000008]"}`} onClick={() => openAlbum(album.id)}>
 				<img src={artworkHighRes(album.artwork)} alt="" className="w-full aspect-square rounded-md object-cover bg-(--tertiary)" loading="lazy" />
 				<div className="flex flex-col min-w-0 gap-0.5">
-					<span title={cleanAlbumTitle(album.title)} className="text-xs font-semibold leading-tight line-clamp-2">{cleanAlbumTitle(album.title)}</span>
+					<span title={cleanAlbumTitle(album.title)} className="text-xs font-semibold leading-tight line-clamp-2">
+						{cleanAlbumTitle(album.title)}
+					</span>
 					<span className="flex items-center gap-1 text-[10px] text-(--text-tertiary) leading-none">
 						{album.explicit && <span className="px-[3px] py-px rounded-[3px] bg-(--text-tertiary) text-(--secondary) font-bold">E</span>}
 						{year}
@@ -677,9 +702,7 @@ export const DigitalLibrary = ({ query, urlPage = "library", urlPrefix, nav, ove
 		const items: MenuItem[] = [
 			{ title: "Play", onClick: () => handlePlay(track), icon: <PlayIcon className="size-5" /> },
 			{ title: "Add to queue", onClick: () => handleQueue(track), icon: <PlusIcon className="size-5" /> },
-			isTrackSaved(track.id)
-				? { title: "Remove from Library", onClick: () => toggleTrack(track), icon: <CheckCircleIcon className="size-5" /> }
-				: { title: "Add to Library", onClick: () => toggleTrack(track), icon: <PlusCircleIcon className="size-5" /> },
+			isTrackSaved(track.id) ? { title: "Remove from Library", onClick: () => toggleTrack(track), icon: <CheckCircleIcon className="size-5" /> } : { title: "Add to Library", onClick: () => toggleTrack(track), icon: <PlusCircleIcon className="size-5" /> },
 			...(lastfmUser ? [{ title: isLoved ? "Remove from Liked Songs" : "Add to Liked Songs", onClick: () => void toggleLove(track.title, track.artist), icon: isLoved ? <HeartIcon className="size-5 text-[#ff3b5c]" /> : <HeartOutlineIcon className="size-5" /> }] : []),
 			{ title: "Start radio", onClick: () => startRadio(track.artist, track.title), icon: <RadioIcon className="size-5" /> },
 			{
@@ -707,7 +730,10 @@ export const DigitalLibrary = ({ query, urlPage = "library", urlPrefix, nav, ove
 			<div
 				className={`group grid ${lastfmUser ? "grid-cols-[minmax(0,1.7fr)_minmax(6rem,1fr)_6.5rem]" : "grid-cols-[minmax(0,1.7fr)_minmax(6rem,1fr)_4.25rem]"} items-center gap-3 h-15 px-4 rounded-xl cursor-pointer duration-150 ${brightness === "dark" ? "bg-[#ffffff14] hover:bg-[#ffffff21]" : "bg-[#0000000a] hover:bg-[#00000014]"}`}
 				onClick={() => handlePlay(track, list)}
-				onContextMenu={e => { e.preventDefault(); openSongMenu(e, track); }}
+				onContextMenu={e => {
+					e.preventDefault();
+					openSongMenu(e, track);
+				}}
 			>
 				<div className="flex items-center gap-3 min-w-0">
 					<div className="relative shrink-0">
@@ -751,11 +777,7 @@ export const DigitalLibrary = ({ query, urlPage = "library", urlPrefix, nav, ove
 							{isLoved ? <HeartIcon className="size-5 text-[#ff3b5c]" /> : <HeartOutlineIcon className="size-5" />}
 						</button>
 					)}
-					<button
-						className={`flex items-center justify-center size-8 rounded-full duration-150 ${brightness === "dark" ? "hover:bg-[#ffffff1f]" : "hover:bg-[#00000012]"}`}
-						title="More"
-						onClick={e => openSongMenu(e, track)}
-					>
+					<button className={`flex items-center justify-center size-8 rounded-full duration-150 ${brightness === "dark" ? "hover:bg-[#ffffff1f]" : "hover:bg-[#00000012]"}`} title="More" onClick={e => openSongMenu(e, track)}>
 						<EllipsisHorizontalIcon className="size-6" />
 					</button>
 				</div>
@@ -764,10 +786,7 @@ export const DigitalLibrary = ({ query, urlPage = "library", urlPrefix, nav, ove
 	};
 
 	const ArtistCard = ({ artist }: { artist: MusicArtist }) => (
-		<div
-			className={`flex flex-col items-center gap-2 p-3 rounded-xl cursor-pointer duration-150 ${brightness === "dark" ? "hover:bg-[#ffffff10]" : "hover:bg-[#00000008]"}`}
-			onClick={() => openArtist(artist.id)}
-		>
+		<div className={`flex flex-col items-center gap-2 p-3 rounded-xl cursor-pointer duration-150 ${brightness === "dark" ? "hover:bg-[#ffffff10]" : "hover:bg-[#00000008]"}`} onClick={() => openArtist(artist.id)}>
 			{artist.picture ? (
 				<img src={artist.picture} alt={artist.name} title={artist.name} className="size-20 rounded-full object-cover bg-(--tertiary)" loading="lazy" />
 			) : (
@@ -775,7 +794,9 @@ export const DigitalLibrary = ({ query, urlPage = "library", urlPrefix, nav, ove
 					{artist.name.charAt(0).toUpperCase()}
 				</div>
 			)}
-			<span title={artist.name} className="text-sm font-medium truncate w-full text-center">{artist.name}</span>
+			<span title={artist.name} className="text-sm font-medium truncate w-full text-center">
+				{artist.name}
+			</span>
 		</div>
 	);
 
@@ -801,7 +822,9 @@ export const DigitalLibrary = ({ query, urlPage = "library", urlPrefix, nav, ove
 				<div className="flex flex-col gap-2">
 					<h2 className="text-lg font-bold px-1">Popular Albums</h2>
 					<div className="grid grid-cols-[repeat(auto-fill,minmax(140px,1fr))] gap-1">
-						{chartAlbums.slice(0, 8).map(album => <AlbumCard key={album.id} album={album} />)}
+						{chartAlbums.slice(0, 8).map(album => (
+							<AlbumCard key={album.id} album={album} />
+						))}
 					</div>
 				</div>
 			)}
@@ -812,15 +835,14 @@ export const DigitalLibrary = ({ query, urlPage = "library", urlPrefix, nav, ove
 							<FireIcon className="size-5 text-(--text-secondary)" />
 							<h2 className="text-lg font-bold">Trending Now</h2>
 						</div>
-						<button
-							className={`text-xs px-3 py-1.5 rounded-lg duration-150 ${brightness === "dark" ? "bg-[#ffffff15] hover:bg-[#ffffff25]" : "bg-[#00000010] hover:bg-[#00000020]"}`}
-							onClick={() => handlePlayAll(chartTracks)}
-						>
+						<button className={`text-xs px-3 py-1.5 rounded-lg duration-150 ${brightness === "dark" ? "bg-[#ffffff15] hover:bg-[#ffffff25]" : "bg-[#00000010] hover:bg-[#00000020]"}`} onClick={() => handlePlayAll(chartTracks)}>
 							Play all
 						</button>
 					</div>
 					<div className="flex flex-col">
-						{chartTracks.slice(0, 25).map((track, i) => <TrackRow key={track.id} track={track} index={i} list={chartTracks} />)}
+						{chartTracks.slice(0, 25).map((track, i) => (
+							<TrackRow key={track.id} track={track} index={i} list={chartTracks} />
+						))}
 					</div>
 				</div>
 			)}
@@ -836,7 +858,9 @@ export const DigitalLibrary = ({ query, urlPage = "library", urlPrefix, nav, ove
 				<div className="flex flex-col gap-2">
 					<h2 className="text-lg font-bold px-1">Artists</h2>
 					<div className="grid grid-cols-[repeat(auto-fill,minmax(110px,1fr))] gap-1">
-						{artists.slice(0, 6).map(artist => <ArtistCard key={artist.id} artist={artist} />)}
+						{artists.slice(0, 6).map(artist => (
+							<ArtistCard key={artist.id} artist={artist} />
+						))}
 					</div>
 				</div>
 			)}
@@ -844,7 +868,9 @@ export const DigitalLibrary = ({ query, urlPage = "library", urlPrefix, nav, ove
 				<div className="flex flex-col gap-2">
 					<h2 className="text-lg font-bold px-1">Albums</h2>
 					<div className="grid grid-cols-[repeat(auto-fill,minmax(140px,1fr))] gap-1">
-						{albums.slice(0, 6).map(album => <AlbumCard key={album.id} album={album} />)}
+						{albums.slice(0, 6).map(album => (
+							<AlbumCard key={album.id} album={album} />
+						))}
 					</div>
 				</div>
 			)}
@@ -852,15 +878,14 @@ export const DigitalLibrary = ({ query, urlPage = "library", urlPrefix, nav, ove
 				<div className="flex flex-col gap-2">
 					<div className="flex items-center justify-between px-1">
 						<h2 className="text-lg font-bold">Songs</h2>
-						<button
-							className={`text-xs px-3 py-1.5 rounded-lg duration-150 ${brightness === "dark" ? "bg-[#ffffff15] hover:bg-[#ffffff25]" : "bg-[#00000010] hover:bg-[#00000020]"}`}
-							onClick={() => handlePlayAll(tracks)}
-						>
+						<button className={`text-xs px-3 py-1.5 rounded-lg duration-150 ${brightness === "dark" ? "bg-[#ffffff15] hover:bg-[#ffffff25]" : "bg-[#00000010] hover:bg-[#00000020]"}`} onClick={() => handlePlayAll(tracks)}>
 							Play all
 						</button>
 					</div>
 					<div className="flex flex-col">
-						{tracks.map((track, i) => <TrackRow key={track.id} track={track} index={i} list={tracks} />)}
+						{tracks.map((track, i) => (
+							<TrackRow key={track.id} track={track} index={i} list={tracks} />
+						))}
 					</div>
 				</div>
 			)}
@@ -955,23 +980,19 @@ export const DigitalLibrary = ({ query, urlPage = "library", urlPrefix, nav, ove
 							<button className={`${button} ${dark ? "bg-white text-black hover:bg-[#ffffffdd]" : "bg-black text-white hover:bg-[#000000dd]"}`} onClick={() => handlePlayAll(albumTracks)}>
 								<PlayIcon className="size-4" /> Play
 							</button>
-							<button
-								className={`${button} ${albumSaved ? "bg-[#3d91ff] text-white hover:brightness-110" : softButton}`}
-								onClick={() => toggleAlbum(album)}
-								title={albumSaved ? "Remove from Your Library" : `Add this ${kind.toLowerCase()} to Your Library`}
-							>
+							<button className={`${button} ${albumSaved ? "bg-[#3d91ff] text-white hover:brightness-110" : softButton}`} onClick={() => toggleAlbum(album)} title={albumSaved ? "Remove from Your Library" : `Add this ${kind.toLowerCase()} to Your Library`}>
 								{albumSaved ? <CheckIcon className="size-4" /> : <PlusIcon className="size-4" />}
 								{albumSaved ? "In Library" : "Add to Library"}
 							</button>
-							<button
-								className={`${button} ${softButton}`}
-								onClick={() => startRadio(splitArtistCredit(album.artist)[0] || album.artist, albumTracks[0]?.title)}
-								title={`Start a station from this ${kind.toLowerCase()}`}
-							>
+							<button className={`${button} ${softButton}`} onClick={() => startRadio(splitArtistCredit(album.artist)[0] || album.artist, albumTracks[0]?.title)} title={`Start a station from this ${kind.toLowerCase()}`}>
 								<RadioIcon className="size-4" /> Radio
 							</button>
 						</div>
-						<div className="flex flex-col">{albumTracks.map((t, i) => <TrackRow key={t.id} track={t} index={i} list={albumTracks} />)}</div>
+						<div className="flex flex-col">
+							{albumTracks.map((t, i) => (
+								<TrackRow key={t.id} track={t} index={i} list={albumTracks} />
+							))}
+						</div>
 					</>
 				)}
 
@@ -1049,10 +1070,7 @@ export const DigitalLibrary = ({ query, urlPage = "library", urlPrefix, nav, ove
 													</span>
 												))}
 												{section.credits.length > 12 && (
-													<button
-														className="text-xs font-semibold text-(--text-secondary) hover:underline cursor-pointer"
-														onClick={() => setOpenCreditSections(o => (open ? o.filter(t => t !== section.title) : [...o, section.title]))}
-													>
+													<button className="text-xs font-semibold text-(--text-secondary) hover:underline cursor-pointer" onClick={() => setOpenCreditSections(o => (open ? o.filter(t => t !== section.title) : [...o, section.title]))}>
 														{open ? "Show less" : `+${section.credits.length - 12} more`}
 													</button>
 												)}
@@ -1140,12 +1158,7 @@ export const DigitalLibrary = ({ query, urlPage = "library", urlPrefix, nav, ove
 					{following ? <CheckIcon className="size-4" /> : <UserPlusIcon className="size-4" />}
 					{following ? "Following" : "Follow"}
 				</button>
-				<button
-					className="flex items-center gap-1.5 whitespace-nowrap shrink-0 px-3.5 py-2 rounded-full font-semibold text-sm bg-white text-black hover:bg-white/90 duration-150 disabled:opacity-60"
-					disabled={radioLoading}
-					onClick={() => startRadio(artist.name)}
-					title="Start a station seeded by this artist"
-				>
+				<button className="flex items-center gap-1.5 whitespace-nowrap shrink-0 px-3.5 py-2 rounded-full font-semibold text-sm bg-white text-black hover:bg-white/90 duration-150 disabled:opacity-60" disabled={radioLoading} onClick={() => startRadio(artist.name)} title="Start a station seeded by this artist">
 					<RadioIcon className="size-4" />
 					{radioLoading ? "Tuning..." : "Start Radio"}
 				</button>
@@ -1263,9 +1276,7 @@ export const DigitalLibrary = ({ query, urlPage = "library", urlPrefix, nav, ove
 						</div>
 
 						{/* Photo collage */}
-						<div className="hidden @3xl:block relative flex-[0.85] min-w-0 rounded-2xl overflow-hidden bg-(--tertiary)">
-							{gallery[0] ? <img src={gallery[0]} alt="" className="w-full h-full object-cover" loading="lazy" /> : <div className="w-full h-full animate-pulse" />}
-						</div>
+						<div className="hidden @3xl:block relative flex-[0.85] min-w-0 rounded-2xl overflow-hidden bg-(--tertiary)">{gallery[0] ? <img src={gallery[0]} alt="" className="w-full h-full object-cover" loading="lazy" /> : <div className="w-full h-full animate-pulse" />}</div>
 						<div className="hidden @3xl:flex flex-col gap-1.5 flex-[0.5] min-w-0">
 							<div className="flex-1 min-h-0 rounded-2xl overflow-hidden bg-(--tertiary)">{gallery[1] ? <img src={gallery[1]} alt="" className="w-full h-full object-cover" loading="lazy" /> : <div className="w-full h-full animate-pulse" />}</div>
 							<div className="w-full aspect-square shrink-0 rounded-full overflow-hidden bg-(--tertiary)">{gallery[2] ? <img src={gallery[2]} alt="" className="w-full h-full object-cover" loading="lazy" /> : <div className="w-full h-full animate-pulse" />}</div>
@@ -1295,10 +1306,7 @@ export const DigitalLibrary = ({ query, urlPage = "library", urlPrefix, nav, ove
 				</div>
 
 				{custom?.pick && (
-					<button
-						className={`group flex items-center gap-4 p-3 rounded-2xl text-left cursor-pointer duration-150 ${dark ? "bg-[#3d91ff14] hover:bg-[#3d91ff22] ring-1 ring-[#3d91ff33]" : "bg-[#3d91ff10] hover:bg-[#3d91ff1c]"}`}
-						onClick={() => playPick(custom.pick!)}
-					>
+					<button className={`group flex items-center gap-4 p-3 rounded-2xl text-left cursor-pointer duration-150 ${dark ? "bg-[#3d91ff14] hover:bg-[#3d91ff22] ring-1 ring-[#3d91ff33]" : "bg-[#3d91ff10] hover:bg-[#3d91ff1c]"}`} onClick={() => playPick(custom.pick!)}>
 						<div className="relative shrink-0">
 							{custom.pick.artwork ? <img src={custom.pick.artwork} alt="" className="size-16 rounded-xl object-cover" /> : <div className="size-16 rounded-xl bg-(--tertiary)" />}
 							<div className="absolute inset-0 hidden group-hover:flex items-center justify-center rounded-xl bg-black/45">
@@ -1321,11 +1329,17 @@ export const DigitalLibrary = ({ query, urlPage = "library", urlPrefix, nav, ove
 
 				{rankedSongs.length > 0 && (
 					<div className="flex flex-col gap-2.5">
-						{topSongs.map(t => <TopSongCard key={t.id} track={t} list={rankedSongs} />)}
+						{topSongs.map(t => (
+							<TopSongCard key={t.id} track={t} list={rankedSongs} />
+						))}
 						<div className="flex items-center justify-center gap-1.5">
-							<button className={chip} onClick={() => handlePlayAll(rankedSongs)}>Play All</button>
+							<button className={chip} onClick={() => handlePlayAll(rankedSongs)}>
+								Play All
+							</button>
 							{rankedSongs.length > TOP_SONGS_MIN && (
-								<button className={chip} onClick={() => setTopSongsExpanded(e => !e)}>{topSongsExpanded ? "Show Less" : `Show All ${rankedSongs.length}`}</button>
+								<button className={chip} onClick={() => setTopSongsExpanded(e => !e)}>
+									{topSongsExpanded ? "Show Less" : `Show All ${rankedSongs.length}`}
+								</button>
 							)}
 						</div>
 					</div>
@@ -1333,18 +1347,18 @@ export const DigitalLibrary = ({ query, urlPage = "library", urlPrefix, nav, ove
 
 				<div className="flex flex-col gap-4 mt-1">
 					<Shelf title="Albums" count={albumsAndEps.length} dark={dark}>
-						{albumsAndEps.map(a => <ReleaseTile key={a.id} album={a} />)}
+						{albumsAndEps.map(a => (
+							<ReleaseTile key={a.id} album={a} />
+						))}
 					</Shelf>
 					<Shelf title="Singles" count={singles.length} dark={dark}>
-						{singles.map(a => <ReleaseTile key={a.id} album={a} />)}
+						{singles.map(a => (
+							<ReleaseTile key={a.id} album={a} />
+						))}
 					</Shelf>
 					<Shelf title="Fans might also like" dark={dark} gridMin={112}>
 						{(similar ?? []).map(s => (
-							<div
-								key={s.name}
-								className={`flex flex-col items-center gap-1.5 w-28 shrink-0 p-2 rounded-xl cursor-pointer duration-150 ${dark ? "hover:bg-[#ffffff10]" : "hover:bg-[#00000008]"}`}
-								onClick={() => openArtistByName(s.name)}
-							>
+							<div key={s.name} className={`flex flex-col items-center gap-1.5 w-28 shrink-0 p-2 rounded-xl cursor-pointer duration-150 ${dark ? "hover:bg-[#ffffff10]" : "hover:bg-[#00000008]"}`} onClick={() => openArtistByName(s.name)}>
 								{s.picture ? (
 									<img src={s.picture} alt={s.name} title={s.name} className="size-24 rounded-full object-cover bg-(--tertiary)" loading="lazy" />
 								) : (
@@ -1353,12 +1367,10 @@ export const DigitalLibrary = ({ query, urlPage = "library", urlPrefix, nav, ove
 									</div>
 								)}
 								<div className="flex flex-col items-center w-full leading-tight">
-									<span title={s.name} className="text-xs font-semibold text-center truncate w-full">{s.name}</span>
-									{s.listeners ? (
-										<span className="text-[10px] text-(--text-tertiary)">{formatCount(s.listeners)} listeners</span>
-									) : (
-										!!s.fans && <span className="text-[10px] text-(--text-tertiary)">{formatCount(s.fans)} fans</span>
-									)}
+									<span title={s.name} className="text-xs font-semibold text-center truncate w-full">
+										{s.name}
+									</span>
+									{s.listeners ? <span className="text-[10px] text-(--text-tertiary)">{formatCount(s.listeners)} listeners</span> : !!s.fans && <span className="text-[10px] text-(--text-tertiary)">{formatCount(s.fans)} fans</span>}
 								</div>
 							</div>
 						))}
@@ -1408,7 +1420,12 @@ export const DigitalLibrary = ({ query, urlPage = "library", urlPrefix, nav, ove
 					{page !== "home" && !overrideShown && (
 						<button
 							className={`p-1.5 rounded-lg duration-150 ${brightness === "dark" ? "hover:bg-[#ffffff15]" : "hover:bg-[#00000010]"}`}
-							onClick={() => { setPage("home"); setAlbumDetail(null); setArtistDetail(null); syncUrl(); }}
+							onClick={() => {
+								setPage("home");
+								setAlbumDetail(null);
+								setArtistDetail(null);
+								syncUrl();
+							}}
 						>
 							<ChartBarIcon className="size-5 text-(--text-secondary)" />
 						</button>
@@ -1424,10 +1441,27 @@ export const DigitalLibrary = ({ query, urlPage = "library", urlPrefix, nav, ove
 						className="flex-1 bg-transparent outline-none text-sm text-(--text-primary) placeholder:text-(--text-tertiary)"
 						value={searchQuery}
 						onChange={e => handleSearchInput(e.target.value)}
-						onKeyDown={e => { if (e.key === "Enter") { onBrowse?.(); doSearch(searchQuery); } }}
+						onKeyDown={e => {
+							if (e.key === "Enter") {
+								onBrowse?.();
+								doSearch(searchQuery);
+							}
+						}}
 					/>
 					{searchQuery && (
-						<button className="text-(--text-tertiary) hover:text-(--text-primary) duration-150" onClick={() => { setSearchQuery(""); setTracks([]); setAlbums([]); setArtists([]); setPage("home"); searchRef.current?.focus(); }}>✕</button>
+						<button
+							className="text-(--text-tertiary) hover:text-(--text-primary) duration-150"
+							onClick={() => {
+								setSearchQuery("");
+								setTracks([]);
+								setAlbums([]);
+								setArtists([]);
+								setPage("home");
+								searchRef.current?.focus();
+							}}
+						>
+							✕
+						</button>
 					)}
 				</div>
 			</div>

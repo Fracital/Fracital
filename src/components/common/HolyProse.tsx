@@ -1,22 +1,22 @@
-import React, { useEffect, useRef } from 'react'
-import { cipherFor, makeDashPlaceholder, resolveHoly } from '../../libs/holy-render'
+import React, { useEffect, useRef } from "react";
+import { cipherFor, makeDashPlaceholder, resolveHoly } from "../../libs/holy-render";
 
-export type HolyProseMode = 'light' | 'shadow'
+export type HolyProseMode = "light" | "shadow";
 
 export interface HolyProseProps extends React.HTMLAttributes<HTMLElement> {
-  text?: string
-  children?: string
-  encrypted?: string
-  as?: React.ElementType
-  /**
-   * 'light' (default): reconstruct the text in the LIGHT DOM. Fully selectable
-   * and copyable. Hidden from scrapers that read the shipped/static HTML only.
-   * 'shadow': reveal into an OPEN shadow root. `host.textContent` /
-   * `host.outerHTML` stay empty of the text even after hydration; still
-   * user-selectable in-browser, but copy reliability across the shadow boundary
-   * varies by browser. See HOLYTEXT.md for the exact protection and its limits.
-   */
-  mode?: HolyProseMode
+	text?: string;
+	children?: string;
+	encrypted?: string;
+	as?: React.ElementType;
+	/**
+	 * 'light' (default): reconstruct the text in the LIGHT DOM. Fully selectable
+	 * and copyable. Hidden from scrapers that read the shipped/static HTML only.
+	 * 'shadow': reveal into an OPEN shadow root. `host.textContent` /
+	 * `host.outerHTML` stay empty of the text even after hydration; still
+	 * user-selectable in-browser, but copy reliability across the shadow boundary
+	 * varies by browser. See HOLYTEXT.md for the exact protection and its limits.
+	 */
+	mode?: HolyProseMode;
 }
 
 /**
@@ -36,53 +36,45 @@ export interface HolyProseProps extends React.HTMLAttributes<HTMLElement> {
  * runs. 'shadow' mode additionally hides the text from a post-hydration
  * `host.textContent` read on the host element.
  */
-export const HolyProse: React.FC<HolyProseProps> = ({
-  text,
-  children,
-  encrypted,
-  as: Component = 'span',
-  className = '',
-  mode = 'light',
-  ...props
-}) => {
-  const content = text ?? (typeof children === 'string' ? children : '')
-  const hostRef = useRef<HTMLElement>(null)
-  const shadowRef = useRef<ShadowRoot | null>(null)
-  const cipher = cipherFor(content, encrypted)
+export const HolyProse: React.FC<HolyProseProps> = ({ text, children, encrypted, as: Component = "span", className = "", mode = "light", ...props }) => {
+	const content = text ?? (typeof children === "string" ? children : "");
+	const hostRef = useRef<HTMLElement>(null);
+	const shadowRef = useRef<ShadowRoot | null>(null);
+	const cipher = cipherFor(content, encrypted);
 
-  useEffect(() => {
-    const host = hostRef.current
-    if (!host) return
+	useEffect(() => {
+		const host = hostRef.current;
+		if (!host) return;
 
-    const res = resolveHoly(content, cipher)
-    if (res.kind === 'keep') return
+		const res = resolveHoly(content, cipher);
+		if (res.kind === "keep") return;
 
-    try {
-      if (mode === 'shadow') {
-        if (!shadowRef.current) {
-          host.textContent = ''
-          // OPEN (not closed) so in-browser selection works; the host element's
-          // own textContent/outerHTML still does not expose the shadow text.
-          shadowRef.current = host.attachShadow({ mode: 'open' })
-        }
-        shadowRef.current.replaceChildren(res.plaintext)
-      } else {
-        // Light DOM: a normal text node -> natively selectable and copyable.
-        host.textContent = res.plaintext
-      }
-    } catch {
-      host.textContent = content
-    }
-  }, [content, cipher, mode])
+		try {
+			if (mode === "shadow") {
+				if (!shadowRef.current) {
+					host.textContent = "";
+					// OPEN (not closed) so in-browser selection works; the host element's
+					// own textContent/outerHTML still does not expose the shadow text.
+					shadowRef.current = host.attachShadow({ mode: "open" });
+				}
+				shadowRef.current.replaceChildren(res.plaintext);
+			} else {
+				// Light DOM: a normal text node -> natively selectable and copyable.
+				host.textContent = res.plaintext;
+			}
+		} catch {
+			host.textContent = content;
+		}
+	}, [content, cipher, mode]);
 
-  const placeholder = makeDashPlaceholder(content)
-  const combinedClass = `holy-prose ${className}`.trim()
+	const placeholder = makeDashPlaceholder(content);
+	const combinedClass = `holy-prose ${className}`.trim();
 
-  return (
-    <Component ref={hostRef} className={combinedClass} data-ectext={cipher} {...props}>
-      {placeholder}
-    </Component>
-  )
-}
+	return (
+		<Component ref={hostRef} className={combinedClass} data-ectext={cipher} {...props}>
+			{placeholder}
+		</Component>
+	);
+};
 
-export default HolyProse
+export default HolyProse;

@@ -54,7 +54,7 @@ export const Search = ({ tab }: SearchProps) => {
 					case "account":
 						return { title: "Account Management", icon: <IdentificationIcon className="size-5" /> };
 					case "text":
-						return { title: "Text Editor", icon: <DocumentIcon className="size-5" /> }
+						return { title: "Text Editor", icon: <DocumentIcon className="size-5" /> };
 					default:
 						return { title: "New Tab", icon: null };
 				}

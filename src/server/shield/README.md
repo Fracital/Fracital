@@ -12,7 +12,6 @@
 >   (`String.raw`), and separate native parser chunks would import the shared
 >   music-metadata core, a native→VM edge that demotes the whole app.
 > - `SHIELD_DEBUG=1` logs each fixpoint demotion with its importing edges.
->
 > Integration proof (Fracital, headless Chrome, `scripts/boot-check.mjs`):
 > entry (255 KB) + app (2.6 MB) compile to bytecode, `bootViaLoader: true`, app
 > renders 35 KB DOM with zero shield errors; vendor chunks stay native by
@@ -27,22 +26,22 @@ loader, and PROVES the real app boots as bytecode.
 
 **Honesty is the deliverable.** This README states exactly what works, what
 falls back to native (`@no-vm`), and the integration-proof result. See the
-*What runs / what falls back* matrix and *Integration proof* below.
+_What runs / what falls back_ matrix and _Integration proof_ below.
 
 ## Files
 
-| File | What it is | Status |
-|---|---|---|
-| `opcodes.ts` | Opcode names, arities, per-build polymorphic layout (`buildLayout`); slot ops + superinstructions | Done |
-| `compiler.ts` | acorn AST → stack bytecode + constant pool; full ES modules + classes + `arguments` + break/continue-across-finally; compile-time slot-based locals + superinstruction fusion + block-scope elision; XChaCha20-Poly1305 encrypt | Done |
-| `runtime-template.js` | The VM: handler-table dispatch, sync/async, classes/super/private, module ops, traps, **wall-clock watchdog**, boot integrity + toString anti-tamper, decrypt | Done |
-| `anti-tamper.js` | PLAN P7 anti-tamper: bytecode integrity hash, VM toString snapshot guard, timing monitor, consolidated `isLikelyBot`, mutation guard — individually flagged, conservative defaults | Done |
-| `anti-tamper.test.mjs` | Per-feature tests + the wipe/flag policy guarantees | Done |
-| `loader-template.js` | Whole-chunk ESM loader: module records, live bindings, circular, dynamic import, TLA, import.meta | Done |
-| `vite-plugin.ts` | Post-build plugin: compiles the sound VM frontier, emits register-artifacts + loader bootstrap + manifest, rewrites index.html | Done |
-| `compiler.test.mjs` | Corpus: VM result vs native `eval` (incl. classes) | Done |
-| `module.test.mjs` | Module corpus: live bindings, circular, dynamic import, TLA, import.meta, re-exports vs native ESM | Done |
-| `runtime.test.mjs` | Trap/wipe, step budget, polymorphism, decrypt integrity | Done |
+| File                   | What it is                                                                                                                                                                                                                      | Status |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
+| `opcodes.ts`           | Opcode names, arities, per-build polymorphic layout (`buildLayout`); slot ops + superinstructions                                                                                                                               | Done   |
+| `compiler.ts`          | acorn AST → stack bytecode + constant pool; full ES modules + classes + `arguments` + break/continue-across-finally; compile-time slot-based locals + superinstruction fusion + block-scope elision; XChaCha20-Poly1305 encrypt | Done   |
+| `runtime-template.js`  | The VM: handler-table dispatch, sync/async, classes/super/private, module ops, traps, **wall-clock watchdog**, boot integrity + toString anti-tamper, decrypt                                                                   | Done   |
+| `anti-tamper.js`       | PLAN P7 anti-tamper: bytecode integrity hash, VM toString snapshot guard, timing monitor, consolidated `isLikelyBot`, mutation guard — individually flagged, conservative defaults                                              | Done   |
+| `anti-tamper.test.mjs` | Per-feature tests + the wipe/flag policy guarantees                                                                                                                                                                             | Done   |
+| `loader-template.js`   | Whole-chunk ESM loader: module records, live bindings, circular, dynamic import, TLA, import.meta                                                                                                                               | Done   |
+| `vite-plugin.ts`       | Post-build plugin: compiles the sound VM frontier, emits register-artifacts + loader bootstrap + manifest, rewrites index.html                                                                                                  | Done   |
+| `compiler.test.mjs`    | Corpus: VM result vs native `eval` (incl. classes)                                                                                                                                                                              | Done   |
+| `module.test.mjs`      | Module corpus: live bindings, circular, dynamic import, TLA, import.meta, re-exports vs native ESM                                                                                                                              | Done   |
+| `runtime.test.mjs`     | Trap/wipe, step budget, polymorphism, decrypt integrity                                                                                                                                                                         | Done   |
 
 ## Module semantics now supported (the crux)
 
@@ -62,7 +61,7 @@ descriptor + module ops; the loader links a graph of compiled chunks.
   bindings accessed before the owner evaluates throw TDZ `ReferenceError`.
 - **Dynamic `import()`** — the loader fetches + instantiates the target chunk at
   runtime and returns its namespace. Both string-literal and
-  no-substitution-template specifiers (Vite's form, `` import(`./route.js`) ``)
+  no-substitution-template specifiers (Vite's form, ``import(`./route.js`)``)
   are statically mapped to module ids; a genuinely computed specifier keeps the
   containing chunk `@no-vm` (see fallbacks).
 - **Top-level await** — a module body with top-level `await` runs as an async
@@ -87,16 +86,16 @@ Class ops: `BUILD_CLASS`, `LOAD_NEW_TARGET`, `SUPER_GET/_DYN`, `SUPER_SET/_DYN`,
 
 ## Loader status (P4)
 
-| Capability | Status |
-|---|---|
-| Module records + live cross-chunk bindings | **Done, browser-proven** |
-| Circular imports (two-phase link/evaluate) | **Done, tested** |
-| Dynamic `import()` (static + template specifiers) | **Done, browser-proven** |
-| Top-level await | **Done, tested** |
-| `import.meta` | **Done, tested** |
-| VM ↔ native (`@no-vm`) interop | **Done** — VM chunks may import native chunks (loader native-imports them); a sound fixpoint prevents native→VM edges |
-| Key delivery into the page | **Done** — per-chunk key is base64 in the register artifact (cost-raising only, per PLAN 1/5.8) |
-| `vite dev` transform | **Not done** — compile mode is a build-time (post-bundle) step; dev serves unbundled ESM unchanged |
+| Capability                                        | Status                                                                                                                |
+| ------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| Module records + live cross-chunk bindings        | **Done, browser-proven**                                                                                              |
+| Circular imports (two-phase link/evaluate)        | **Done, tested**                                                                                                      |
+| Dynamic `import()` (static + template specifiers) | **Done, browser-proven**                                                                                              |
+| Top-level await                                   | **Done, tested**                                                                                                      |
+| `import.meta`                                     | **Done, tested**                                                                                                      |
+| VM ↔ native (`@no-vm`) interop                    | **Done** — VM chunks may import native chunks (loader native-imports them); a sound fixpoint prevents native→VM edges |
+| Key delivery into the page                        | **Done** — per-chunk key is base64 in the register artifact (cost-raising only, per PLAN 1/5.8)                       |
+| `vite dev` transform                              | **Not done** — compile mode is a build-time (post-bundle) step; dev serves unbundled ESM unchanged                    |
 
 ## Bootstrap choice
 
@@ -156,8 +155,8 @@ unforeseen uncompilable construct degrades gracefully instead of breaking.
 The old runtime had a single cumulative step counter capped at 20M, reset only
 at the top-level `run()`. Because every later call back into a chunk's runtime
 (a React render, an event handler, an effect, a timer) kept incrementing the
-SAME counter without resetting it, the "budget" was really a *total
-instructions this chunk may ever execute on the page* cap — so any long-lived
+SAME counter without resetting it, the "budget" was really a _total
+instructions this chunk may ever execute on the page_ cap — so any long-lived
 or heavy route (notably `/games`) tripped `step budget exceeded` doing
 legitimate work. That was a false positive, not a safety win.
 
@@ -165,8 +164,8 @@ The cap is now a **per-synchronous-burst wall-clock watchdog**
 (`runtime-template.js`): the step counter and a `performance.now()` start time
 reset on every host→VM entry (re-entrancy depth 0→1) and at every async resume.
 Within a burst the clock is sampled every ~1M steps and the runtime trips
-(wipe + fatal throw) only after `watchdogMs` (default **10s**) of *uninterrupted
-synchronous* execution. Legitimate renders return to the event loop long before
+(wipe + fatal throw) only after `watchdogMs` (default **10s**) of _uninterrupted
+synchronous_ execution. Legitimate renders return to the event loop long before
 that; `while(true){}` does not — so infinite loops and a tampered runtime that
 spins are still caught, and the trap-wipe still fires. An explicit numeric
 `budget` option keeps a hard per-burst step cap (the fast unit tests use it so
@@ -200,12 +199,12 @@ A scratch `SHIELD_MODE=compile` build of the real app + a headless-Chrome boot
   the stub backend returns empty JSON so the only console noise is 404/websocket
   from missing APIs — not shield):
 
-  | Route | first render | stable | DOM | shield errors |
-  |---|---|---|---|---|
-  | home | ~510ms* | ~1.25s | 16.5 KB | none |
-  | games | ~230ms | ~2.0s | 138 KB | none |
-  | account | ~255ms | ~1.23s | 13 KB | none |
-  | chat | ~220ms | ~1.27s | 21.6 KB | none |
+  | Route   | first render | stable | DOM     | shield errors |
+  | ------- | ------------ | ------ | ------- | ------------- |
+  | home    | ~510ms*      | ~1.25s | 16.5 KB | none          |
+  | games   | ~230ms       | ~2.0s  | 138 KB  | none          |
+  | account | ~255ms       | ~1.23s | 13 KB   | none          |
+  | chat    | ~220ms       | ~1.27s | 21.6 KB | none          |
 
   *home's number is dominated by the initial document-load wait, not VM work.
   Against the untouched native build (`SHIELD_MODE=manifest`) the VM adds roughly
@@ -218,20 +217,20 @@ fixed it — it now renders a 138 KB DOM with no shield errors.
 
 ## What runs / what falls back
 
-| Construct | VM | Note |
-|---|---|---|
-| All P2 subset (expr/stmt, closures, async/await, try/catch/finally, destructuring, spread/rest, optional chaining, template literals, BigInt) | ✅ | tested == native |
-| Classes (methods, get/set, static, private, extends/super, new.target) | ✅ | tested == native |
-| ES modules (static import/export, live bindings, namespace, re-export, default) | ✅ | tested == native |
-| Dynamic `import()` (literal / template specifier) | ✅ | loader maps to chunk id |
-| Top-level await, circular imports, `import.meta` | ✅ | tested == native |
-| Logical assignment on members (`obj.x ??=/||=/&&= y`), optional method call (`o.m?.()`), computed key before object rest | ✅ | these were the dominant real-bundle blockers |
-| `break`/`continue` across a `finally` (incl. labeled, nested finallys, per-iteration scopes, catch+finally) | ✅ | completion-record routing + scope trampoline; tested == native |
-| `arguments` (non-arrow functions; arrows inherit) | ✅ | bound lazily only when referenced; tested == native |
-| Generators / `yield`, `for await…of` | ❌ `@no-vm` | |
-| `eval` / `new Function` / `with` / tagged templates | ❌ `@no-vm` | dynamic code / unsupported |
-| Computed (non-static) dynamic `import()` | ❌ `@no-vm` | can't map to a chunk id |
-| Heavy / long-lived routes | ✅ | watchdog is wall-clock, not a cumulative step cap — no false trips |
+| Construct                                                                                                                                     | VM          | Note                                                                         |
+| --------------------------------------------------------------------------------------------------------------------------------------------- | ----------- | ---------------------------------------------------------------------------- |
+| All P2 subset (expr/stmt, closures, async/await, try/catch/finally, destructuring, spread/rest, optional chaining, template literals, BigInt) | ✅          | tested == native                                                             |
+| Classes (methods, get/set, static, private, extends/super, new.target)                                                                        | ✅          | tested == native                                                             |
+| ES modules (static import/export, live bindings, namespace, re-export, default)                                                               | ✅          | tested == native                                                             |
+| Dynamic `import()` (literal / template specifier)                                                                                             | ✅          | loader maps to chunk id                                                      |
+| Top-level await, circular imports, `import.meta`                                                                                              | ✅          | tested == native                                                             |
+| Logical assignment on members (`obj.x ??=/                                                                                                    |             | =/&&= y`), optional method call (`o.m?.()`), computed key before object rest | ✅  | these were the dominant real-bundle blockers |
+| `break`/`continue` across a `finally` (incl. labeled, nested finallys, per-iteration scopes, catch+finally)                                   | ✅          | completion-record routing + scope trampoline; tested == native               |
+| `arguments` (non-arrow functions; arrows inherit)                                                                                             | ✅          | bound lazily only when referenced; tested == native                          |
+| Generators / `yield`, `for await…of`                                                                                                          | ❌ `@no-vm` |                                                                              |
+| `eval` / `new Function` / `with` / tagged templates                                                                                           | ❌ `@no-vm` | dynamic code / unsupported                                                   |
+| Computed (non-static) dynamic `import()`                                                                                                      | ❌ `@no-vm` | can't map to a chunk id                                                      |
+| Heavy / long-lived routes                                                                                                                     | ✅          | watchdog is wall-clock, not a cumulative step cap — no false trips           |
 
 For the **real `main` bundle, the residual `@no-vm` set is empty** (25/25
 compile). The remaining ❌ rows are language features the bundle does not use;
@@ -245,12 +244,12 @@ Measured on a representative CPU-bound workload (object building, property
 access, method calls, loops — the hot ops per the AST histogram) via a Node
 microbench of the interpreter, median of repeated runs:
 
-| Change | ms/run | vs baseline |
-|---|---|---|
-| Baseline (handler table, Map scopes, 20M cumulative cap) | 38.1 | 1.00× |
-| + per-frame try/catch (lifted out of the per-op loop) | 38.8 | ~1.00× (enabler; no solo win here) |
-| + **compile-time slot-based locals** (array-indexed scopes, no Map/hashing) | 33.4 | **1.14×** |
-| + **superinstructions** (fused hot bigrams/trigrams) | 31.2 | **1.22×** |
+| Change                                                                      | ms/run | vs baseline                        |
+| --------------------------------------------------------------------------- | ------ | ---------------------------------- |
+| Baseline (handler table, Map scopes, 20M cumulative cap)                    | 38.1   | 1.00×                              |
+| + per-frame try/catch (lifted out of the per-op loop)                       | 38.8   | ~1.00× (enabler; no solo win here) |
+| + **compile-time slot-based locals** (array-indexed scopes, no Map/hashing) | 33.4   | **1.14×**                          |
+| + **superinstructions** (fused hot bigrams/trigrams)                        | 31.2   | **1.22×**                          |
 
 - **Slot-based locals** were the single biggest low-risk win. A CPU profile of
   the baseline showed `FindOrderedHashMapEntry` (the scope-chain `Map` lookups)
@@ -259,7 +258,7 @@ microbench of the interpreter, median of repeated runs:
   eliminated it. Free variables resolve to `*_GLOBAL` ops; module exports
   resolve by slot via `program.module.exportSlots`.
 - **Superinstructions** fuse the top sequences from a static analysis of real
-  shield-compiled app bytecode, cutting BOTH dispatch overhead and *step count*
+  shield-compiled app bytecode, cutting BOTH dispatch overhead and _step count_
   (the lever that matters for heavy routes): `BIND_PARAM` (the
   DECLARE;LOAD_ARG;INIT param-prologue triple), `LOAD_SLOT_PROP` /
   `LOAD_GLOBAL_PROP` (`ident.key`), and `LOAD_SLOT_DUP_PROP` /
@@ -274,20 +273,20 @@ Three structural/emit-time changes, each measured on the four bench workloads
 total over the real app source (188 compiled files; a build-free proxy for route
 step density). Only changes that helped were kept.
 
-| Change | what it fuses | where it wins |
-|---|---|---|
-| **Block-scope elision** | a nested `{…}` with no `let`/`const`/`class`/`function` decl runs in the enclosing scope — no `ENTER_SCOPE`/`EXIT_SCOPE` (−2 steps per block execution) | hot loop/branch bodies |
-| **`OBJ_SET_CONST`** | `PUSH_CONST ; OBJ_SET` → one op for `{ key: <literal> }` (value kept in the const pool by index, so NaN/-0/BigInt/RegExp stay correct) | object literals (the #1 real-bundle bigram) |
-| **`DECLARE_SLOTS`** | a contiguous same-kind run of `DECLARE_SLOT` (block-prologue TDZ cells) → one op (`DECLARE_CONST;DECLARE_CONST…` real-bundle run) | blocks/modules with many `const`/`let` |
+| Change                  | what it fuses                                                                                                                                           | where it wins                               |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------- |
+| **Block-scope elision** | a nested `{…}` with no `let`/`const`/`class`/`function` decl runs in the enclosing scope — no `ENTER_SCOPE`/`EXIT_SCOPE` (−2 steps per block execution) | hot loop/branch bodies                      |
+| **`OBJ_SET_CONST`**     | `PUSH_CONST ; OBJ_SET` → one op for `{ key: <literal> }` (value kept in the const pool by index, so NaN/-0/BigInt/RegExp stay correct)                  | object literals (the #1 real-bundle bigram) |
+| **`DECLARE_SLOTS`**     | a contiguous same-kind run of `DECLARE_SLOT` (block-prologue TDZ cells) → one op (`DECLARE_CONST;DECLARE_CONST…` real-bundle run)                       | blocks/modules with many `const`/`let`      |
 
 Measured step count (and median ms), before → after this pass:
 
-| Workload | steps before | steps after | Δ steps | ms before → after |
-|---|---|---|---|---|
-| arith | 60,000,016 | 56,000,016 | **−6.7%** | 662 → 601 |
-| propcall | 48,000,027 | 46,000,025 | **−4.2%** | 612 → 598 |
-| closure | 26,400,018 | 26,400,018 | 0% (loop body declares a `const`, keeps its scope) | 555 → 566 (noise) |
-| fib | 33,656,716 | 33,656,716 | 0% (no elidable block / object literal in the hot path) | 492 → 502 (noise) |
+| Workload | steps before | steps after | Δ steps                                                 | ms before → after |
+| -------- | ------------ | ----------- | ------------------------------------------------------- | ----------------- |
+| arith    | 60,000,016   | 56,000,016  | **−6.7%**                                               | 662 → 601         |
+| propcall | 48,000,027   | 46,000,025  | **−4.2%**                                               | 612 → 598         |
+| closure  | 26,400,018   | 26,400,018  | 0% (loop body declares a `const`, keeps its scope)      | 555 → 566 (noise) |
+| fib      | 33,656,716   | 33,656,716  | 0% (no elidable block / object literal in the hot path) | 492 → 502 (noise) |
 
 - **Real-app static opcode total: 232,518 → 218,808 (−5.9%)** across 188 compiled
   source files. The object-literal and bulk-declare fusions land mostly here
@@ -304,8 +303,8 @@ Measured step count (and median ms), before → after this pass:
   locals while requiring a from-scratch re-implementation of trap-wipe,
   async/await suspension, try/catch/finally unwinding, TDZ and the watchdog.
   Per-step throughput also tops out ~50–140 Msteps/s regardless (no `eval`/`new
-  Function` under the CSP), so the strategic lever for heavy routes is *fewer
-  steps* (superinstructions), which is why they were prioritised.
+  Function` under the CSP), so the strategic lever for heavy routes is _fewer
+  steps_ (superinstructions), which is why they were prioritised.
 
 Per-build polymorphism (the opcode→byte layout differs per build), encrypted
 bytecode + constant pool, and the trap-wipe are all intact through these
@@ -321,14 +320,14 @@ timing and mutation signals are **tripwires that only FLAG** — they are too
 false-positive-prone to brick a real user. The key ships in the page, so none of
 these create secrecy; like the rest of shield they raise reversing cost.
 
-| Feature | Default | On detect | Measured cost | False-positive risk | Documented bypass |
-|---|---|---|---|---|---|
-| **Bytecode integrity hash** (`integrityHash`, verified at boot) | **ON** | **WIPE + fatal** | ~**0.002 ms/chunk** at boot (0.44 ms to hash all 189 real-app programs) | ~none (digest is exact) | patch the hash fn, or recompute+embed a matching digest after editing bytecode |
-| **Trap opcodes** (unused byte → wipe+throw) | always | **WIPE + fatal** | 0 (only fires on an illegal byte) | ~none | avoid emitting an unmapped byte (i.e. don't tamper) |
-| **VM `toString` snapshot** (`createToStringGuard` over runFrame/runSync/decrypt/handlers/`Function.prototype.toString`) | **ON** | **WIPE + fatal** | 6 `toString` calls once per runtime + 1 throttled check per host→VM entry (≤1/2 s) | ~none (nothing legitimately rewrites the VM's own fns) | patch the per-runtime closures the dispatcher actually calls (unreachable by name), or neuter the guard before boot snapshot |
-| **Timing check** (`createTimingMonitor`, `performance.now()` deltas) | **OFF** | FLAG only | 0 when off; a divide when on | **HIGH** — slow devices, throttled background tabs, debuggers all trip it; lenient (needs N consecutive) and **never wipes** | run fast, or patch `performance.now` |
-| **Environment / `isLikelyBot`** (renamed A10: `navigator.webdriver` + automation globals + `navigator.languages.length===0` + zero outer dims) | **ON** | **FLAG only** (`window.__shieldFlags.likelyBot`) | one-time at boot, a few property reads | medium — privacy extensions blank `languages`, some embeds report zero outer dims; **it is a tripwire, NOT a security control, and never wipes/blocks** | spoof `navigator.webdriver`/`languages` + the automation globals |
-| **Mutation guard** (`installMutationGuard` on shield shadow roots) | **OFF** | FLAG only | 0 (no shield-owned shadow roots in this build; shadow DOM lives in HolyText/uncloak, outside shield) | low when scoped | mutate via an uncovered path, or disconnect the observer |
+| Feature                                                                                                                                        | Default | On detect                                        | Measured cost                                                                                        | False-positive risk                                                                                                                                     | Documented bypass                                                                                                            |
+| ---------------------------------------------------------------------------------------------------------------------------------------------- | ------- | ------------------------------------------------ | ---------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| **Bytecode integrity hash** (`integrityHash`, verified at boot)                                                                                | **ON**  | **WIPE + fatal**                                 | ~**0.002 ms/chunk** at boot (0.44 ms to hash all 189 real-app programs)                              | ~none (digest is exact)                                                                                                                                 | patch the hash fn, or recompute+embed a matching digest after editing bytecode                                               |
+| **Trap opcodes** (unused byte → wipe+throw)                                                                                                    | always  | **WIPE + fatal**                                 | 0 (only fires on an illegal byte)                                                                    | ~none                                                                                                                                                   | avoid emitting an unmapped byte (i.e. don't tamper)                                                                          |
+| **VM `toString` snapshot** (`createToStringGuard` over runFrame/runSync/decrypt/handlers/`Function.prototype.toString`)                        | **ON**  | **WIPE + fatal**                                 | 6 `toString` calls once per runtime + 1 throttled check per host→VM entry (≤1/2 s)                   | ~none (nothing legitimately rewrites the VM's own fns)                                                                                                  | patch the per-runtime closures the dispatcher actually calls (unreachable by name), or neuter the guard before boot snapshot |
+| **Timing check** (`createTimingMonitor`, `performance.now()` deltas)                                                                           | **OFF** | FLAG only                                        | 0 when off; a divide when on                                                                         | **HIGH** — slow devices, throttled background tabs, debuggers all trip it; lenient (needs N consecutive) and **never wipes**                            | run fast, or patch `performance.now`                                                                                         |
+| **Environment / `isLikelyBot`** (renamed A10: `navigator.webdriver` + automation globals + `navigator.languages.length===0` + zero outer dims) | **ON**  | **FLAG only** (`window.__shieldFlags.likelyBot`) | one-time at boot, a few property reads                                                               | medium — privacy extensions blank `languages`, some embeds report zero outer dims; **it is a tripwire, NOT a security control, and never wipes/blocks** | spoof `navigator.webdriver`/`languages` + the automation globals                                                             |
+| **Mutation guard** (`installMutationGuard` on shield shadow roots)                                                                             | **OFF** | FLAG only                                        | 0 (no shield-owned shadow roots in this build; shadow DOM lives in HolyText/uncloak, outside shield) | low when scoped                                                                                                                                         | mutate via an uncovered path, or disconnect the observer                                                                     |
 
 **The A10 rename.** The old `isHeadlessScraper` (`navigator.webdriver` only) in
 `main/src/lib/holy-decrypt.ts` — outside shield, gating `HolyText` DOM reveal —
@@ -340,10 +339,10 @@ was minimally renamed to `isLikelyBot` (body unchanged; its one caller in
 25/25 chunks VM, anti-tamper at defaults).** Time-to-first-render vs the native
 `SHIELD_MODE=manifest` build on the same stub backend (single noisy samples):
 
-| Route | native | VM (fusions + anti-tamper) | VM delta | shield errors |
-|---|---|---|---|---|
-| home | 212 ms | 346 ms | **+134 ms** | none |
-| games | 54 ms | 211 ms | **+157 ms** | none |
+| Route | native | VM (fusions + anti-tamper) | VM delta    | shield errors |
+| ----- | ------ | -------------------------- | ----------- | ------------- |
+| home  | 212 ms | 346 ms                     | **+134 ms** | none          |
+| games | 54 ms  | 211 ms                     | **+157 ms** | none          |
 
 Both deltas stay inside the documented **+150–250 ms** first-render budget — the
 P7 anti-tamper additions did **not** blow it (integrity+toString are a sub-ms

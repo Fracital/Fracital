@@ -499,10 +499,7 @@ if (typeof window !== "undefined") {
 		try {
 			// Blob URLs die with the page; only server/remote tracks are restorable.
 			const keep = (t: Track | null) => !!t?.src && !t.src.startsWith("blob:");
-			localStorage.setItem(
-				PERSIST_MUSIC_KEY,
-				serialize({ queue: state.queue.filter(keep), currentTrack: keep(state.currentTrack) ? state.currentTrack : null, playerView: state.playerView }),
-			);
+			localStorage.setItem(PERSIST_MUSIC_KEY, serialize({ queue: state.queue.filter(keep), currentTrack: keep(state.currentTrack) ? state.currentTrack : null, playerView: state.playerView }));
 		} catch {
 			/* storage full/unavailable */
 		}

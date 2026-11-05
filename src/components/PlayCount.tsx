@@ -13,10 +13,7 @@ interface PlayCountProps {
 	skeleton?: boolean;
 }
 
-const tooltip = (p: TrackPlays) =>
-	p.official
-		? `${p.plays.toLocaleString()} streams on YouTube across ${p.uploads} official upload${p.uploads === 1 ? "" : "s"}`
-		: `${p.plays.toLocaleString()} streams on YouTube (most-played upload)`;
+const tooltip = (p: TrackPlays) => (p.official ? `${p.plays.toLocaleString()} streams on YouTube across ${p.uploads} official upload${p.uploads === 1 ? "" : "s"}` : `${p.plays.toLocaleString()} streams on YouTube (most-played upload)`);
 
 /**
  * A song's total streams on YouTube (summed across its official uploads), e.g. "510M plays".
@@ -39,12 +36,15 @@ export const PlayCount = ({ title, artist, className = "", suffix = " plays", pr
 	useEffect(() => {
 		const el = ref.current;
 		if (!el || visible) return;
-		const io = new IntersectionObserver(entries => {
-			if (entries.some(e => e.isIntersecting)) {
-				setVisible(true);
-				io.disconnect();
-			}
-		}, { rootMargin: "200px" });
+		const io = new IntersectionObserver(
+			entries => {
+				if (entries.some(e => e.isIntersecting)) {
+					setVisible(true);
+					io.disconnect();
+				}
+			},
+			{ rootMargin: "200px" },
+		);
 		io.observe(el);
 		return () => io.disconnect();
 	}, [visible]);

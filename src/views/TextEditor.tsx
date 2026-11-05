@@ -1,8 +1,13 @@
-import Editor from "@monaco-editor/react";
+import Editor, { loader } from "@monaco-editor/react";
 import { useEffect, useMemo, useState } from "react";
 
 import { getLanguageFromPath, getPathFromQuery } from "./textEditorUtils";
 import { CheckIcon } from "@heroicons/react/24/solid";
+
+// Self-host the editor: the default loader pulls from a CDN at runtime, which
+// filters block (and it leaks the dependency graph). The vendored tree is
+// copied to /vendor/editor/vs at build time (see vite.config.ts).
+loader.config({ paths: { vs: "/vendor/editor/vs" } });
 
 interface TextEditorProps {
 	path?: string;
@@ -76,22 +81,17 @@ export const TextEditor = ({ path, query }: TextEditorProps) => {
 		<div className="flex flex-col size-[calc(100%-4px)] ml-0.5 mt-0.5 rounded-xl overflow-hidden">
 			<div className="flex items-center justify-between  p-2">
 				<h1 className="pl-2">Text Editor</h1>
-                <div>
-                    <button className="p-2 bg-white/10 text-white stroke-current stroke-2 rounded-full hover:bg-white/20 disabled:opacity-50 disabled:hover:bg-white/10 cursor-pointer duration-100"
-                        onClick={saveFile}
-                        disabled={!resolvedPath || isSaving}
-                    >
-                        <CheckIcon className="size-4" />
-                    </button>
-                </div>
+				<div>
+					<button className="p-2 bg-white/10 text-white stroke-current stroke-2 rounded-full hover:bg-white/20 disabled:opacity-50 disabled:hover:bg-white/10 cursor-pointer duration-100" onClick={saveFile} disabled={!resolvedPath || isSaving}>
+						<CheckIcon className="size-4" />
+					</button>
+				</div>
 			</div>
 
 			{error ? <div style={{ color: "#b91c1c" }}>{error}</div> : null}
 
 			{isLoading ? (
-				<div style={{ padding: "1rem", border: "1px solid #d1d5db", borderRadius: "0.5rem" }}>
-					Loading file...
-				</div>
+				<div style={{ padding: "1rem", border: "1px solid #d1d5db", borderRadius: "0.5rem" }}>Loading file...</div>
 			) : (
 				<div className="h-full" style={{ overflow: "hidden" }}>
 					<Editor
@@ -106,7 +106,7 @@ export const TextEditor = ({ path, query }: TextEditorProps) => {
 							wordWrap: "on",
 							scrollBeyondLastLine: false,
 						}}
-						onChange={(value) => setContent(value ?? "")}
+						onChange={value => setContent(value ?? "")}
 					/>
 				</div>
 			)}
