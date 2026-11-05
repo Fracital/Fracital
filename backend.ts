@@ -465,6 +465,21 @@ export function fsrv() {
 		return c.html(appShell);
 	});
 
+	// Static caching policy: content-hashed bundles (/assets/[hash].js) are
+	// immutable forever; everything else (vendor/, sw.js, libs/, icons — fixed
+	// names that change across deploys) revalidates after 5 minutes so a deploy
+	// never sits behind a stale edge cache (Cloudflare held a 4h-old ctl.js once).
+	app.use("*", async (c, next) => {
+		await next();
+		if (c.res.headers.has("Cache-Control")) return; // routes that set their own win
+		const p = new URL(c.req.url).pathname;
+		if (p.startsWith("/assets/")) {
+			c.header("Cache-Control", "public, max-age=31536000, immutable");
+		} else if (/^\/(?:vendor|libs)\//.test(p) || p === "/sw.js" || p.endsWith(".svg")) {
+			c.header("Cache-Control", "public, max-age=300, must-revalidate");
+		}
+	});
+
 	app.use(
 		"*",
 		serveStatic({
