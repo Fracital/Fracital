@@ -2,7 +2,6 @@ import { lazy, StrictMode, Suspense } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
 import { Loader } from "./components/Loader";
-import { CloakGate } from "./components/CloakGate";
 import { getCloakShadowRoot } from "./libs/cloak";
 import "./index.css";
 
@@ -24,8 +23,7 @@ function mount() {
 			</Suspense>
 		</BrowserRouter>
 	);
-	// Decoy hosts already uncloaked via Ctrl+E; the study-guide cover is only for direct hosts.
-	createRoot(el).render(<StrictMode>{shadowRoot ? app : <CloakGate>{app}</CloakGate>}</StrictMode>);
+	createRoot(el).render(<StrictMode>{app}</StrictMode>);
 }
 
 mount();

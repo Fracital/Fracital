@@ -172,8 +172,8 @@
     }
   }
 
-  // Unlock lasts for the tab session only, like CloakGate on direct hosts; the
-  // other keys are from the old persistent unlock and are cleared here.
+  // Unlock lasts for the tab session only; the other keys are from the old
+  // persistent unlock and are cleared here.
   const setUncloaked = (val) => {
     try {
       if (val) sessionStorage.setItem(UNCLOAK_STORAGE_KEY, '1')
@@ -578,7 +578,7 @@
     }
   }
 
-  // Ctrl+E toggles both ways, matching CloakGate: open the app, or drop back to the decoy and pause media.
+  // Ctrl+E toggles both ways: open the app, or drop back to the decoy and pause media.
   const onKeyDown = (event) => {
     if (opening) return
     const isE = event.key?.toLowerCase() === 'e' || event.code === 'KeyE'
