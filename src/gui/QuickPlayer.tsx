@@ -735,7 +735,7 @@ export const QuickPlayer = ({ panelsOpen, className, onMouseDown }: QuickPlayerP
 									</div>
 								)}
 								<div className="relative flex justify-center items-center h-9">
-									<div ref={controlsRef} className={`absolute flex p-2.5 gap-2 w-full items-center transition-[bottom] duration-200 ${currentTrack ? "" : "-bottom-22"}`}>
+									<div ref={controlsRef} className={`absolute flex p-2.5 gap-2 w-full items-center transition-[bottom,opacity,visibility] duration-200 ${currentTrack ? "" : "-bottom-22 opacity-0 invisible pointer-events-none"}`}>
 										<span className="font-medium">{formatTime(currentTime)}</span>
 										<span ref={seekbarRef} className="w-full h-2 bg-(--text-tertiary) rounded-full overflow-hidden hover:h-2.5 cursor-pointer duration-150" onMouseDown={handleMouseDown} onClick={e => handleSeek(e.clientX)}>
 											<span style={{ width: `var(--current, 0%)` }} className={`flex h-full ${brightness === "dark" ? "bg-white" : "bg-black"}`}></span>
