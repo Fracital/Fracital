@@ -1,13 +1,14 @@
 import type { Plugin, ViteDevServer } from "vite";
 import { create as createYoutubeDl } from "youtube-dl-exec";
-import ytSearch from "yt-search";
 import { rankAlbums, rankArtists, rankTracks } from "./music-rank";
 import { artistBanner, artistBio, artistTopTracks, buildRadio, findDeezerArtist, relatedArtists } from "./music-radio";
 import { artistStats, lastfmKey, trackPlays } from "./music-stats";
 import { getRequestListener } from "@hono/node-server";
 import { getAccountsApp, initAccounts } from "./accounts";
 import { artistExtras } from "./artist-extras";
-import { songCredits, songInfo } from "./song-info";
+import { albumInfo, songCredits, songInfo } from "./song-info";
+import { findYoutubeMatch, isExplicitEdition, playbackHints } from "./youtube-match";
+import { upstreamRange } from "./stream-range";
 import type { SimilarArtist } from "./music-radio";
 
 /** Adds Last.fm listener counts to an artist and its similar artists (no-op without a key). */
@@ -62,14 +63,6 @@ function albumType(title: string | undefined): "album" | "single" | "ep" {
 	return "album";
 }
 
-async function findYoutubeVideoId(title: string, artist: string): Promise<string | null> {
-	try {
-		const result = (await ytSearch(`${artist} ${title} official audio`)) as { videos?: { videoId?: string }[] };
-		return result.videos?.find((v) => v.videoId && videoIdPattern.test(v.videoId))?.videoId || null;
-	} catch {
-		return null;
-	}
-}
 
 async function lookupItunesTrack(id: string): Promise<{ title: string; artist: string; preview: string } | null> {
 	try {
@@ -126,9 +119,9 @@ function registerMusicApi(server: { middlewares: ViteDevServer["middlewares"] },
 				albumId: item.collectionId ? String(item.collectionId) : undefined,
 				duration: Math.round((item.trackTimeMillis || 0) / 1000),
 				artwork: artworkHd(item.artworkUrl100),
-				streamUrl: `${apiBase}/playback/${item.trackId}?fallback=${encodeURIComponent(item.previewUrl || "")}&title=${encodeURIComponent(item.trackName || "")}&artist=${encodeURIComponent(item.artistName || "")}`,
+				streamUrl: `${apiBase}/playback/${item.trackId}?${playbackHints({ preview: item.previewUrl, title: item.trackName || "", artist: item.artistName || "", explicit: isExplicitEdition(item.trackExplicitness), duration: (item.trackTimeMillis || 0) / 1000 })}`,
 				previewUrl: item.previewUrl || "",
-				explicit: item.trackExplicitness === "explicit",
+				explicit: isExplicitEdition(item.trackExplicitness),
 			}));
 
 			const albums = (albumCatalog.results || [])
@@ -186,9 +179,9 @@ function registerMusicApi(server: { middlewares: ViteDevServer["middlewares"] },
 				albumId: String(item.collectionId || id),
 				duration: Math.round((item.trackTimeMillis || 0) / 1000),
 				artwork: artworkHd(item.artworkUrl100) || album.artwork,
-				streamUrl: `${apiBase}/playback/${item.trackId}?fallback=${encodeURIComponent(item.previewUrl || "")}&title=${encodeURIComponent(item.trackName || "")}&artist=${encodeURIComponent(item.artistName || "")}`,
+				streamUrl: `${apiBase}/playback/${item.trackId}?${playbackHints({ preview: item.previewUrl, title: item.trackName || "", artist: item.artistName || "", explicit: isExplicitEdition(item.trackExplicitness), duration: (item.trackTimeMillis || 0) / 1000 })}`,
 				previewUrl: item.previewUrl || "",
-				explicit: item.trackExplicitness === "explicit",
+				explicit: isExplicitEdition(item.trackExplicitness),
 			}));
 
 			sendJson(res, 200, { album, tracks });
@@ -231,12 +224,12 @@ function registerMusicApi(server: { middlewares: ViteDevServer["middlewares"] },
 						id: String(item.trackId), title: item.trackName, artist: item.artistName, album: item.collectionName,
 						albumId: item.collectionId ? String(item.collectionId) : undefined,
 						duration: Math.round((item.trackTimeMillis || 0) / 1000), artwork: artworkHd(item.artworkUrl100),
-						streamUrl: `${apiBase}/playback/${item.trackId}?fallback=${encodeURIComponent(item.previewUrl || "")}&title=${encodeURIComponent(item.trackName || "")}&artist=${encodeURIComponent(item.artistName || "")}`,
-						previewUrl: item.previewUrl || "", explicit: item.trackExplicitness === "explicit",
+						streamUrl: `${apiBase}/playback/${item.trackId}?${playbackHints({ preview: item.previewUrl, title: item.trackName || "", artist: item.artistName || "", explicit: isExplicitEdition(item.trackExplicitness), duration: (item.trackTimeMillis || 0) / 1000 })}`,
+						previewUrl: item.previewUrl || "", explicit: isExplicitEdition(item.trackExplicitness),
 					}));
 			const albums = (albumsData.results || [])
 				.filter((r: any) => r.wrapperType === "collection")
-				.map((r: any) => ({ id: String(r.collectionId), title: r.collectionName, artist: r.artistName, artwork: artworkHd(r.artworkUrl100), trackCount: r.trackCount, releaseDate: r.releaseDate, type: albumType(r.collectionName), explicit: r.collectionExplicitness === "explicit" }))
+				.map((r: any) => ({ id: String(r.collectionId), title: r.collectionName, artist: r.artistName, artwork: artworkHd(r.artworkUrl100), trackCount: r.trackCount, releaseDate: r.releaseDate, type: albumType(r.collectionName), explicit: isExplicitEdition(r.collectionExplicitness) }))
 				.sort((a: any, b: any) => new Date(b.releaseDate || 0).getTime() - new Date(a.releaseDate || 0).getTime());
 
 			sendJson(res, 200, { ...(await withListeners(artist, similar)), tracks, albums });
@@ -277,8 +270,8 @@ function registerMusicApi(server: { middlewares: ViteDevServer["middlewares"] },
 						artistId: item.artistId ? String(item.artistId) : undefined,
 						album: item.collectionName, albumId: item.collectionId ? String(item.collectionId) : undefined,
 						duration: Math.round((item.trackTimeMillis || 0) / 1000), artwork: artworkHd(item.artworkUrl100),
-						streamUrl: `${apiBase}/playback/${item.trackId}?fallback=${encodeURIComponent(item.previewUrl || "")}&title=${encodeURIComponent(item.trackName || "")}&artist=${encodeURIComponent(item.artistName || "")}`,
-						previewUrl: item.previewUrl || "", explicit: item.trackExplicitness === "explicit",
+						streamUrl: `${apiBase}/playback/${item.trackId}?${playbackHints({ preview: item.previewUrl, title: item.trackName || "", artist: item.artistName || "", explicit: isExplicitEdition(item.trackExplicitness), duration: (item.trackTimeMillis || 0) / 1000 })}`,
+						previewUrl: item.previewUrl || "", explicit: isExplicitEdition(item.trackExplicitness),
 					};
 				});
 
@@ -297,6 +290,8 @@ function registerMusicApi(server: { middlewares: ViteDevServer["middlewares"] },
 		let fallback = reqUrl.searchParams.get("fallback") || "";
 		const titleHint = reqUrl.searchParams.get("title") || "";
 		const artistHint = reqUrl.searchParams.get("artist") || "";
+		const explicitHint = reqUrl.searchParams.get("explicit") === "1";
+		const durationHint = Number(reqUrl.searchParams.get("dur")) || undefined;
 		const warmOnly = reqUrl.searchParams.get("warm") === "1";
 
 		const redirectToFallback = () => {
@@ -309,14 +304,15 @@ function registerMusicApi(server: { middlewares: ViteDevServer["middlewares"] },
 			videoId = id;
 			// Numeric catalog ids, or lfm-<hash> for Last.fm songs that resolve via the title/artist hints.
 		} else if (/^(\d+|lfm-[a-f0-9]+)$/.test(id)) {
-			videoId = trackToVideoCache.get(id) || null;
+			const cacheKey = titleHint && artistHint ? `${id}|${artistHint}|${titleHint}`.toLowerCase() : id;
+			videoId = trackToVideoCache.get(cacheKey) || null;
 			if (!videoId) {
 				let title = titleHint, artist = artistHint;
 				if (!title || !artist) {
 					const info = await lookupItunesTrack(id);
 					if (info) { title = title || info.title; artist = artist || info.artist; if (!fallback && info.preview) fallback = info.preview; }
 				}
-				if (title && artist) { videoId = await findYoutubeVideoId(title, artist); if (videoId) trackToVideoCache.set(id, videoId); }
+				if (title && artist) { videoId = await findYoutubeMatch({ title, artist, explicit: explicitHint, duration: durationHint }); if (videoId) trackToVideoCache.set(cacheKey, videoId); }
 			}
 		}
 
@@ -344,7 +340,8 @@ function registerMusicApi(server: { middlewares: ViteDevServer["middlewares"] },
 				streamUrlCache.set(videoId, { url: streamUrl, at: Date.now() });
 			}
 			const headers: Record<string, string> = { "User-Agent": "Mozilla/5.0", Referer: "https://www.youtube.com/" };
-			if (req.headers.range) headers.Range = req.headers.range;
+			const range = await upstreamRange(req.headers.range, streamUrl, headers);
+			if (range) headers.Range = range;
 			const upstream = await fetch(streamUrl, { headers });
 			if (!upstream.ok || !upstream.body) throw new Error(`Upstream ${upstream.status}`);
 			res.statusCode = upstream.status;
@@ -399,6 +396,15 @@ function registerMusicApi(server: { middlewares: ViteDevServer["middlewares"] },
 		if (!title || !artist) return sendJson(res, 400, { error: "title and artist are required" });
 		res.setHeader("Cache-Control", "public, max-age=3600");
 		sendJson(res, 200, await songInfo(title, artist, q.get("albumId")?.trim() || undefined));
+	});
+	server.middlewares.use(`${apiBase}/album-info`, async (req, res) => {
+		const q = parseUrl(req.url).searchParams;
+		const title = q.get("title")?.trim();
+		const artist = q.get("artist")?.trim();
+		if (!title || !artist) return sendJson(res, 400, { error: "title and artist are required" });
+		const info = await albumInfo(q.get("id")?.trim() || undefined, title, artist, Number(q.get("tracks")) || undefined);
+		res.setHeader("Cache-Control", info.partial ? "no-store" : "public, max-age=3600");
+		sendJson(res, 200, info);
 	});
 	server.middlewares.use(`${apiBase}/song-credits`, async (req, res) => {
 		const q = parseUrl(req.url).searchParams;

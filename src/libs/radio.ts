@@ -144,6 +144,14 @@ export function stopRadio(): void {
 let retuneTimer = 0;
 let started = false;
 
+/** Empties the queue, cancelling any radio refresh still loading so it can't refill it a moment later. */
+export function clearQueue(): void {
+	generation++;
+	window.clearTimeout(retuneTimer);
+	useRadioStore.setState({ loading: false });
+	useMusicStore.getState().clearQueue();
+}
+
 /** Wires radio to the player. Called once at startup. */
 export function initRadio(): void {
 	if (started) return;

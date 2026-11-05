@@ -19,6 +19,8 @@ import {
 	splitArtistCredit,
 	getMusicApiConfig,
 	getArtistExtras,
+	getAlbumInfo,
+	type AlbumInfo,
 	library,
 	formatCount,
 	type ArtistExtras,
@@ -118,6 +120,24 @@ const FitTitle = ({ children, className = "", style, max, min }: { children: Rea
 		<h1 ref={ref} className={`min-w-0 truncate ${className}`} style={{ ...style, fontSize: size }}>
 			{children}
 		</h1>
+	);
+};
+
+/** Full-size album art over the page; click anywhere or press Esc to close. */
+const ArtworkLightbox = ({ src, title, onClose }: { src: string; title: string; onClose: () => void }) => {
+	useEffect(() => {
+		const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+		window.addEventListener("keydown", onKey);
+		return () => window.removeEventListener("keydown", onKey);
+	}, [onClose]);
+	return createPortal(
+		<div className="fixed inset-0 z-[1000] flex items-center justify-center p-8 bg-black/85 backdrop-blur-sm cursor-zoom-out" onClick={onClose}>
+			<img src={src} alt={title} className="max-w-[min(90vw,90vh)] max-h-[90vh] aspect-square object-contain rounded-xl shadow-2xl" />
+			<button className="absolute top-5 right-5 p-2 rounded-full text-white hover:bg-white/10 cursor-pointer" title="Close (Esc)" onClick={onClose}>
+				<XMarkIcon className="size-6" />
+			</button>
+		</div>,
+		document.body,
 	);
 };
 
@@ -245,6 +265,25 @@ export const DigitalLibrary = ({ query, urlPage = "library", urlPrefix, nav, ove
 	const [loading, setLoading] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const [albumDetail, setAlbumDetail] = useState<AlbumDetail | null>(null);
+	/** Release details, bio and credits for the open album (keyed by album id; loads after the tracks). */
+	const [albumInfo, setAlbumInfo] = useState<{ id: string; data: AlbumInfo | null } | null>(null);
+	const [albumBioOpen, setAlbumBioOpen] = useState(false);
+	const [openCreditSections, setOpenCreditSections] = useState<string[]>([]);
+	const [artZoom, setArtZoom] = useState(false);
+	useEffect(() => {
+		if (!albumDetail) return;
+		const album = albumDetail.album;
+		let alive = true;
+		setAlbumBioOpen(false);
+		setOpenCreditSections([]);
+		setArtZoom(false);
+		getAlbumInfo(album)
+			.then(data => alive && setAlbumInfo({ id: album.id, data }))
+			.catch(() => alive && setAlbumInfo({ id: album.id, data: null }));
+		return () => {
+			alive = false;
+		};
+	}, [albumDetail]);
 	const [artistDetail, setArtistDetail] = useState<ArtistDetail | null>(null);
 	// Artist page UI state lives here (not in ArtistPage) so it survives re-renders.
 	const [bioExpanded, setBioExpanded] = useState(false);
@@ -830,52 +869,208 @@ export const DigitalLibrary = ({ query, urlPage = "library", urlPrefix, nav, ove
 
 	const AlbumPage = () => {
 		if (!albumDetail) return null;
+		const { album } = albumDetail;
 		const albumTracks = albumDetail.tracks || [];
-		const albumSaved = savedAlbums.some(a => a.id === albumDetail.album.id);
+		const albumSaved = savedAlbums.some(a => a.id === album.id);
+		const dark = brightness === "dark";
+		const kind = album.type === "single" ? "Single" : album.type === "ep" ? "EP" : "Album";
+		const info = albumInfo?.id === album.id ? albumInfo.data : undefined; // undefined = still loading
+		const released = info?.releaseDate ?? album.releaseDate;
+		const songCount = albumTracks.length || album.trackCount || 0;
+		const totalSecs = albumTracks.reduce((n, t) => n + (t.duration || 0), 0);
+		const length = totalSecs >= 3600 ? `${Math.floor(totalSecs / 3600)} hr ${Math.round((totalSecs % 3600) / 60)} min` : `${Math.round(totalSecs / 60)} min`;
+		const meta = [released ? new Date(released).getFullYear() : null, `${songCount} song${songCount === 1 ? "" : "s"}`, totalSecs ? length : null, info?.genre].filter(Boolean);
+		const card = `flex flex-col gap-3 p-4 rounded-2xl ${dark ? "bg-[#ffffff0a]" : "bg-[#00000006]"}`;
+		const button = `w-max flex items-center gap-1.5 px-4 py-2 rounded-lg font-medium text-sm duration-150`;
+		const softButton = dark ? "bg-[#ffffff1f] hover:bg-[#ffffff33]" : "bg-[#00000012] hover:bg-[#00000022]";
+		const zoomSrc = (album.artwork || "").replace(/\d+x\d+bb/, "1500x1500bb");
+		const bio = info?.bio;
 		return (
 			<div className="flex flex-col gap-4">
-				<div className="flex gap-4 items-end">
-					<img src={artworkHighRes(albumDetail.album.artwork)} alt="" className="size-36 rounded-xl object-cover bg-(--tertiary) shadow-lg" />
+				<div className="flex gap-5 items-end">
+					<button className="group relative shrink-0 rounded-xl cursor-zoom-in" title="View full size" onClick={() => setArtZoom(true)}>
+						<img src={artworkHighRes(album.artwork)} alt="" className="size-44 rounded-xl object-cover bg-(--tertiary) shadow-lg duration-200 group-hover:brightness-90" />
+					</button>
 					<div className="flex flex-col gap-1 min-w-0">
-						<span className="text-xs text-(--text-tertiary) uppercase font-medium">{albumDetail.album.type === "single" ? "Single" : albumDetail.album.type === "ep" ? "EP" : "Album"}</span>
-						<h1 className="text-2xl font-bold truncate">{cleanAlbumTitle(albumDetail.album.title)}</h1>
-						<span className="text-sm text-(--text-secondary)">
-							{splitArtistCredit(albumDetail.album.artist).map((name, i, all) => (
+						<span className="flex items-center gap-1.5 text-xs text-(--text-tertiary) uppercase font-medium">
+							{kind}
+							{album.explicit && <span className="px-1 py-px rounded-[3px] bg-(--text-tertiary) text-(--secondary) font-bold leading-none normal-case">E</span>}
+						</span>
+						<h1 className="text-3xl font-bold leading-tight line-clamp-2">{cleanAlbumTitle(album.title)}</h1>
+						<span className="text-sm font-semibold text-(--text-secondary)">
+							{splitArtistCredit(album.artist).map((name, i, all) => (
 								<span key={`${name}-${i}`}>
-									<span
-										className="cursor-pointer hover:underline"
-										onClick={() => (i === 0 && albumDetail.album.artistId && all.length === 1 ? openArtist(albumDetail.album.artistId!) : openArtistByName(name))}
-									>
+									<span className="cursor-pointer hover:underline" onClick={() => (i === 0 && album.artistId && all.length === 1 ? openArtist(album.artistId!) : openArtistByName(name))}>
 										{name}
 									</span>
 									{i < all.length - 1 && <span>, </span>}
 								</span>
 							))}
 						</span>
-						{albumDetail.album.trackCount && <span className="text-xs text-(--text-tertiary)">{albumDetail.album.trackCount} tracks</span>}
+						<span className="text-xs text-(--text-tertiary)">{meta.join(" · ")}</span>
+						{!!info?.tags.length && (
+							<div className="flex flex-wrap gap-1 mt-1">
+								{info.tags.map(t => (
+									<span key={t} className={`px-2 py-0.5 rounded-full text-[11px] font-medium capitalize ${dark ? "bg-[#ffffff14]" : "bg-[#0000000d]"}`}>
+										{t}
+									</span>
+								))}
+							</div>
+						)}
 					</div>
 				</div>
+
+				{/* About sits between the header and the actions, so it's read before the track list. */}
+				{info === undefined && (
+					<div className={`${card} animate-pulse`}>
+						<div className="h-4 w-20 rounded bg-[#ffffff1a]" />
+						<div className="h-3 w-full rounded bg-[#ffffff12]" />
+						<div className="h-3 w-3/5 rounded bg-[#ffffff12]" />
+					</div>
+				)}
+				{bio && (
+					<section className={card}>
+						<h2 className="text-base font-bold">About</h2>
+						<p className={`text-sm leading-relaxed text-(--text-secondary) whitespace-pre-line ${albumBioOpen ? "" : "line-clamp-3"}`} style={{ fontFamily: TEXT_STACK }}>
+							{albumBioOpen ? bio.full : bio.summary}
+						</p>
+						<div className="flex items-center gap-3 text-xs">
+							{(bio.full.length > bio.summary.length + 20 || bio.summary.length > 280) && (
+								<button className="font-semibold hover:underline cursor-pointer" onClick={() => setAlbumBioOpen(o => !o)}>
+									{albumBioOpen ? "Show less" : "Read more"}
+								</button>
+							)}
+							{bio.url && (
+								<button className="text-(--text-tertiary) hover:underline cursor-pointer" onClick={() => openTab(bio.url!, "Last.fm")}>
+									Source: Last.fm
+								</button>
+							)}
+						</div>
+					</section>
+				)}
+
 				{albumTracks.length > 0 && (
 					<>
 						<div className="flex items-center gap-2">
-							<button
-								className={`w-max flex items-center gap-1.5 px-4 py-2 rounded-lg font-medium text-sm duration-150 ${brightness === "dark" ? "bg-white text-black hover:bg-[#ffffffdd]" : "bg-black text-white hover:bg-[#000000dd]"}`}
-								onClick={() => handlePlayAll(albumTracks)}
-							>
+							<button className={`${button} ${dark ? "bg-white text-black hover:bg-[#ffffffdd]" : "bg-black text-white hover:bg-[#000000dd]"}`} onClick={() => handlePlayAll(albumTracks)}>
 								<PlayIcon className="size-4" /> Play
 							</button>
 							<button
-								className={`w-max flex items-center gap-1.5 px-4 py-2 rounded-lg font-medium text-sm duration-150 ${albumSaved ? "bg-[#3d91ff] text-white hover:brightness-110" : brightness === "dark" ? "bg-[#ffffff1f] hover:bg-[#ffffff33]" : "bg-[#00000012] hover:bg-[#00000022]"}`}
-								onClick={() => toggleAlbum(albumDetail.album)}
-								title={albumSaved ? "Remove from Your Library" : `Add this ${albumDetail.album.type === "single" ? "single" : albumDetail.album.type === "ep" ? "EP" : "album"} to Your Library`}
+								className={`${button} ${albumSaved ? "bg-[#3d91ff] text-white hover:brightness-110" : softButton}`}
+								onClick={() => toggleAlbum(album)}
+								title={albumSaved ? "Remove from Your Library" : `Add this ${kind.toLowerCase()} to Your Library`}
 							>
 								{albumSaved ? <CheckIcon className="size-4" /> : <PlusIcon className="size-4" />}
 								{albumSaved ? "In Library" : "Add to Library"}
+							</button>
+							<button
+								className={`${button} ${softButton}`}
+								onClick={() => startRadio(splitArtistCredit(album.artist)[0] || album.artist, albumTracks[0]?.title)}
+								title={`Start a station from this ${kind.toLowerCase()}`}
+							>
+								<RadioIcon className="size-4" /> Radio
 							</button>
 						</div>
 						<div className="flex flex-col">{albumTracks.map((t, i) => <TrackRow key={t.id} track={t} index={i} list={albumTracks} />)}</div>
 					</>
 				)}
+
+				{/* Release details and credits (iTunes / Last.fm / MusicBrainz) */}
+				{info === undefined ? (
+					<div className={`${card} animate-pulse`}>
+						<div className="h-4 w-28 rounded bg-[#ffffff1a]" />
+						<div className="h-3 w-2/3 rounded bg-[#ffffff12]" />
+					</div>
+				) : (
+					<div className="grid gap-3 md:grid-cols-2 items-start">
+						<section className={card}>
+							<h2 className="text-base font-bold">Release details</h2>
+							<dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-sm">
+								{released && (
+									<>
+										<dt className="text-(--text-tertiary)">Released</dt>
+										<dd>{new Date(released).toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" })}</dd>
+									</>
+								)}
+								<dt className="text-(--text-tertiary)">Type</dt>
+								<dd>{kind}</dd>
+								<dt className="text-(--text-tertiary)">Songs</dt>
+								<dd>
+									{songCount}
+									{totalSecs ? `, ${length}` : ""}
+								</dd>
+								{info?.genre && (
+									<>
+										<dt className="text-(--text-tertiary)">Genre</dt>
+										<dd>{info.genre}</dd>
+									</>
+								)}
+								{info?.label && (
+									<>
+										<dt className="text-(--text-tertiary)">Label</dt>
+										<dd>{info.label}</dd>
+									</>
+								)}
+								{!!info?.listeners && (
+									<>
+										<dt className="text-(--text-tertiary)">Listeners</dt>
+										<dd>
+											{formatCount(info.listeners)} on Last.fm{info.playcount ? ` · ${formatCount(info.playcount)} plays` : ""}
+										</dd>
+									</>
+								)}
+							</dl>
+							{info?.copyright && <p className="text-[11px] text-(--text-tertiary) leading-snug">{info.copyright}</p>}
+						</section>
+
+						{!!info?.credits.length && (
+							<section className={card}>
+								<h2 className="text-base font-bold">Credits</h2>
+								{info.credits.map(section => {
+									const open = openCreditSections.includes(section.title);
+									return (
+										<div key={section.title} className="flex flex-col gap-1.5">
+											<h3 className="text-[11px] font-bold uppercase tracking-wider text-(--text-tertiary)">
+												{section.title} <span className="font-medium normal-case tracking-normal">({section.credits.length})</span>
+											</h3>
+											<div className="flex flex-wrap gap-x-3 gap-y-1">
+												{section.credits.slice(0, open ? undefined : 12).map(c => (
+													<span key={c.name} className="text-sm leading-tight" title={c.roles.join(", ")}>
+														<span className="font-semibold cursor-pointer hover:underline" onClick={() => openArtistByName(c.name)}>
+															{c.name}
+														</span>
+														{c.roles.length > 0 && (
+															<span className="text-xs text-(--text-tertiary)">
+																{" "}
+																· {c.roles.slice(0, 2).join(", ")}
+																{c.roles.length > 2 ? "…" : ""}
+															</span>
+														)}
+													</span>
+												))}
+												{section.credits.length > 12 && (
+													<button
+														className="text-xs font-semibold text-(--text-secondary) hover:underline cursor-pointer"
+														onClick={() => setOpenCreditSections(o => (open ? o.filter(t => t !== section.title) : [...o, section.title]))}
+													>
+														{open ? "Show less" : `+${section.credits.length - 12} more`}
+													</button>
+												)}
+											</div>
+										</div>
+									);
+								})}
+								{info.creditsUrl && (
+									<button className="w-max text-xs text-(--text-tertiary) hover:underline cursor-pointer" onClick={() => openTab(info.creditsUrl!, "MusicBrainz")}>
+										Source: MusicBrainz
+									</button>
+								)}
+							</section>
+						)}
+					</div>
+				)}
+
+				{artZoom && zoomSrc && <ArtworkLightbox src={zoomSrc} title={cleanAlbumTitle(album.title)} onClose={() => setArtZoom(false)} />}
 			</div>
 		);
 	};
@@ -1242,7 +1437,7 @@ export const DigitalLibrary = ({ query, urlPage = "library", urlPrefix, nav, ove
 				{/* Called (not <HomePage />) so Your Library keeps its state across re-renders. */}
 				{page === "home" && HomePage()}
 				{page === "search" && <SearchPage />}
-				{page === "album" && <AlbumPage />}
+				{page === "album" && AlbumPage()}
 				{/* Called, not mounted as <ArtistPage />: a fresh component identity each render would remount it as play counts stream in. */}
 				{page === "artist" && ArtistPage()}
 			</div>

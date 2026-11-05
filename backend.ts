@@ -10,14 +10,15 @@ import { fileURLToPath } from "node:url";
 import { version } from "./package.json";
 import { server as wisp } from "@mercuryworkshop/wisp-js/server";
 import { create as createYoutubeDl } from "youtube-dl-exec";
-import ytSearch from "yt-search";
 import { cloakMiddleware } from "./src/server/cloak-routing";
 import { rankAlbums, rankArtists, rankTracks } from "./src/server/music-rank";
 import { artistBanner, artistBio, artistTopTracks, buildRadio, findDeezerArtist, relatedArtists } from "./src/server/music-radio";
 import { artistStats, lastfmKey, trackPlays } from "./src/server/music-stats";
 import { getAccountsApp, initAccounts } from "./src/server/accounts";
 import { artistExtras } from "./src/server/artist-extras";
-import { songCredits, songInfo } from "./src/server/song-info";
+import { albumInfo, songCredits, songInfo } from "./src/server/song-info";
+import { findYoutubeMatch, isExplicitEdition, playbackHints } from "./src/server/youtube-match";
+import { upstreamRange } from "./src/server/stream-range";
 
 export function fsrv() {
 	config.config();
@@ -61,12 +62,6 @@ export function fsrv() {
 	// iTunes marks singles and EPs with a title suffix.
 	const albumType = (title: string | undefined): "album" | "single" | "ep" => (/ - single$/i.test(title || "") ? "single" : / - ep$/i.test(title || "") ? "ep" : "album");
 
-	const findVideoId = async (title: string, artist: string): Promise<string | null> => {
-		try {
-			const r = (await ytSearch(`${artist} ${title} official audio`)) as { videos?: { videoId?: string }[] };
-			return r.videos?.find(v => v.videoId && videoIdPattern.test(v.videoId))?.videoId || null;
-		} catch { return null; }
-	};
 
 	// Social links + gallery photos for the artist page hero (loaded after the page).
 	app.get("/api/music/artist-extras", async c => {
@@ -83,6 +78,14 @@ export function fsrv() {
 		if (!title || !artist) return c.json({ error: "title and artist are required" }, 400);
 		c.header("Cache-Control", "public, max-age=3600");
 		return c.json(await songInfo(title, artist, c.req.query("albumId")?.trim() || undefined));
+	});
+	app.get("/api/music/album-info", async c => {
+		const title = c.req.query("title")?.trim();
+		const artist = c.req.query("artist")?.trim();
+		if (!title || !artist) return c.json({ error: "title and artist are required" }, 400);
+		const info = await albumInfo(c.req.query("id")?.trim() || undefined, title, artist, Number(c.req.query("tracks")) || undefined);
+		c.header("Cache-Control", info.partial ? "no-store" : "public, max-age=3600");
+		return c.json(info);
 	});
 	app.get("/api/music/song-credits", async c => {
 		const title = c.req.query("title")?.trim();
@@ -152,8 +155,8 @@ export function fsrv() {
 				album: item.collectionName || undefined, albumId: item.collectionId ? String(item.collectionId) : undefined,
 				duration: Math.round((item.trackTimeMillis || 0) / 1000), artwork: artworkHd(item.artworkUrl100),
 				// Title/artist hints let playback resolve YouTube without another iTunes lookup.
-				streamUrl: `/api/music/playback/${item.trackId}?fallback=${encodeURIComponent(item.previewUrl || "")}&title=${encodeURIComponent(item.trackName || "")}&artist=${encodeURIComponent(item.artistName || "")}`,
-				previewUrl: item.previewUrl || "", explicit: item.trackExplicitness === "explicit",
+				streamUrl: `/api/music/playback/${item.trackId}?${playbackHints({ preview: item.previewUrl, title: item.trackName || "", artist: item.artistName || "", explicit: isExplicitEdition(item.trackExplicitness), duration: (item.trackTimeMillis || 0) / 1000 })}`,
+				previewUrl: item.previewUrl || "", explicit: isExplicitEdition(item.trackExplicitness),
 			}));
 			const albums = (albumCatalog.results || [])
 				.filter((r: any) => r.wrapperType === "collection" && r.collectionName)
@@ -190,8 +193,8 @@ export function fsrv() {
 				id: String(item.trackId), title: item.trackName || "Unknown", artist: item.artistName || "",
 				album: item.collectionName || album.title, albumId: String(item.collectionId || id),
 				duration: Math.round((item.trackTimeMillis || 0) / 1000), artwork: artworkHd(item.artworkUrl100) || album.artwork,
-				streamUrl: `/api/music/playback/${item.trackId}?fallback=${encodeURIComponent(item.previewUrl || "")}&title=${encodeURIComponent(item.trackName || "")}&artist=${encodeURIComponent(item.artistName || "")}`,
-				previewUrl: item.previewUrl || "", explicit: item.trackExplicitness === "explicit",
+				streamUrl: `/api/music/playback/${item.trackId}?${playbackHints({ preview: item.previewUrl, title: item.trackName || "", artist: item.artistName || "", explicit: isExplicitEdition(item.trackExplicitness), duration: (item.trackTimeMillis || 0) / 1000 })}`,
+				previewUrl: item.previewUrl || "", explicit: isExplicitEdition(item.trackExplicitness),
 			}));
 			return c.json({ album, tracks });
 		} catch (err: any) { return c.json({ error: err.message }, 502); }
@@ -225,11 +228,11 @@ export function fsrv() {
 					id: String(item.trackId), title: item.trackName, artist: item.artistName, album: item.collectionName,
 					albumId: item.collectionId ? String(item.collectionId) : undefined,
 					duration: Math.round((item.trackTimeMillis || 0) / 1000), artwork: artworkHd(item.artworkUrl100),
-					streamUrl: `/api/music/playback/${item.trackId}?fallback=${encodeURIComponent(item.previewUrl || "")}&title=${encodeURIComponent(item.trackName || "")}&artist=${encodeURIComponent(item.artistName || "")}`,
-					previewUrl: item.previewUrl || "", explicit: item.trackExplicitness === "explicit",
+					streamUrl: `/api/music/playback/${item.trackId}?${playbackHints({ preview: item.previewUrl, title: item.trackName || "", artist: item.artistName || "", explicit: isExplicitEdition(item.trackExplicitness), duration: (item.trackTimeMillis || 0) / 1000 })}`,
+					previewUrl: item.previewUrl || "", explicit: isExplicitEdition(item.trackExplicitness),
 				}));
 			const albums = (ad.results || []).filter((r: any) => r.wrapperType === "collection").map((r: any) => ({
-				id: String(r.collectionId), title: r.collectionName, artist: r.artistName, artwork: artworkHd(r.artworkUrl100), trackCount: r.trackCount, releaseDate: r.releaseDate, type: albumType(r.collectionName), explicit: r.collectionExplicitness === "explicit",
+				id: String(r.collectionId), title: r.collectionName, artist: r.artistName, artwork: artworkHd(r.artworkUrl100), trackCount: r.trackCount, releaseDate: r.releaseDate, type: albumType(r.collectionName), explicit: isExplicitEdition(r.collectionExplicitness),
 			})).sort((a: any, b: any) => new Date(b.releaseDate || 0).getTime() - new Date(a.releaseDate || 0).getTime());
 			// Last.fm listener counts (no-op without LASTFM_API_KEY).
 			const [mainStats, ...similarStats] = await Promise.all([artistStats(artistName), ...similar.map(s => artistStats(s.name))]);
@@ -271,8 +274,8 @@ export function fsrv() {
 						artistId: item.artistId ? String(item.artistId) : undefined,
 						album: item.collectionName, albumId: item.collectionId ? String(item.collectionId) : undefined,
 						duration: Math.round((item.trackTimeMillis || 0) / 1000), artwork: artworkHd(item.artworkUrl100),
-						streamUrl: `/api/music/playback/${item.trackId}?fallback=${encodeURIComponent(item.previewUrl || "")}&title=${encodeURIComponent(item.trackName || "")}&artist=${encodeURIComponent(item.artistName || "")}`,
-						previewUrl: item.previewUrl || "", explicit: item.trackExplicitness === "explicit",
+						streamUrl: `/api/music/playback/${item.trackId}?${playbackHints({ preview: item.previewUrl, title: item.trackName || "", artist: item.artistName || "", explicit: isExplicitEdition(item.trackExplicitness), duration: (item.trackTimeMillis || 0) / 1000 })}`,
+						previewUrl: item.previewUrl || "", explicit: isExplicitEdition(item.trackExplicitness),
 					};
 				});
 
@@ -287,13 +290,16 @@ export function fsrv() {
 		let fallback = c.req.query("fallback") || "";
 		const titleHint = c.req.query("title") || "";
 		const artistHint = c.req.query("artist") || "";
+		const explicitHint = c.req.query("explicit") === "1";
+		const durationHint = Number(c.req.query("dur")) || undefined;
 		const warm = c.req.query("warm") === "1";
 
 		let videoId: string | null = null;
 		if (videoIdPattern.test(id)) { videoId = id; }
 		// Numeric catalog ids, or lfm-<hash> for Last.fm songs that resolve via the title/artist hints.
 		else if (/^(\d+|lfm-[a-f0-9]+)$/.test(id)) {
-			videoId = trackToVideoCache.get(id) || null;
+			const cacheKey = titleHint && artistHint ? `${id}|${artistHint}|${titleHint}`.toLowerCase() : id;
+			videoId = trackToVideoCache.get(cacheKey) || null;
 			if (!videoId) {
 				let t = titleHint, a = artistHint;
 				if (!t || !a) {
@@ -304,7 +310,7 @@ export function fsrv() {
 						if (tr) { t = t || tr.trackName; a = a || tr.artistName; if (!fallback && tr.previewUrl) fallback = tr.previewUrl; }
 					} catch {}
 				}
-				if (t && a) { videoId = await findVideoId(t, a); if (videoId) trackToVideoCache.set(id, videoId); }
+				if (t && a) { videoId = await findYoutubeMatch({ title: t, artist: a, explicit: explicitHint, duration: durationHint }); if (videoId) trackToVideoCache.set(cacheKey, videoId); }
 			}
 		}
 
@@ -336,14 +342,18 @@ export function fsrv() {
 				return url;
 			};
 
-			const headers: Record<string, string> = { "User-Agent": "Mozilla/5.0", Referer: "https://www.youtube.com/" };
-			const range = c.req.header("range");
-			if (range) headers.Range = range;
+			const base: Record<string, string> = { "User-Agent": "Mozilla/5.0", Referer: "https://www.youtube.com/" };
+			const withRange = async (url: string) => {
+				const range = await upstreamRange(c.req.header("range"), url, base);
+				return range ? { ...base, Range: range } : base;
+			};
 
 			// A cached googlevideo URL can expire or be IP-bound; retry once with a fresh resolution.
-			let upstream = await fetch(await resolveStream(false), { headers }).catch(() => null);
+			const cachedUrl = await resolveStream(false);
+			let upstream = await fetch(cachedUrl, { headers: await withRange(cachedUrl) }).catch(() => null);
 			if (!upstream || !upstream.ok || !upstream.body) {
-				upstream = await fetch(await resolveStream(true), { headers });
+				const freshUrl = await resolveStream(true);
+				upstream = await fetch(freshUrl, { headers: await withRange(freshUrl) });
 			}
 			if (!upstream.ok || !upstream.body) throw new Error(`Upstream ${upstream.status}`);
 

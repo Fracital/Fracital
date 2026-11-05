@@ -10,6 +10,8 @@
  * Falls back to Deezer's related-artists graph when Last.fm isn't configured.
  */
 import { asArray, lastfmCall, lastfmKey } from "./lastfm";
+import { createHash } from "node:crypto";
+import { playbackHints } from "./youtube-match";
 
 interface DeezerArtist {
 	id: number;
@@ -203,7 +205,7 @@ const toRadioTrack = (t: DeezerTrack, apiBase: string): RadioTrack => ({
 	duration: t.duration || 0,
 	artwork: t.album?.cover_xl || t.album?.cover_big || t.album?.cover_medium || "",
 	// The playback route resolves via the title/artist hints (yt-search → yt-dlp).
-	streamUrl: `${apiBase}/playback/${t.id}?fallback=${encodeURIComponent(t.preview || "")}&title=${encodeURIComponent(t.title_short || t.title)}&artist=${encodeURIComponent(t.artist?.name || "")}`,
+	streamUrl: `${apiBase}/playback/${t.id}?${playbackHints({ preview: t.preview, title: t.title_short || t.title, artist: t.artist?.name || "", explicit: !!t.explicit_lyrics, duration: t.duration })}`,
 	previewUrl: t.preview || "",
 	explicit: !!t.explicit_lyrics,
 });
@@ -442,7 +444,8 @@ export async function buildRadio({ artist, title, variety, limit }: RadioOptions
 			if (title && c === picked[0] && seedSong) return seedSong;
 			const resolved = await findDeezerTrack(c.title, c.artist, apiBase).catch(() => null);
 			if (resolved) return { ...resolved, title: c.title, artist: c.artist };
-			const id = `lfm-${Buffer.from(songKey(c.title, c.artist)).toString("hex").slice(0, 16)}`;
+			// A hash of the whole song key: the old hex prefix only covered ~8 characters, so songs by the same artist collided.
+			const id = `lfm-${createHash("md5").update(songKey(c.title, c.artist)).digest("hex").slice(0, 16)}`;
 			return {
 				id,
 				title: c.title,
