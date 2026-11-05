@@ -743,26 +743,46 @@ export default App;
 function SideAd() {
 	const show = useShowAds();
 	const [closed, setClosed] = useState(false);
+	const panelRef = useRef<HTMLDivElement>(null);
+	const [slots, setSlots] = useState(2);
 
-	// A closed ad comes back with a fresh one at the next 5–10 minute refresh.
 	useEffect(() => {
 		if (!closed) return;
 		const t = window.setTimeout(() => setClosed(false), (5 + Math.random() * 5) * 60_000);
 		return () => window.clearTimeout(t);
 	}, [closed]);
 
+	useEffect(() => {
+		const el = panelRef.current;
+		if (!el) return;
+		const fit = () => {
+			const usable = el.clientHeight - 48;
+			setSlots(Math.min(3, Math.max(2, Math.floor(usable / (AD_UNITS.side.height + 8)))));
+		};
+		fit();
+		const ro = new ResizeObserver(fit);
+		ro.observe(el);
+		return () => ro.disconnect();
+	}, [show, closed]);
+
 	if (!show || closed) return null;
 	return (
-		<div className="hidden lg:flex flex-col items-center justify-center gap-1.5 shrink-0 p-2 rounded-2xl bg-(--secondary) inset-shadow-(--inset-shadow-primary)">
-			<button
-				className="flex items-center gap-1.5 self-stretch justify-center px-2 py-1 rounded-lg text-xs font-medium text-(--text-secondary) hover:text-(--text-primary) hover:bg-[#ffffff14] duration-150"
-				title="Close ad"
-				onClick={() => setClosed(true)}
-			>
-				<XMarkIcon className="size-3.5" />
-				Close
-			</button>
-			<AdBanner unit={AD_UNITS.side} refreshMinutes={[5, 10]} className="rounded-lg" />
+		<div ref={panelRef} className="hidden lg:flex flex-col shrink-0 rounded-2xl bg-(--secondary) inset-shadow-(--inset-shadow-primary) overflow-y-auto overflow-x-hidden [scrollbar-width:none]">
+			<div className="sticky top-0 z-10 m-2 p-2 pb-1.5 bg-(--secondary)">
+				<button
+					className="flex items-center gap-1.5 w-full justify-center px-2 py-1 rounded-lg text-xs font-medium text-(--text-secondary) hover:text-(--text-primary) hover:bg-[#ffffff14] duration-150"
+					title="Close ads"
+					onClick={() => setClosed(true)}
+				>
+					<XMarkIcon className="size-3.5" />
+					Close
+				</button>
+			</div>
+			<div className="flex flex-col items-center gap-2 px-2 pb-2">
+				{Array.from({ length: slots }, (_, i) => (
+					<AdBanner key={i} unit={AD_UNITS.side} refreshMinutes={[5, 10]} className="rounded-lg" />
+				))}
+			</div>
 		</div>
 	);
 }
