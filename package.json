@@ -21,7 +21,7 @@
 		"@fortawesome/react-fontawesome": "^3.5.0",
 		"@heroicons/react": "^2.2.0",
 		"@hono/node-server": "^2.1.6",
-		"@mercuryworkshop/epoxy-transport": "^3.0.2",
+		"@mercuryworkshop/epoxy-transport": "git+https://github.com/Fracital/EpoxyTransport.git#c3cbf1165c8fd1d64af697a659ca8cc5743e5cb4",
 		"@mercuryworkshop/libcurl-transport": "^2.0.6",
 		"@mercuryworkshop/proxy-transports": "^1.0.2",
 		"@mercuryworkshop/scramjet": "2.0.67-alpha.2",
