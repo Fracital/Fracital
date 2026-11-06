@@ -20,6 +20,7 @@ import LibcurlTransport from "@mercuryworkshop/libcurl-transport";
 import { useMusicStore, usePanelsStore, useSettingsStore, useTabsStore } from "./store";
 import { init, quickLinks } from "./libs/init";
 import { initTheme } from "./libs/theme";
+import { startGameSaveSync } from "./libs/gameSaves";
 import { View } from "./gui/View";
 import TabGroup from "./components/TabGroup";
 import { ModalProvider } from "./components/Modal/ModalContext";
@@ -194,6 +195,8 @@ const App = () => {
 			await Api();
 			await init();
 			await initTheme();
+			// After init, so the bundled games are on disk before their saves are matched.
+			startGameSaveSync();
 		})();
 		window.appReady = bootstrapPromise;
 		void bootstrapPromise;

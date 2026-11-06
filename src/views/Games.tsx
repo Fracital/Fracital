@@ -2,6 +2,9 @@ import { useState, useEffect, useRef } from "react";
 import { RufflePlayer } from "../components/RufflePlayer";
 import { HTMLPlayer } from "../components/HTMLPlayer";
 import { GameInstaller } from "../components/GameInstaller";
+import { GameCloudSave } from "../components/GameCloudSave";
+import { prepareGame, syncGame, trackGameSession } from "../libs/gameSaves";
+import { HolyText } from "../components/common/HolyText";
 import { useSettingsStore, useTabsStore } from "../store";
 import { updatePageTab } from "../libs/aboutPages";
 import { PlusIcon, PlayIcon, XMarkIcon, PhotoIcon, TrashIcon, StarIcon, PencilIcon, ArrowsPointingOutIcon, ArrowsPointingInIcon, SpeakerWaveIcon, SpeakerXMarkIcon, FunnelIcon, ArchiveBoxIcon, FolderIcon, ChevronLeftIcon, ChevronRightIcon, ArrowDownTrayIcon } from "@heroicons/react/24/solid";
@@ -74,6 +77,39 @@ const Games = ({ query, className }: GamesProps) => {
 
 	const playerContainerRef = useRef<HTMLDivElement>(null);
 	const rufflePlayerRef = useRef<any>(null);
+	// The player mounts only once the game's cloud save (if any) is in place.
+	const [savesReadyFor, setSavesReadyFor] = useState<string | null>(null);
+	const savesReady = !!selectedGame && savesReadyFor === selectedGame.id;
+
+	useEffect(() => {
+		if (!selectedGame) return;
+		const id = selectedGame.id;
+		let cancelled = false;
+		void prepareGame(selectedGame).finally(() => {
+			if (!cancelled) setSavesReadyFor(id);
+		});
+		return () => {
+			cancelled = true;
+			setSavesReadyFor(null);
+		};
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [selectedGame?.id]);
+
+	useEffect(() => {
+		if (!selectedGame || !savesReady) return;
+		return trackGameSession(selectedGame);
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [selectedGame?.id, savesReady]);
+
+	const restoreCloudSave = async () => {
+		if (!selectedGame) return;
+		const id = selectedGame.id;
+		setSavesReadyFor(null);
+		// Let the player unmount and the session's final flush settle before overwriting.
+		await new Promise(r => setTimeout(r, 1000));
+		await syncGame(selectedGame, "restore");
+		setSavesReadyFor(id);
+	};
 	const [detailsCollapsed, setDetailsCollapsed] = useState<boolean>(() => {
 		try {
 			return localStorage.getItem("gamesDetailsCollapsed") === "1";
@@ -688,7 +724,14 @@ const Games = ({ query, className }: GamesProps) => {
 					<div className="flex flex-col lg:flex-row gap-4 flex-1 min-h-0">
 						<div className="flex-1 flex flex-col gap-4 min-h-0">
 							<div ref={playerContainerRef} className="relative flex-1 rounded-xl overflow-hidden bg-black">
-								{selectedGame.type === "flash" ? (
+								{!savesReady ? (
+									<div className="absolute inset-0 flex items-center justify-center bg-(--primary)">
+										<div className="flex flex-col items-center gap-3">
+											<div className="size-12 border-4 border-(--accent) border-t-transparent rounded-full animate-spin"></div>
+											<HolyText className="text-lg font-semibold text-(--text-secondary)" text="Loading saves..." />
+										</div>
+									</div>
+								) : selectedGame.type === "flash" ? (
 									<RufflePlayer
 										data={selectedGame.data}
 										className="w-full h-full"
@@ -791,6 +834,9 @@ const Games = ({ query, className }: GamesProps) => {
 									<TrashIcon className="size-5" />
 									<span className="hidden sm:inline">Delete</span>
 								</button>
+							</div>
+							<div className={`px-4 py-3 rounded-xl ${settings.brightness === "dark" ? "bg-[#ffffff10]" : "bg-[#00000010]"}`}>
+								<GameCloudSave game={selectedGame} onRestore={restoreCloudSave} />
 							</div>
 						</div>
 
