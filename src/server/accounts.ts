@@ -19,6 +19,7 @@ import * as z from "zod";
 import { asArray, lastfmCall, lastfmImage, lastfmKey, lastfmSecret, toCount } from "./lastfm";
 import { findDeezerArtist, findDeezerTrack, type RadioTrack } from "./music-radio";
 import { isBanned, migrateArtistTables, registerArtistRoutes, userMeta } from "./artists";
+import { mailEnabled, sendVerificationEmail } from "./mail";
 
 const MUSIC_API = "/api/music";
 const STATE_COOKIE = "fracital_lastfm_state";
@@ -122,13 +123,39 @@ function trustedOrigins(request?: Request): string[] {
 	return host ? [...fromEnv, `http://${host}`, `https://${host}`] : fromEnv;
 }
 
+// Cloudflare's published ranges: on the pre-cutover :80 path nginx appends the Cloudflare hop to X-Forwarded-For.
+const CLOUDFLARE_PROXIES = [
+	"173.245.48.0/20", "103.21.244.0/22", "103.22.200.0/22", "103.31.4.0/22", "141.101.64.0/18", "108.162.192.0/18", "190.93.240.0/20", "188.114.96.0/20",
+	"197.234.240.0/22", "198.41.128.0/17", "162.158.0.0/15", "104.16.0.0/13", "104.24.0.0/14", "172.64.0.0/13", "131.0.72.0/22",
+	"2400:cb00::/32", "2606:4700::/32", "2803:f800::/32", "2405:b500::/32", "2405:8100::/32", "2a06:98c0::/29", "2c0f:f248::/32",
+];
+
+const MINUTE = 60;
+
 const authOptions = (pool: Pool) => ({
 	database: pool,
 	secret: process.env.BETTER_AUTH_SECRET,
 	baseURL: process.env.BETTER_AUTH_URL || undefined,
 	basePath: "/api/auth",
 	trustedOrigins,
-	emailAndPassword: { enabled: true, autoSignIn: true, minPasswordLength: 8 },
+	emailAndPassword: { enabled: true, autoSignIn: true, minPasswordLength: 8, maxPasswordLength: 120, revokeSessionsOnPasswordReset: true },
+	emailVerification: {
+		sendOnSignUp: mailEnabled(),
+		autoSignInAfterVerification: true,
+		sendVerificationEmail: async ({ user, url }: { user: { email: string }; url: string }) => {
+			if (!mailEnabled() || user.email.endsWith("@lastfm.invalid")) return;
+			// Not awaited, so response timing doesn't reveal whether the address exists.
+			void sendVerificationEmail(user.email, url).catch(err => console.error("Verification email failed:", err instanceof Error ? err.message : err));
+		},
+	},
+	rateLimit: {
+		enabled: true,
+		customRules: {
+			"/sign-in/*": { window: 15 * MINUTE, max: 30 },
+			"/sign-up/*": { window: 15 * MINUTE, max: 5 },
+		},
+	},
+	advanced: { ipAddress: { ipAddressHeaders: ["x-forwarded-for"], trustedProxies: CLOUDFLARE_PROXIES } },
 	session: { expiresIn: 60 * 60 * 24 * 30 },
 	plugins: [lastfmPlugin()],
 	databaseHooks: {
