@@ -76,19 +76,19 @@ export default defineConfig({
 						{
 							src: `${scramjetPath}/scramjet.js`.replace(/\\/g, "/"),
 							dest: "vendor",
-							rename: "core.js",
+							rename: { stripBase: true, name: "core.js" },
 							overwrite: true,
 						},
 						{
 							src: `${scramjetPath}/scramjet.wasm`.replace(/\\/g, "/"),
 							dest: "vendor",
-							rename: "core.wasm",
+							rename: { stripBase: true, name: "core.wasm" },
 							overwrite: true,
 						},
 						{
 							src: "node_modules/@mercuryworkshop/scramjet-controller/dist/controller.api.js",
 							dest: "vendor",
-							rename: "ctl.js",
+							rename: { stripBase: true, name: "ctl.js" },
 							overwrite: true,
 							transform: (content: string | Buffer) => {
 								const text = content.toString();
@@ -108,13 +108,13 @@ export default defineConfig({
 						{
 							src: "node_modules/@mercuryworkshop/scramjet-controller/dist/controller.sw.js",
 							dest: "vendor",
-							rename: "ctl.sw.js",
+							rename: { stripBase: true, name: "ctl.sw.js" },
 							overwrite: true,
 						},
 						{
 							src: "node_modules/@mercuryworkshop/scramjet-controller/dist/controller.inject.js",
 							dest: "vendor",
-							rename: "ctl.frame.js",
+							rename: { stripBase: true, name: "ctl.frame.js" },
 							overwrite: true,
 						},
 						// Transport engine wasm, self-hosted (never a CDN: filters
@@ -122,7 +122,7 @@ export default defineConfig({
 						{
 							src: "node_modules/libcurl.js/libcurl.wasm",
 							dest: "vendor",
-							rename: "net.wasm",
+							rename: { stripBase: true, name: "net.wasm" },
 							overwrite: true,
 						},
 						// Flash emulator, self-hosted for the same reason. Companion
@@ -131,12 +131,13 @@ export default defineConfig({
 						{
 							src: "node_modules/@ruffle-rs/ruffle/*.js",
 							dest: "vendor/flash",
-							rename: (name: string, ext: string) => (name === "ruffle" ? "player.js" : `${name}.${ext}`),
+							rename: (name: string, ext: string) => (name === "ruffle" ? { stripBase: true as const, name: "player.js" } : { stripBase: true as const, name: `${name}.${ext}` }),
 							overwrite: true,
 						},
 						{
 							src: "node_modules/@ruffle-rs/ruffle/*.wasm",
 							dest: "vendor/flash",
+							rename: { stripBase: true },
 							overwrite: true,
 						},
 						// Code editor, self-hosted (monaco's default loader pulls from
@@ -145,6 +146,7 @@ export default defineConfig({
 						{
 							src: "node_modules/monaco-editor/min/vs/**/*",
 							dest: "vendor/editor/vs",
+							rename: { stripBase: 4 },
 							overwrite: true,
 						},
 					],
