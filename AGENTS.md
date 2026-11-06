@@ -190,6 +190,7 @@ user.
 | `src/server/uncloak-client.js`  | Raw client that opens the app on decoy domains.                                                   |
 | `deploy/terp-deploy-gate.sh`    | Source of `/usr/local/sbin/fracital-deploy-gate` on terp (installs by hand; CI never updates it). |
 | `.github/workflows/deploy.yml`  | Build + deploy to terp on push to `main`.                                                         |
+| `.github/workflows/deploy-dev.yml` | Build + deploy the `dev` branch to dev.fracit.al (pm2 `fracital-dev`, :8090, `/opt/fracital/dev`, shares the prod database; owner-only cookie lock in OpenResty `conf.d/20-fracital-dev.conf`). Reached directly from Cloudflare on terp :8443 (ufw: Cloudflare ranges only), not via the abulxt edge. |
 
 Related checkouts (siblings, separate repos): `~/src/cloaks-fracital` (the
 decoy sites) and `~/src/cloaks-abulxt` (abulxt's decoys — do not serve those

@@ -242,6 +242,16 @@ function init() {
 				created_at timestamptz not null default now(),
 				primary key (user_id, kind, item_id)
 			)`);
+			await pool.query(`create table if not exists fracital_game_saves (
+				user_id text not null references "user"(id) on delete cascade,
+				game_key text not null,
+				title text not null,
+				hash text not null,
+				data text not null,
+				size integer not null,
+				updated_at timestamptz not null default now(),
+				primary key (user_id, game_key)
+			)`);
 			await migrateArtistTables(pool);
 			console.log("Fracital Accounts ready");
 			return { auth, pool };
@@ -473,6 +483,53 @@ else setTimeout(() => location.replace("/"), 1500);
 		if (!kind.success) return c.json({ error: "Invalid request" }, 400);
 		await c.get("pool").query("delete from fracital_saved_items where user_id = $1 and kind = $2 and item_id = $3", [c.get("user").id, kind.data, c.req.param("id")]);
 		return c.json({ ok: true, saved: false });
+	});
+
+	// --- Game save backups (per-game localStorage snapshots, see src/libs/gameSaves.ts) ---
+
+	const gameKey = z.string().regex(/^[a-z0-9-]{1,100}$/);
+	const MAX_GAME_SAVE_BYTES = 4_000_000;
+	const MAX_GAME_SAVES = 500;
+
+	app.get("/api/me/game-saves", async c => {
+		const { rows } = await c.get("pool").query<{ game_key: string; title: string; hash: string; size: number; updated_at: Date }>("select game_key, title, hash, size, updated_at from fracital_game_saves where user_id = $1 order by updated_at desc", [c.get("user").id]);
+		return c.json({ saves: rows.map(r => ({ key: r.game_key, title: r.title, hash: r.hash, size: r.size, updatedAt: r.updated_at })) });
+	});
+
+	app.get("/api/me/game-saves/:key", async c => {
+		const key = gameKey.safeParse(c.req.param("key"));
+		if (!key.success) return c.json({ error: "Invalid request" }, 400);
+		const { rows } = await c.get("pool").query<{ title: string; hash: string; data: string; updated_at: Date }>("select title, hash, data, updated_at from fracital_game_saves where user_id = $1 and game_key = $2", [c.get("user").id, key.data]);
+		if (!rows[0]) return c.json({ error: "No backup for this game" }, 404);
+		return c.json({ key: key.data, title: rows[0].title, hash: rows[0].hash, data: rows[0].data, updatedAt: rows[0].updated_at });
+	});
+
+	app.put("/api/me/game-saves/:key", async c => {
+		const key = gameKey.safeParse(c.req.param("key"));
+		const body = z.object({ title: z.string().min(1).max(300), hash: z.string().min(1).max(64), data: z.string().min(2).max(MAX_GAME_SAVE_BYTES) }).safeParse(await c.req.json().catch(() => null));
+		if (!key.success || !body.success) return c.json({ error: "Invalid request" }, 400);
+		try {
+			const parsed = JSON.parse(body.data.data) as { v?: unknown; ls?: unknown };
+			if (parsed?.v !== 1 || typeof parsed.ls !== "object" || parsed.ls === null) throw new Error();
+		} catch {
+			return c.json({ error: "Invalid save data" }, 400);
+		}
+		const pool = c.get("pool");
+		const userId = c.get("user").id;
+		const { rows: count } = await pool.query<{ n: string }>("select count(*) as n from fracital_game_saves where user_id = $1 and game_key <> $2", [userId, key.data]);
+		if (Number(count[0]?.n) >= MAX_GAME_SAVES) return c.json({ error: "Too many game backups" }, 409);
+		const { rows } = await pool.query<{ updated_at: Date }>(
+			"insert into fracital_game_saves (user_id, game_key, title, hash, data, size, updated_at) values ($1, $2, $3, $4, $5, $6, now()) on conflict (user_id, game_key) do update set title = excluded.title, hash = excluded.hash, data = excluded.data, size = excluded.size, updated_at = now() returning updated_at",
+			[userId, key.data, body.data.title, body.data.hash, body.data.data, body.data.data.length],
+		);
+		return c.json({ ok: true, updatedAt: rows[0].updated_at });
+	});
+
+	app.delete("/api/me/game-saves/:key", async c => {
+		const key = gameKey.safeParse(c.req.param("key"));
+		if (!key.success) return c.json({ error: "Invalid request" }, 400);
+		await c.get("pool").query("delete from fracital_game_saves where user_id = $1 and game_key = $2", [c.get("user").id, key.data]);
+		return c.json({ ok: true });
 	});
 
 	// --- Last.fm library ---
