@@ -1,4 +1,4 @@
-import { dirExists, fileExists, ThemePath, StaticThemePath, MusicPath, GamesPath, SettingsPath } from "../types";
+import { dirExists, fileExists, GamesPath, MusicPath, SettingsPath, StaticThemePath, ThemePath } from "../types";
 import { configureMusicApi } from "./music-service";
 
 export const quickLinks = [
@@ -6,7 +6,7 @@ export const quickLinks = [
 		title: "Github",
 		icon: "https://github.githubassets.com/favicons/favicon.svg",
 		color: "#fff",
-		href: "https://github.com/NovaAppsInc/Fracital",
+		href: "https://github.com/Fracital/Fracital",
 	},
 	{
 		title: "YouTube",

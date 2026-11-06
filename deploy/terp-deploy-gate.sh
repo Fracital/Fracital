@@ -7,7 +7,7 @@ umask 022
 REPO=/opt/fracital/repo
 STAGE=/opt/fracital/stage
 CLOAKS=/opt/cloaks-fracital
-UPSTREAM=https://github.com/NovaAppsInc/Fracital.git
+UPSTREAM=https://github.com/Fracital/Fracital.git
 LOG=/var/log/fracital-deploy.log
 STATE=/var/lib/fracital-deploy
 

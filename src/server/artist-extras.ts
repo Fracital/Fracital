@@ -15,7 +15,7 @@ export interface ArtistExtras {
 	images: string[];
 }
 
-const UA = "Fracital/2.0 (https://github.com/NovaAppsInc/Fracital)";
+const UA = "Fracital/2.0 (https://github.com/Fracital/Fracital)";
 const TTL = 24 * 60 * 60_000;
 const cache = new Map<string, { at: number; value: ArtistExtras }>();
 
