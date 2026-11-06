@@ -92,6 +92,11 @@ export const Tab = ({ title, url, id, icon }: TabProps) => {
         `
 			}
 			onMouseDown={e => {
+				if (e.button === 1) {
+					// Suppress the browser's middle-click autoscroll; the close happens in onAuxClick.
+					e.preventDefault();
+					return;
+				}
 				if (e.target === closeRef.current) return;
 
 				const latestCurrentTab = useTabsStore.getState().tabs.find(tab => tab.current);
@@ -103,6 +108,11 @@ export const Tab = ({ title, url, id, icon }: TabProps) => {
 						input.value = latestCurrentTab.displayUrl || latestCurrentTab.url || "about:newtab";
 					}
 				}
+			}}
+			onAuxClick={e => {
+				if (e.button !== 1) return;
+				e.preventDefault();
+				closeTab(id);
 			}}
 		>
 			<div className="flex w-full min-w-0 justify-between items-center gap-1.5 duration-150">
