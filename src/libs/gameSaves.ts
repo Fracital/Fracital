@@ -267,7 +267,10 @@ export function trackGameSession(game: SaveGame): () => void {
 			if (tracked.has(k)) changed.push(k);
 		}
 		if (!changed.length) return false;
-		addToIndex(key, changed.filter(k => present.has(k)));
+		addToIndex(
+			key,
+			changed.filter(k => present.has(k)),
+		);
 		return true;
 	};
 

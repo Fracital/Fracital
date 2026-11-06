@@ -56,14 +56,7 @@ export const GameCloudSave = ({ game, onRestore }: GameCloudSaveProps) => {
 		);
 	}
 
-	const label =
-		info.status === "syncing"
-			? "Backing up…"
-			: info.status === "error"
-				? info.error || "Backup failed"
-				: info.status === "empty"
-					? "No save yet — it backs up once you save in-game"
-					: "Saved to your account";
+	const label = info.status === "syncing" ? "Backing up…" : info.status === "error" ? info.error || "Backup failed" : info.status === "empty" ? "No save yet — it backs up once you save in-game" : "Saved to your account";
 
 	return (
 		<div className="flex flex-wrap items-center gap-2 text-sm">
