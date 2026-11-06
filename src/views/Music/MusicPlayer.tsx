@@ -47,11 +47,11 @@ const SeekBar = ({ dark }: { dark: boolean }) => {
 	const percent = duration ? (shown / duration) * 100 : 0;
 
 	return (
-		<div className="flex w-full items-center gap-3 select-none">
-			<span className="w-12 text-right text-sm font-medium tabular-nums text-(--text-secondary)">{formatTime(shown)}</span>
+		<div className="flex w-full items-center gap-2 @lg:gap-3 select-none">
+			<span className="w-11 @lg:w-13 shrink-0 text-right text-sm @lg:text-lg font-semibold tabular-nums text-(--text-primary)">{formatTime(shown)}</span>
 			<div
 				ref={barRef}
-				className="group relative flex-1 h-2 rounded-full overflow-hidden bg-(--text-tertiary) cursor-pointer"
+				className={`group relative flex-1 h-2.5 rounded-full cursor-pointer touch-none ${dark ? "bg-[#ffffff4d]" : "bg-[#00000024]"}`}
 				onPointerDown={e => {
 					if (!duration) return;
 					e.currentTarget.setPointerCapture(e.pointerId);
@@ -67,10 +67,10 @@ const SeekBar = ({ dark }: { dark: boolean }) => {
 				}}
 				onPointerCancel={() => setDragTime(null)}
 			>
-				<div style={{ width: `${percent}%` }} className={`h-full rounded-full ${dark ? "bg-white" : "bg-black"}`} />
-				<div style={{ left: `${percent}%` }} className={`absolute top-1/2 size-3.5 -translate-1/2 rounded-full shadow opacity-0 group-hover:opacity-100 duration-150 ${dark ? "bg-white" : "bg-black"} ${dragTime !== null ? "opacity-100" : ""}`} />
+				<div style={{ width: `${percent}%` }} className="h-full rounded-full bg-(--accent)" />
+				<div style={{ left: `${percent}%` }} className={`absolute top-1/2 size-4 -translate-1/2 rounded-full bg-(--accent) shadow-[0_0_0_3px_#ffffff40,0_2px_8px_#00000060] opacity-0 group-hover:opacity-100 duration-150 ${dragTime !== null ? "opacity-100" : ""}`} />
 			</div>
-			<span className="w-12 text-sm font-medium tabular-nums text-(--text-secondary)">{formatTime(duration)}</span>
+			<span className="w-11 @lg:w-13 shrink-0 text-sm @lg:text-lg font-semibold tabular-nums text-(--text-primary)">{formatTime(duration)}</span>
 		</div>
 	);
 };
@@ -139,7 +139,7 @@ const VolumeControl = ({ dark, buttonClassName }: { dark: boolean; buttonClassNa
 				</div>
 			</div>
 			<button title={muted ? "Unmute" : "Mute"} className={buttonClassName} onClick={toggleMute}>
-				{muted || volume === 0 ? <SpeakerXMarkIcon className="size-6" /> : <SpeakerWaveIcon className="size-6" />}
+				{muted || volume === 0 ? <SpeakerXMarkIcon className="size-7" /> : <SpeakerWaveIcon className="size-7" />}
 			</button>
 		</div>
 	);
@@ -241,7 +241,7 @@ const LyricsPanel = ({ track }: { track: Track }) => {
 							ref={el => {
 								lineRefs.current[i] = el;
 							}}
-							className={`text-left text-2xl lg:text-3xl font-bold leading-snug origin-left cursor-pointer duration-300 ${line.breakBefore ? "mt-8" : ""} ${
+							className={`text-left text-xl @lg:text-2xl @4xl:text-3xl font-bold leading-snug origin-left cursor-pointer duration-300 ${line.breakBefore ? "mt-8" : ""} ${
 								i === active ? "text-(--text-primary) scale-100" : i < active ? "text-(--text-tertiary) opacity-70 hover:opacity-100 scale-95" : "text-(--text-secondary) opacity-60 hover:opacity-100 scale-95"
 							}`}
 							onClick={() => {
@@ -309,34 +309,36 @@ const CreditsPanel = ({ track }: { track: Track }) => {
 	const linkable = isLinkable(track);
 
 	return (
-		<div className="flex h-full flex-col gap-5 overflow-y-auto p-6">
-			<h2 className="text-2xl font-bold">Credits</h2>
+		<div className="flex h-full flex-col gap-5 overflow-y-auto px-5 pt-5 pb-14 @lg:px-6 text-base @lg:text-lg font-semibold leading-snug" style={{ maskImage: "linear-gradient(to bottom, black calc(100% - 3rem), transparent)" }}>
+			<h2 className="-mb-4 text-(--text-primary)">Credits</h2>
 			{loading ? (
-				<div className="flex flex-col gap-4">
+				<div className="flex flex-col gap-5">
 					{[0, 1, 2].map(i => (
 						<div key={i} className="flex flex-col gap-2">
-							<div className="h-3 w-24 rounded bg-[#ffffff20] animate-pulse" />
-							<div className="h-4 w-48 rounded bg-[#ffffff26] animate-pulse" />
-							<div className="h-3 w-32 rounded bg-[#ffffff18] animate-pulse" />
+							<div className="h-4 w-28 rounded bg-[#ffffff26] animate-pulse" />
+							<div className="h-4 w-64 max-w-full rounded bg-[#ffffff1c] animate-pulse" />
+							<div className="h-4 w-48 max-w-full rounded bg-[#ffffff14] animate-pulse" />
 						</div>
 					))}
 				</div>
 			) : (
 				<>
 					{sections.map(section => (
-						<section key={section.title} className="flex flex-col gap-2.5">
-							<h3 className="text-xs font-bold uppercase tracking-wider text-(--text-tertiary)">{section.title}</h3>
+						<section key={section.title} className="flex flex-col">
+							<h3 className="text-(--text-primary)">
+								{section.title} <span className="text-(--text-secondary)">({section.credits.length})</span>
+							</h3>
 							{section.credits.map(c => (
-								<div key={c.name} className="flex flex-col leading-tight">
+								<p key={c.name} className="text-(--text-secondary)">
 									{linkable ? (
-										<button className="w-max max-w-full truncate text-left font-semibold hover:underline cursor-pointer" title={`Go to ${c.name}`} onClick={() => (section.title === "Performed by" && trackArtists(track).includes(c.name) ? openTrackArtist(track, c.name) : openArtistByName(c.name))}>
+										<button className="text-left hover:underline hover:text-(--text-primary) cursor-pointer" title={`Go to ${c.name}`} onClick={() => (section.title === "Performed by" && trackArtists(track).includes(c.name) ? openTrackArtist(track, c.name) : openArtistByName(c.name))}>
 											{c.name}
 										</button>
 									) : (
-										<span className="font-semibold">{c.name}</span>
+										<span>{c.name}</span>
 									)}
-									{c.roles.length > 0 && <span className="text-sm text-(--text-secondary)">{c.roles.join(", ")}</span>}
-								</div>
+									{c.roles.length > 0 && <span className="text-(--text-tertiary)"> · {c.roles.join(", ")}</span>}
+								</p>
 							))}
 						</section>
 					))}
@@ -371,7 +373,7 @@ const QueuePanel = () => {
 		<div className="flex h-full flex-col gap-1 overflow-y-auto p-4">
 			<RadioStatus className="mb-2" />
 			<div className="flex items-center justify-between gap-2 px-2 pb-2">
-				<h2 className="text-2xl font-bold">Up next</h2>
+				<h2 className="text-lg font-semibold">Up next</h2>
 				<button className="flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold text-(--text-secondary) hover:text-(--text-primary) bg-[#ffffff18] hover:bg-[#ffffff28] cursor-pointer duration-150" title={`Remove all ${queue.length} songs from the queue`} onClick={clearQueue}>
 					Clear queue
 				</button>
@@ -445,121 +447,156 @@ export const MusicPlayer = ({ query, className, onClose }: MusicPlayerProps) => 
 
 	const showVisualizer = settings["big-player-visualizer"] === true && settings["disable-visualizers"] !== true;
 	const sidePanel = mode !== "cover";
-	const iconButton = "flex items-center justify-center p-2.5 rounded-full text-(--text-secondary) hover:text-(--text-primary) hover:bg-[#ffffff15] cursor-pointer duration-150";
-	const toggledButton = (on: boolean) => `${iconButton} ${on ? "text-(--text-primary) bg-[#ffffff20]" : ""}`;
+	const glass = dark ? "bg-[#ffffff1f] backdrop-blur-xl" : "bg-[#0000000f] backdrop-blur-xl";
+	const iconButton = "flex items-center justify-center p-2 rounded-full text-(--text-primary) opacity-85 hover:opacity-100 hover:bg-[#ffffff15] cursor-pointer duration-150";
+	const transportButton = "flex items-center justify-center text-(--accent) drop-shadow-[0_2px_10px_#00000040] cursor-pointer hover:scale-110 active:scale-95 duration-150";
+	const segment = (on: boolean) =>
+		`flex items-center justify-center size-9 @lg:size-10 rounded-full cursor-pointer duration-150 ${
+			on ? `text-(--text-primary) ${dark ? "bg-[#ffffff2b] shadow-[inset_0_0_0_1px_#ffffff4d,0_2px_8px_#00000030]" : "bg-[#ffffffb0] shadow-[inset_0_0_0_1px_#00000014,0_2px_8px_#00000018]"}` : "text-(--text-secondary) hover:text-(--text-primary)"
+		}`;
+	const linkable = isLinkable(currentTrack);
+	const openLibrary = () => (onClose ? onClose() : void import("../../libs/aboutPages").then(m => m.openLibraryPage("")));
+
+	const trackInfo = (track: Track, align: "center" | "left") => {
+		const album = track.album && !/^unknown/i.test(track.album) ? cleanAlbumTitle(track.album) : null;
+		return (
+			<div className={`flex min-w-0 flex-col ${align === "center" ? "items-center text-center" : "items-start text-left"}`}>
+				<h1 className={`max-w-full text-3xl @lg:text-4xl font-bold leading-tight line-clamp-2 ${linkable ? "cursor-pointer hover:underline" : ""}`} title={linkable ? `Go to ${track.album || "album"}` : track.title} onClick={linkable ? () => openTrackAlbum(track) : undefined}>
+					{track.title}
+				</h1>
+				<h2 className="max-w-full truncate text-lg @lg:text-xl font-semibold leading-snug text-(--text-secondary)">
+					{trackArtists(track).map((name, i, all) => (
+						<span key={`${name}-${i}`}>
+							<span className={linkable ? "cursor-pointer hover:underline hover:text-(--text-primary)" : ""} onClick={linkable ? () => openTrackArtist(track, name) : undefined}>
+								{name}
+							</span>
+							{i < all.length - 1 && ", "}
+						</span>
+					))}
+				</h2>
+				{(album || releaseYear) && (
+					<span className="max-w-full truncate text-base @lg:text-lg font-medium leading-snug text-(--text-tertiary)">
+						{album && (
+							<span className={linkable ? "cursor-pointer hover:underline hover:text-(--text-secondary)" : ""} onClick={linkable ? () => openTrackAlbum(track) : undefined}>
+								{album}
+							</span>
+						)}
+						{album && releaseYear && " · "}
+						{releaseYear}
+					</span>
+				)}
+				<div className="mt-1 flex flex-wrap items-center gap-2">
+					{failed ? <span className="text-sm @lg:text-base font-semibold text-[#ff6b6b]">Couldn't play this song</span> : <PlayCount title={track.title} artist={track.artists} skeleton={false} className="text-sm @lg:text-base font-semibold text-(--text-primary)" />}
+					<button
+						className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-semibold cursor-pointer duration-150 ${mode === "credits" ? (dark ? "bg-white text-black" : "bg-black text-white") : dark ? "bg-[#ffffff33] hover:bg-[#ffffff4d]" : "bg-[#00000014] hover:bg-[#00000024]"}`}
+						title={mode === "credits" ? "Hide credits" : "Show song credits"}
+						onClick={() => changeMode("credits")}
+					>
+						<UserGroupIcon className="size-4" />
+						Credits
+					</button>
+				</div>
+			</div>
+		);
+	};
 
 	return (
-		<div className={`${className ?? ""} overflow-hidden`}>
+		<div className={`${className ?? ""} @container overflow-hidden`}>
 			{currentTrack?.cover && <img src={currentTrack.cover} alt="" aria-hidden className="absolute inset-0 size-full object-cover scale-125 blur-3xl opacity-50 saturate-150 pointer-events-none" />}
 			<div className={`absolute inset-0 pointer-events-none ${dark ? "bg-[#00000060]" : "bg-[#ffffff60]"}`} />
 
 			<div className="relative flex h-full w-full flex-col">
-				<div className="flex items-center justify-end gap-1 p-3">
-					<button title="Queue" className={toggledButton(mode === "queue")} onClick={() => changeMode("queue")}>
-						<QueueListIcon className="size-5" />
+				<div className="flex items-center gap-3 px-3 pt-3 pb-2 @lg:px-6 @lg:pt-4">
+					<button title="Browse music" className="shrink-0 p-1 rounded-xl text-(--accent) drop-shadow-[0_2px_8px_#00000050] cursor-pointer hover:scale-105 active:scale-95 duration-150" onClick={openLibrary}>
+						<MusicalNoteIcon className="size-8 @lg:size-9" />
 					</button>
-					<button title="Lyrics" className={toggledButton(mode === "lyrics")} onClick={() => changeMode("lyrics")}>
-						<ChatBubbleBottomCenterTextIcon className="size-5" />
-					</button>
-					<button title="Cover only" className={toggledButton(mode === "cover")} onClick={() => changeMode("cover")}>
-						<PhotoIcon className="size-5" />
-					</button>
-					<button title={onClose ? "Back to browsing (side panel player)" : "Close player (back to side panel)"} className={iconButton} onClick={closePlayer}>
-						<ArrowsPointingInIcon className="size-5" />
-					</button>
+					<nav className="hidden @3xl:flex min-w-0 items-center gap-1" aria-label="Artist">
+						{["Merch", "Playlists", "Videos", "Tours"].map(label => (
+							<button key={label} aria-disabled title={`${label} — coming soon`} className="shrink-0 px-2 py-1 rounded-lg text-lg @4xl:text-xl font-semibold text-(--text-primary) opacity-85 cursor-default">
+								{label}
+							</button>
+						))}
+					</nav>
+					<div className="ml-auto flex shrink-0 items-center gap-2 @lg:gap-3">
+						<div className={`flex items-center gap-0.5 p-1 rounded-full ${glass}`} role="group" aria-label="Player view">
+							<button title="Queue" aria-pressed={mode === "queue"} className={segment(mode === "queue")} onClick={() => changeMode("queue")}>
+								<QueueListIcon className="size-5" />
+							</button>
+							<button title="Cover only" aria-pressed={mode === "cover"} className={segment(mode === "cover")} onClick={() => changeMode("cover")}>
+								<PhotoIcon className="size-5" />
+							</button>
+							<button title="Lyrics" aria-pressed={mode === "lyrics"} className={segment(mode === "lyrics")} onClick={() => changeMode("lyrics")}>
+								<ChatBubbleBottomCenterTextIcon className="size-5" />
+							</button>
+						</div>
+						<button title={onClose ? "Back to browsing (side panel player)" : "Close player (back to side panel)"} className={`flex items-center justify-center size-9 rounded-full text-(--text-secondary) hover:text-(--text-primary) cursor-pointer duration-150 ${glass}`} onClick={closePlayer}>
+							<ArrowsPointingInIcon className="size-5" />
+						</button>
+					</div>
 				</div>
 
 				{!currentTrack ? (
 					<div className="flex flex-1 flex-col items-center justify-center gap-4 text-(--text-secondary)">
 						<MusicalNoteIcon className="size-16 opacity-60" />
 						<span className="text-2xl font-bold text-(--text-primary)">Nothing playing</span>
-						<button
-							className="flex items-center gap-2 px-4 py-2 rounded-md bg-(--tertiary) text-(--text-primary) hover:bg-(--accent) duration-150"
-							// Lazy: aboutPages registers this component, so a static import would be circular.
-							onClick={() => (onClose ? onClose() : void import("../../libs/aboutPages").then(m => m.openLibraryPage("")))}
-						>
+						<button className="flex items-center gap-2 px-4 py-2 rounded-md bg-(--tertiary) text-(--text-primary) hover:bg-(--accent) duration-150" onClick={openLibrary}>
 							Browse music
 							<MusicalNoteIcon className="size-4" />
 						</button>
 					</div>
 				) : (
-					<div className={`flex flex-1 min-h-0 overflow-y-auto gap-8 px-8 ${onClose ? "pb-5" : "pb-8"} ${sidePanel ? "flex-col md:flex-row" : "flex-col"}`}>
-						<div className={`flex min-h-0 flex-col items-center justify-center gap-6 ${sidePanel ? "md:w-[42%] shrink-0" : "flex-1"}`}>
-							<div className="relative w-full flex justify-center items-center">
-								<Cover
-									track={currentTrack}
-									className={`rounded-2xl shadow-[0_10px_40px_0px_#00000090] duration-300 ${isPlaying ? "scale-100" : "scale-95"} ${sidePanel ? (onClose ? "w-full max-w-[min(100%,40vh)]" : "w-full max-w-[min(100%,48vh)]") : onClose ? "w-[min(60%,44vh)]" : "w-[min(70%,56vh)]"}`}
-								/>
-								{showVisualizer && (
-									<div className="absolute bottom-4 left-1/2 -translate-x-1/2 pointer-events-none drop-shadow-xl">
-										<AudvisVisualizer analyser={analyser} isPlaying={isPlaying} width={220} height={40} color={dark ? "#FFFFFF" : "#000000"} opacity={0.85} />
+					<>
+						{sidePanel ? (
+							<div className="flex flex-1 min-h-0 flex-col @3xl:flex-row gap-4 @3xl:gap-8 overflow-y-auto px-4 @lg:px-8 @3xl:px-12 pt-2 @3xl:pt-4">
+								<div className="flex shrink-0 items-center gap-4 @3xl:min-h-0 @3xl:w-[min(34%,22rem)] @3xl:flex-col @3xl:items-stretch @3xl:gap-5">
+									{/* Sized to the free space (container query units) so the cover stays square and the info below always fits. */}
+									<div className="@container-size relative shrink-0 size-24 @lg:size-28 @3xl:h-auto @3xl:w-full @3xl:flex-1 @3xl:min-h-24 @3xl:max-h-[min(calc(0.34*(100cqw_-_6rem)),22rem)]">
+										<Cover track={currentTrack} className={`size-[min(100cqw,100cqh)] rounded-xl @3xl:rounded-3xl shadow-[0_10px_40px_0px_#00000090] duration-300 ${isPlaying ? "scale-100" : "scale-95"}`} />
+										{showVisualizer && (
+											<div className="hidden @3xl:block absolute top-[calc(min(100cqw,100cqh)-3.5rem)] left-[min(50cqw,50cqh)] -translate-x-1/2 pointer-events-none drop-shadow-xl">
+												<AudvisVisualizer analyser={analyser} isPlaying={isPlaying} width={180} height={36} color={dark ? "#FFFFFF" : "#000000"} opacity={0.85} />
+											</div>
+										)}
 									</div>
-								)}
-							</div>
-
-							<div className={`flex w-full flex-col items-center gap-1 text-center ${sidePanel ? "" : "max-w-2xl"}`}>
-								<h1
-									className={`text-3xl font-bold leading-tight line-clamp-2 ${isLinkable(currentTrack) ? "cursor-pointer hover:underline" : ""}`}
-									title={isLinkable(currentTrack) ? `Go to ${currentTrack.album || "album"}` : currentTrack.title}
-									onClick={isLinkable(currentTrack) ? () => openTrackAlbum(currentTrack) : undefined}
-								>
-									{currentTrack.title}
-								</h1>
-								<h2 className="text-lg font-semibold text-(--text-secondary)">
-									{trackArtists(currentTrack).map((name, i, all) => (
-										<span key={`${name}-${i}`}>
-											<span className={isLinkable(currentTrack) ? "cursor-pointer hover:underline hover:text-(--text-primary)" : ""} onClick={isLinkable(currentTrack) ? () => openTrackArtist(currentTrack, name) : undefined}>
-												{name}
-											</span>
-											{i < all.length - 1 && ", "}
-										</span>
-									))}
-								</h2>
-								{(() => {
-									const album = currentTrack.album && !/^unknown/i.test(currentTrack.album) ? cleanAlbumTitle(currentTrack.album) : null;
-									if (!album && !releaseYear) return null;
-									return (
-										<span className="text-sm text-(--text-tertiary)">
-											{album && (
-												<span className={isLinkable(currentTrack) ? "cursor-pointer hover:underline hover:text-(--text-secondary)" : ""} onClick={isLinkable(currentTrack) ? () => openTrackAlbum(currentTrack) : undefined}>
-													{album}
-												</span>
-											)}
-											{album && releaseYear && " · "}
-											{releaseYear}
-										</span>
-									);
-								})()}
-								<div className="flex items-center gap-2.5 mt-1">
-									{failed ? <span className="text-sm font-semibold text-[#ff6b6b]">Couldn't play this song</span> : <PlayCount title={currentTrack.title} artist={currentTrack.artists} skeleton={false} className="text-sm font-medium text-(--text-tertiary)" />}
-									<button
-										className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold cursor-pointer duration-150 ${mode === "credits" ? (dark ? "bg-white text-black" : "bg-black text-white") : dark ? "bg-[#ffffff1f] hover:bg-[#ffffff33]" : "bg-[#00000012] hover:bg-[#00000022]"}`}
-										title={mode === "credits" ? "Hide credits" : "Show song credits"}
-										onClick={() => changeMode("credits")}
-									>
-										<UserGroupIcon className="size-3.5" />
-										Credits
-									</button>
+									{trackInfo(currentTrack, "left")}
+								</div>
+								<div className={`flex-1 min-h-72 @3xl:min-h-0 rounded-3xl border ${dark ? "border-[#ffffff40] bg-[#ffffff12]" : "border-[#00000020] bg-[#ffffff40]"} backdrop-blur-sm overflow-hidden`}>
+									{mode === "lyrics" ? <LyricsPanel track={currentTrack} /> : mode === "credits" ? <CreditsPanel track={currentTrack} /> : <QueuePanel />}
 								</div>
 							</div>
+						) : (
+							<div className="flex flex-1 min-h-0 flex-col items-center justify-center-safe gap-4 @lg:gap-5 overflow-y-auto px-4 @lg:px-8 pt-4">
+								{/* The cover shrinks with the free height so the info and controls always fit. */}
+								<div className="@container-size relative flex w-full flex-1 min-h-40 max-h-[30rem] items-end justify-center">
+									<Cover track={currentTrack} className={`size-[min(85cqw,100cqh)] rounded-3xl shadow-[0_10px_40px_0px_#00000090] duration-300 ${isPlaying ? "scale-100" : "scale-95"}`} />
+									{showVisualizer && (
+										<div className="absolute bottom-4 left-1/2 -translate-x-1/2 pointer-events-none drop-shadow-xl">
+											<AudvisVisualizer analyser={analyser} isPlaying={isPlaying} width={220} height={40} color={dark ? "#FFFFFF" : "#000000"} opacity={0.85} />
+										</div>
+									)}
+								</div>
+								<div className="w-full max-w-2xl">{trackInfo(currentTrack, "center")}</div>
+							</div>
+						)}
 
-							<div className={`flex w-full flex-col items-center gap-4 ${sidePanel ? "" : "max-w-2xl"}`}>
+						<div className={`flex shrink-0 flex-col gap-2 @lg:gap-3 px-4 @lg:px-8 @3xl:px-12 pt-4 ${onClose ? "pb-4" : "pb-5 @lg:pb-7"}`}>
+							<div className={`mx-auto flex w-full flex-col gap-2 @lg:gap-3 ${sidePanel ? "" : "max-w-4xl"}`}>
 								<SeekBar dark={dark} />
 								<div className="flex w-full items-center">
 									<div className="flex flex-1 basis-0 justify-start">
-										<button title="Repeat" className={toggledButton(loop)} onClick={toggleLoop}>
-											<ArrowPathRoundedSquareIcon className="size-6" />
+										<button title={loop ? "Repeat: on" : "Repeat: off"} aria-pressed={loop} className={`${iconButton} ${loop ? "text-(--accent)! opacity-100 bg-[#ffffff1a]" : ""}`} onClick={toggleLoop}>
+											<ArrowPathRoundedSquareIcon className="size-7" />
 										</button>
 									</div>
-									<div className="flex shrink-0 items-center gap-4">
-										<button title="Previous" className={iconButton} onClick={previous}>
-											<BackwardIcon className="size-8" />
+									<div className="flex shrink-0 items-center gap-5 @lg:gap-7">
+										<button title="Previous" className={transportButton} onClick={previous}>
+											<BackwardIcon className="size-9 @lg:size-10" />
 										</button>
-										<button title={isPlaying ? "Pause" : "Play"} className={`flex items-center justify-center size-16 rounded-full shadow-lg cursor-pointer hover:scale-105 active:scale-95 duration-150 ${dark ? "bg-white text-black" : "bg-black text-white"}`} onClick={() => void togglePlay()}>
-											{isPlaying ? <PauseIcon className="size-8" /> : <PlayIcon className="size-8 translate-x-0.5" />}
+										<button title={isPlaying ? "Pause" : "Play"} className={transportButton} onClick={() => void togglePlay()}>
+											{isPlaying ? <PauseIcon className="size-11 @lg:size-13" /> : <PlayIcon className="size-11 @lg:size-13 translate-x-0.5" />}
 										</button>
-										<button title="Next" className={iconButton} onClick={next}>
-											<ForwardIcon className="size-8" />
+										<button title="Next" className={transportButton} onClick={next}>
+											<ForwardIcon className="size-9 @lg:size-10" />
 										</button>
 									</div>
 									<div className="flex flex-1 basis-0 justify-end">
@@ -568,9 +605,7 @@ export const MusicPlayer = ({ query, className, onClose }: MusicPlayerProps) => 
 								</div>
 							</div>
 						</div>
-
-						{sidePanel && <div className={`flex-1 min-h-0 rounded-3xl ${dark ? "bg-[#00000030]" : "bg-[#ffffff40]"}`}>{mode === "lyrics" ? <LyricsPanel track={currentTrack} /> : mode === "credits" ? <CreditsPanel track={currentTrack} /> : <QueuePanel />}</div>}
-					</div>
+					</>
 				)}
 			</div>
 		</div>
