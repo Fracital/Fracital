@@ -448,19 +448,8 @@ export const MusicLibrary = ({ query }: MusicLibraryProps) => {
 											{
 												title: "Play next",
 												onClick: () => {
-													try {
-														const store: any = useMusicStore;
-														const state = store.getState();
-														const existingQueue = Array.isArray(state.queue) ? state.queue : [];
-														const filteredQueue = existingQueue.filter((t: any) => t.id !== song.id);
-														const newQueue = [song, ...filteredQueue];
-														store.setState({ queue: newQueue });
-														setContextMenu(null);
-													} catch (err) {
-														console.error("Failed to add track to top of queue, falling back to append:", err);
-														addTrack(song);
-														setContextMenu(null);
-													}
+													useMusicStore.getState().queueNext([song]);
+													setContextMenu(null);
 												},
 												icon: null,
 											},

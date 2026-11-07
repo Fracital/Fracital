@@ -578,19 +578,8 @@ export const QuickPlayer = ({ panelsOpen, className, onOpenPanels }: QuickPlayer
 														{
 															title: "Play next",
 															onClick: () => {
-																try {
-																	const store: any = useMusicStore;
-																	const state = store.getState();
-																	const existingQueue = Array.isArray(state.queue) ? state.queue : [];
-																	const filteredQueue = existingQueue.filter((t: any) => t.id !== currentTrack.id);
-																	const newQueue = [currentTrack, ...filteredQueue];
-																	store.setState({ queue: newQueue });
-																	setContextMenu(null);
-																} catch (err) {
-																	console.error("Failed to add track to top of queue, falling back to append:", err);
-																	addTrack(currentTrack);
-																	setContextMenu(null);
-																}
+																useMusicStore.getState().queueNext([currentTrack]);
+																setContextMenu(null);
 															},
 															icon: <BarsArrowUpIcon className="size-5" />,
 														},
@@ -704,19 +693,8 @@ export const QuickPlayer = ({ panelsOpen, className, onOpenPanels }: QuickPlayer
 															{
 																title: "Play next",
 																onClick: () => {
-																	try {
-																		const store: any = useMusicStore;
-																		const state = store.getState();
-																		const existingQueue = Array.isArray(state.queue) ? state.queue : [];
-																		const filteredQueue = existingQueue.filter((t: any) => t.id !== song.id);
-																		const newQueue = [song, ...filteredQueue];
-																		store.setState({ queue: newQueue });
-																		setContextMenu(null);
-																	} catch (err) {
-																		console.error("Failed to add track to top of queue, falling back to append:", err);
-																		addTrack(song);
-																		setContextMenu(null);
-																	}
+																	useMusicStore.getState().queueNext([song]);
+																	setContextMenu(null);
 																},
 																icon: <BarsArrowUpIcon className="size-5" />,
 															},
@@ -1057,19 +1035,8 @@ export const QuickPlayer = ({ panelsOpen, className, onOpenPanels }: QuickPlayer
 													{
 														title: "Play next",
 														onClick: () => {
-															try {
-																const store: any = useMusicStore;
-																const state = store.getState();
-																const existingQueue = Array.isArray(state.queue) ? state.queue : [];
-																const filteredQueue = existingQueue.filter((t: any) => t.id !== currentTrack.id);
-																const newQueue = [currentTrack, ...filteredQueue];
-																store.setState({ queue: newQueue });
-																setContextMenu(null);
-															} catch (err) {
-																console.error("Failed to add track to top of queue, falling back to append:", err);
-																addTrack(currentTrack);
-																setContextMenu(null);
-															}
+															useMusicStore.getState().queueNext([currentTrack]);
+															setContextMenu(null);
 														},
 														icon: null,
 													},

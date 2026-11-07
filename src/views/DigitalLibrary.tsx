@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { ChevronLeftIcon, ChevronRightIcon, XMarkIcon } from "@heroicons/react/24/solid";
 import { useMusicStore, useSettingsStore, useTabsStore } from "../store";
 import { getPageFromUrl, updatePageTab } from "../libs/aboutPages";
-import { MagnifyingGlassIcon, PlayIcon, PlusIcon, MusicalNoteIcon, ChartBarIcon, RadioIcon, AdjustmentsHorizontalIcon, EllipsisHorizontalIcon, UserIcon } from "@heroicons/react/24/solid";
+import { BarsArrowUpIcon, MagnifyingGlassIcon, PlayIcon, PlusIcon, QueueListIcon, MusicalNoteIcon, ChartBarIcon, RadioIcon, AdjustmentsHorizontalIcon, EllipsisHorizontalIcon, UserIcon } from "@heroicons/react/24/solid";
 import { FireIcon } from "@heroicons/react/24/outline";
 import { createId } from "@paralleldrive/cuid2";
 import {
@@ -250,7 +250,8 @@ export const DigitalLibrary = ({ query, urlPage = "library", urlPrefix, nav, ove
 	const brightness = settings.brightness as string;
 	const playTrack = useMusicStore(state => state.playTrack);
 	const playList = useMusicStore(state => state.playList);
-	const addTrack = useMusicStore(state => state.addTrack);
+	const addTracks = useMusicStore(state => state.addTracks);
+	const queueNext = useMusicStore(state => state.queueNext);
 	const configured = !!getMusicApiConfig()?.baseUrl;
 
 	const [page, setPage] = useState<Page>("home");
@@ -554,10 +555,10 @@ export const DigitalLibrary = ({ query, urlPage = "library", urlPrefix, nav, ove
 		if (next) warmStream(next);
 	};
 
-	const handleQueue = (track: MusicTrack) => {
-		const t = trackToFracital(track);
-		addTrack({ ...t, id: createId() });
-	};
+	/** Adds songs to the queue, after anything the user already queued. */
+	const handleQueue = (tracks: MusicTrack | MusicTrack[]) => addTracks((Array.isArray(tracks) ? tracks : [tracks]).map(trackToFracital));
+	/** Queues songs to play right after the current one. */
+	const handlePlayNext = (tracks: MusicTrack | MusicTrack[]) => queueNext((Array.isArray(tracks) ? tracks : [tracks]).map(trackToFracital));
 
 	/** Plays a whole list from the top, replacing the queue. */
 	const handlePlayAll = (trackList: MusicTrack[]) => {
@@ -647,13 +648,23 @@ export const DigitalLibrary = ({ query, urlPage = "library", urlPrefix, nav, ove
 			</button>
 			<button
 				className="opacity-0 group-hover:opacity-100 p-1 rounded-full hover:bg-[#ffffff20] duration-150"
+				title="Play next"
+				onClick={e => {
+					e.stopPropagation();
+					handlePlayNext(track);
+				}}
+			>
+				<BarsArrowUpIcon className="size-4 text-(--text-secondary)" />
+			</button>
+			<button
+				className="opacity-0 group-hover:opacity-100 p-1 rounded-full hover:bg-[#ffffff20] duration-150"
 				title="Add to queue"
 				onClick={e => {
 					e.stopPropagation();
 					handleQueue(track);
 				}}
 			>
-				<PlusIcon className="size-4 text-(--text-secondary)" />
+				<QueueListIcon className="size-4 text-(--text-secondary)" />
 			</button>
 		</div>
 	);
@@ -701,7 +712,8 @@ export const DigitalLibrary = ({ query, urlPage = "library", urlPrefix, nav, ove
 		const isLoved = lovedSongs[songKey(track.title, track.artist)];
 		const items: MenuItem[] = [
 			{ title: "Play", onClick: () => handlePlay(track), icon: <PlayIcon className="size-5" /> },
-			{ title: "Add to queue", onClick: () => handleQueue(track), icon: <PlusIcon className="size-5" /> },
+			{ title: "Play next", onClick: () => handlePlayNext(track), icon: <BarsArrowUpIcon className="size-5" /> },
+			{ title: "Add to queue", onClick: () => handleQueue(track), icon: <QueueListIcon className="size-5" /> },
 			isTrackSaved(track.id) ? { title: "Remove from Library", onClick: () => toggleTrack(track), icon: <CheckCircleIcon className="size-5" /> } : { title: "Add to Library", onClick: () => toggleTrack(track), icon: <PlusCircleIcon className="size-5" /> },
 			...(lastfmUser ? [{ title: isLoved ? "Remove from Liked Songs" : "Add to Liked Songs", onClick: () => void toggleLove(track.title, track.artist), icon: isLoved ? <HeartIcon className="size-5 text-[#ff3b5c]" /> : <HeartOutlineIcon className="size-5" /> }] : []),
 			{ title: "Start radio", onClick: () => startRadio(track.artist, track.title), icon: <RadioIcon className="size-5" /> },
@@ -979,6 +991,12 @@ export const DigitalLibrary = ({ query, urlPage = "library", urlPrefix, nav, ove
 						<div className="flex items-center gap-2">
 							<button className={`${button} ${dark ? "bg-white text-black hover:bg-[#ffffffdd]" : "bg-black text-white hover:bg-[#000000dd]"}`} onClick={() => handlePlayAll(albumTracks)}>
 								<PlayIcon className="size-4" /> Play
+							</button>
+							<button className={`${button} ${softButton}`} onClick={() => handlePlayNext(albumTracks)} title={`Play this ${kind.toLowerCase()} after the current song`}>
+								<BarsArrowUpIcon className="size-4" /> Play next
+							</button>
+							<button className={`${button} ${softButton}`} onClick={() => handleQueue(albumTracks)} title={`Add this ${kind.toLowerCase()} to the queue`}>
+								<QueueListIcon className="size-4" /> Add to queue
 							</button>
 							<button className={`${button} ${albumSaved ? "bg-[#3d91ff] text-white hover:brightness-110" : softButton}`} onClick={() => toggleAlbum(album)} title={albumSaved ? "Remove from Your Library" : `Add this ${kind.toLowerCase()} to Your Library`}>
 								{albumSaved ? <CheckIcon className="size-4" /> : <PlusIcon className="size-4" />}

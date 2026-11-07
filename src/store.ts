@@ -223,6 +223,10 @@ export const useMusicStore = create<{
 	playedHistory: Track[];
 
 	addTrack: (track: Track) => void;
+	/** Queues songs after the ones the user queued (ahead of autoplay radio). Starts them if nothing is playing. */
+	addTracks: (tracks: Track[]) => void;
+	/** Queues songs to play right after the current one. Starts them if nothing is playing. */
+	queueNext: (tracks: Track[]) => void;
 	removeTrack: (id: string) => void;
 	clearQueue: () => void;
 	setCurrentTrack: (track: Track | null) => void;
@@ -243,16 +247,23 @@ export const useMusicStore = create<{
 	playerView: "bigplayer",
 	playedHistory: [],
 
-	addTrack: track => {
-		set(state => ({
-			queue: [
-				...state.queue,
-				{
-					...track,
-					id: typeof track.id === "string" && track.id.length > 0 ? createId() : createId(),
-				},
-			],
-		}));
+	addTrack: track => get().addTracks([track]),
+	addTracks: tracks => {
+		// Fresh ids: the same song can sit in the queue more than once.
+		const fresh = tracks.map(t => ({ ...t, id: createId(), radio: undefined }));
+		if (!fresh.length) return;
+		const { currentTrack, queue } = get();
+		if (!currentTrack) return get().playList(fresh, 0);
+		// After what the user queued themselves, ahead of autoplay radio's picks.
+		const firstRadio = queue.findIndex(t => t.radio);
+		const at = firstRadio === -1 ? queue.length : firstRadio;
+		set({ queue: [...queue.slice(0, at), ...fresh, ...queue.slice(at)] });
+	},
+	queueNext: tracks => {
+		const fresh = tracks.map(t => ({ ...t, id: createId(), radio: undefined }));
+		if (!fresh.length) return;
+		if (!get().currentTrack) return get().playList(fresh, 0);
+		set(state => ({ queue: [...fresh, ...state.queue] }));
 	},
 	removeTrack: id => {
 		set(state => ({
