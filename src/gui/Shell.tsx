@@ -35,9 +35,11 @@ import type { linkProps } from "../views/Home";
 import { useModal } from "../components/Modal/ModalContext";
 import FavoriteModal from "../components/Modal/Favorite";
 import { Modal } from "../components/Modal/Modal";
-import { changeProxy, getLogin, getProxy } from "../types";
+import { changeProxy, EXPERIMENTAL_PROXIES_SETTING, getLogin, getProxy, isProxyEngine, type ProxyEngine } from "../types";
+import { STOMP_VERSION, useStompStore } from "../libs/stompEngine";
 import { getMe, signOut } from "../libs/auth";
 import { runtimeGlobal } from "../libs/proxyGlobals";
+import { HolyText } from "../components/common/HolyText";
 import { ShieldCheckIcon } from "@heroicons/react/24/solid";
 import { ContextMenu, type MenuItem } from "../components/ContextMenu";
 
@@ -280,18 +282,24 @@ const Shell = () => {
 
 	const settings = useSettingsStore(state => state.settings);
 
-	const [proxy, setProxy] = useState<"uv" | "sj">("sj");
+	const [proxy, setProxy] = useState<ProxyEngine>("sj");
 	const proxyUserChangedRef = useRef(false);
 
 	const navButtonsRef = useRef<HTMLDivElement>(null);
-	const uvRef = useRef<HTMLDivElement>(null);
-	const sjRef = useRef<HTMLDivElement>(null);
 
 	const [isFullscreen, setIsFullscreen] = useState<boolean>(Boolean(document.fullscreenElement));
 
 	const [uvVersion] = useState("v3.2.10");
 	const runtime = runtimeGlobal();
 	const sjVersion = runtime?.versionInfo?.version ? `v${runtime.versionInfo.version}` : "";
+	// The engines on offer: stomp only behind the experimental proxies setting.
+	const experimentalProxies = settings[EXPERIMENTAL_PROXIES_SETTING] === true;
+	const engines: ProxyEngine[] = experimentalProxies ? ["sj", "uv", "st"] : ["sj", "uv"];
+	const shownProxy: ProxyEngine = engines.includes(proxy) ? proxy : "sj";
+	const stompStatus = useStompStore(state => state.status);
+	const stompStale = useStompStore(state => state.stale);
+	// What the stomp row says next to its version: starting, failed, or ready on an older service worker.
+	const stompState = stompStatus === "booting" ? "starting" : stompStatus === "failed" ? "failed" : stompStale ? "older worker" : null;
 
 	const { openModal } = useModal();
 	const [isFavorited, setIsFavorited] = useState<boolean>(false);
@@ -341,7 +349,7 @@ const Shell = () => {
 	const handleProxyChange = async (e: Event) => {
 		const customEvent = e as CustomEvent;
 		const newProxy = customEvent.detail.proxy;
-		if (newProxy === "sj" || newProxy === "uv") {
+		if (isProxyEngine(newProxy)) {
 			proxyUserChangedRef.current = true;
 			setProxy(newProxy);
 			await changeProxy(newProxy);
@@ -547,7 +555,7 @@ const Shell = () => {
 						window.dispatchEvent(
 							new CustomEvent("proxy-change", {
 								detail: {
-									proxy: proxy === "uv" ? "sj" : "uv",
+									proxy: engines[(engines.indexOf(shownProxy) + 1) % engines.length],
 								},
 							}),
 						);
@@ -559,27 +567,41 @@ const Shell = () => {
 								"flex flex-col items-start gap-2 h-4.5 duration-150" +
 								" " +
 								`
-                            ${proxy === "uv" ? "" : "-translate-y-6.5 pointer-events-none"}
+                            ${shownProxy === "uv" ? "" : "-translate-y-6.5 pointer-events-none"}
                         `
 							}
 						>
-							<div ref={uvRef} className={"flex items-center justify-center gap-2 duration-150"}>
+							<div className={"flex items-center justify-center gap-2 duration-150"}>
 								<span className="text-(--text-secondary) group-hover:text-(--text-primary) font-bold text-lg duration-150">UV</span>
 								<span className="text-(--text-tertiary) group-hover:text-(--text-primary) font-semibold duration-150">{uvVersion}</span>
 							</div>
 							<div
-								ref={sjRef}
 								className={
 									"flex items-center justify-center gap-2 duration-150" +
 									" " +
 									`
-                                ${proxy === "sj" ? "" : "absolute opacity-0 pointer-events-none"}
+                                ${shownProxy === "sj" ? "" : "absolute opacity-0 pointer-events-none"}
                             `
 								}
 							>
 								<span className="text-(--text-secondary) group-hover:text-(--text-primary) font-bold text-lg duration-150">Scramjet</span>
 								<span className="text-(--text-tertiary) group-hover:text-(--text-primary) font-semibold duration-150">{sjVersion}</span>
 							</div>
+							{experimentalProxies && (
+								<div
+									className={
+										"flex items-center justify-center gap-2 duration-150" +
+										" " +
+										`
+                                ${shownProxy === "st" ? "" : "absolute opacity-0 pointer-events-none"}
+                            `
+									}
+								>
+									<HolyText as="span" className="text-(--text-secondary) group-hover:text-(--text-primary) font-bold text-lg duration-150" text="Stomp" />
+									<span className="text-(--text-tertiary) group-hover:text-(--text-primary) font-semibold duration-150">{STOMP_VERSION}</span>
+									{stompState && <HolyText as="span" className="text-(--text-tertiary) group-hover:text-(--text-primary) font-medium text-sm duration-150" text={stompState} />}
+								</div>
+							)}
 						</div>
 					</div>
 					<ChevronUpDownIcon className="size-5 text-(--text-tertiary) group-hover:text-(--text-secondary) stroke-current stroke-1 cursor-pointer duration-150" />
