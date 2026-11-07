@@ -144,7 +144,10 @@ in any user-facing copy.
 - The vendored proxy runtimes ship only as renamed files under `dist/vendor/`:
   Scramjet's five files, and the stomp engine's files under `dist/vendor/rt/`
   (see vite.config.ts; `src/libs/stompEngine.ts` tells stomp those names
-  through its `assets` option). Never reintroduce a `/scramjet/`, `/stomp/`,
+  through its `assets` option). Both engine names are in the proxy
+  transform's rename list and the canary list; stomp's error page
+  (`src/stomp/error.html`) reads a global minted per build, never the
+  engine's default name. Never reintroduce a `/scramjet/`, `/stomp/`,
   `/controller/`, or similar fingerprint path, and never ship `.map`/`.d.ts`
   artifacts (`scripts/prune-dist.mjs` removes them; if it removed something,
   find out what shipped them).

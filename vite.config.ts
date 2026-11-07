@@ -6,7 +6,6 @@ import tailwindcss from "@tailwindcss/vite";
 import { scramjetPath } from "@mercuryworkshop/scramjet/path";
 import { stompPath } from "stomp-rewrite/path";
 import { randomBytes } from "node:crypto";
-import { readFileSync } from "node:fs";
 import { server as wisp } from "@mercuryworkshop/wisp-js/server";
 import { isWebOS } from "./src/types";
 import { cloakRouting } from "./src/server/cloak-routing";
@@ -30,9 +29,10 @@ const STOMP_FILES: [string, string][] = [
 // file that is not there.
 const stripSourceMap = (content: string | Buffer) => content.toString().replace(/\n\/\/# sourceMappingURL=\S+\s*$/, "\n");
 
-// The four helper globals stomp's rewriter and inject bundles rendezvous on,
-// minted once per build (and per dev server start) so a deployment never
-// carries the package defaults. Each is an identifier no plain window has.
+// The five helper globals stomp's rewriter, inject bundles and error page
+// rendezvous on, minted once per build (and per dev server start) so a
+// deployment never carries the package defaults. Each is an identifier no
+// plain window has.
 const mintHelperName = () => {
 	const letters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
 	const bytes = randomBytes(6);
@@ -40,18 +40,16 @@ const mintHelperName = () => {
 };
 const mintHelperNames = () => {
 	const names = new Set<string>();
-	while (names.size < 4) names.add(mintHelperName());
-	const [access, client, globalProxy, globalName] = names;
-	return { access, client, globalProxy, globalName };
+	while (names.size < 5) names.add(mintHelperName());
+	const [access, client, globalProxy, globalName, error] = names;
+	return { access, client, globalProxy, globalName, error };
 };
+const stompNames = mintHelperNames();
 
 // https://vite.dev/config/
 export default defineConfig({
 	define: {
-		__STOMP_NAMES__: JSON.stringify(mintHelperNames()),
-		// The engine's package version, for the selector label (the controller
-		// does not expose its build; see src/libs/stompEngine.ts).
-		__STOMP_VERSION__: JSON.stringify(JSON.parse(readFileSync("node_modules/stomp-rewrite/package.json", "utf8")).version),
+		__STOMP_NAMES__: JSON.stringify(stompNames),
 	},
 	optimizeDeps: {
 		include: ["music-metadata"],
@@ -166,6 +164,19 @@ export default defineConfig({
 							overwrite: true,
 							transform: stripSourceMap,
 						})),
+						// The engine's error page, given the name of the global the service
+						// worker sets on it (names.error); see src/stomp/error.html.
+						{
+							src: "src/stomp/error.html",
+							dest: STOMP_DIR,
+							rename: { stripBase: true, name: "err.html" },
+							overwrite: true,
+							transform: (content: string | Buffer) => {
+								const text = content.toString();
+								if (!text.includes("__STOMP_ERROR_NAME__")) throw new Error("error page placeholder missing (src/stomp/error.html changed shape)");
+								return text.split("__STOMP_ERROR_NAME__").join(stompNames.error);
+							},
+						},
 						// The transport module stomp's transport worker imports: epoxy over
 						// the relay, the Fracital build (wasm inlined, one file).
 						{

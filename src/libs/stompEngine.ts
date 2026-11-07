@@ -17,9 +17,8 @@ import type { Assets, Frame, HelperNames, NavigateInfo, StaleInfo, StompControll
 import { useTabsStore } from "../store";
 import { wispURL } from "../types";
 
-// Minted per build in vite.config.ts (define).
+// Minted per build in vite.config.ts (define); `error` is also written into err.html there.
 declare const __STOMP_NAMES__: HelperNames;
-declare const __STOMP_VERSION__: string;
 
 declare global {
 	interface Window {
@@ -40,12 +39,10 @@ const STOMP_ASSETS: Assets = {
 const CONTROLLER_MODULE = `${STOMP_DIRECTORY}api.mjs`;
 /** The epoxy transport module (Fracital build), imported by stomp's transport worker, never by a page. */
 const TRANSPORT_MODULE = `${STOMP_DIRECTORY}link.mjs`;
-/** Shown by the service worker for a document it failed to produce (public/vendor/rt/err.html). */
+/** Shown by the service worker for a document it failed to produce (src/stomp/error.html, copied by vite). */
 const ERROR_PAGE = `${STOMP_DIRECTORY}err.html`;
 /** The controller id for this browser tab; one per tab, kept across reloads. */
 const ID_KEY = "fracital:st-controller";
-
-export const STOMP_VERSION = `v${__STOMP_VERSION__}`;
 
 type StompModule = typeof import("stomp-rewrite");
 
@@ -54,6 +51,8 @@ export type StompStatus = "idle" | "booting" | "ready" | "failed";
 interface StompState {
 	status: StompStatus;
 	controller: StompController | null;
+	/** the controller bundle's build (version plus commit), once booted */
+	build: string | null;
 	/** set while an older service worker is still in charge after a deploy */
 	stale: StaleInfo | null;
 	error: string | null;
@@ -62,6 +61,7 @@ interface StompState {
 export const useStompStore = create<StompState>()(() => ({
 	status: "idle",
 	controller: null,
+	build: null,
 	stale: null,
 	error: null,
 }));
@@ -106,7 +106,10 @@ export const bootStomp = (): Promise<StompController> => {
 		try {
 			if (!("serviceWorker" in navigator)) throw new Error("Service workers are not supported in this browser");
 			if (!wispURL) throw new Error("No relay URL");
-			const { StompController } = (await import(/* @vite-ignore */ CONTROLLER_MODULE)) as StompModule;
+			// The default export is the controller class. The named export carries
+			// the engine's name, which the build's proxy transform renames in
+			// vendor files (scripts/obfuscate-build.mjs); the default has no name.
+			const { default: StompController } = (await import(/* @vite-ignore */ CONTROLLER_MODULE)) as StompModule;
 			// Scope: the directory; resolves once the worker is activated (30 s cap).
 			const registration = await StompController.register(STOMP_DIRECTORY, { assets: STOMP_ASSETS });
 			const controller = new StompController({
@@ -130,7 +133,7 @@ export const bootStomp = (): Promise<StompController> => {
 			const syncStale = () => useStompStore.setState({ stale: controller.stale });
 			controller.addEventListener("stale", syncStale);
 			controller.addEventListener("rebind", syncStale);
-			useStompStore.setState({ status: "ready", controller, stale: controller.stale });
+			useStompStore.setState({ status: "ready", controller, build: controller.build, stale: controller.stale });
 			window.stompController = controller;
 			return controller;
 		} catch (error) {

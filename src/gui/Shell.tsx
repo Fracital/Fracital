@@ -36,7 +36,7 @@ import { useModal } from "../components/Modal/ModalContext";
 import FavoriteModal from "../components/Modal/Favorite";
 import { Modal } from "../components/Modal/Modal";
 import { changeProxy, EXPERIMENTAL_PROXIES_SETTING, getLogin, getProxy, isProxyEngine, type ProxyEngine } from "../types";
-import { STOMP_VERSION, useStompStore } from "../libs/stompEngine";
+import { useStompStore } from "../libs/stompEngine";
 import { getMe, signOut } from "../libs/auth";
 import { runtimeGlobal } from "../libs/proxyGlobals";
 import { HolyText } from "../components/common/HolyText";
@@ -298,6 +298,8 @@ const Shell = () => {
 	const shownProxy: ProxyEngine = engines.includes(proxy) ? proxy : "sj";
 	const stompStatus = useStompStore(state => state.status);
 	const stompStale = useStompStore(state => state.stale);
+	// The controller's build string (version plus commit), known once it booted.
+	const stompBuild = useStompStore(state => state.build) ?? "";
 	// What the stomp row says next to its version: starting, failed, or ready on an older service worker.
 	const stompState = stompStatus === "booting" ? "starting" : stompStatus === "failed" ? "failed" : stompStale ? "older worker" : null;
 
@@ -598,7 +600,7 @@ const Shell = () => {
 									}
 								>
 									<HolyText as="span" className="text-(--text-secondary) group-hover:text-(--text-primary) font-bold text-lg duration-150" text="Stomp" />
-									<span className="text-(--text-tertiary) group-hover:text-(--text-primary) font-semibold duration-150">{STOMP_VERSION}</span>
+									<span className="text-(--text-tertiary) group-hover:text-(--text-primary) font-semibold duration-150">{stompBuild}</span>
 									{stompState && <HolyText as="span" className="text-(--text-tertiary) group-hover:text-(--text-primary) font-medium text-sm duration-150" text={stompState} />}
 								</div>
 							)}

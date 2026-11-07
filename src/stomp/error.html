@@ -59,10 +59,14 @@
 			The proxy engine's error page (its errorPage option). The engine's
 			service worker serves this under the frame's URL for a document it
 			failed to produce, with the failure in a script in the head
-			(globalThis.stompError = { url, status, error, kind }); reloading
-			retries the real page. Standalone like uncloak-client.js: no app code,
-			no framework. The strings are plain because this document is not part
-			of the app bundle and names nothing about the host.
+			(globalThis.<names.error> = { url, status, error, kind }); reloading
+			retries the real page. The global's name is minted per build with the
+			engine's other helper names (vite.config.ts) and written into this file
+			when it is copied to dist/vendor/rt/err.html, so the contract never
+			carries the engine's name and the obfuscator has no literal to touch.
+			Standalone like uncloak-client.js: no app code, no framework. The
+			strings are plain because this document is not part of the app bundle
+			and names nothing about the host.
 		-->
 		<main>
 			<h1 id="title">Page unavailable</h1>
@@ -71,7 +75,7 @@
 			<button id="retry" type="button">Retry</button>
 		</main>
 		<script>
-			const info = globalThis.stompError || {};
+			const info = globalThis.__STOMP_ERROR_NAME__ || {};
 			const titles = {
 				transport: "Could not reach the site",
 				timeout: "The site took too long",

@@ -4,7 +4,9 @@
  * the app, turns on the experimental proxies setting, selects stomp, and
  * drives real tabs through the shell: a page's title and URL, the address bar
  * following the page, window.open becoming a tab, the error page for an
- * unreachable site, and the controller id surviving a reload.
+ * unreachable site (whose error global carries the per-build name, not the
+ * engine's), the tab favicon from the page's navigate report, the build string
+ * in the engine selector, and the controller id surviving a reload.
  *
  *   node scripts/stomp-check.mjs http://localhost:5173/
  */
@@ -96,7 +98,7 @@ const frameInfo = async () => {
 		if (!controller) return null;
 		const frames = controller.frames;
 		const frame = frames[frames.length - 1];
-		return frame ? { url: frame.url, title: frame.title, count: frames.length, id: controller.id } : { count: 0, id: controller.id };
+		return frame ? { url: frame.url, title: frame.title, icon: frame.lastNavigate?.icon ?? null, count: frames.length, id: controller.id } : { count: 0, id: controller.id };
 	});
 };
 
@@ -134,6 +136,24 @@ check("wikipedia: address bar", /^https:\/\/en\.wikipedia\.org\/wiki\//.test(add
 await sleep(1500);
 const wikiHeading = await (await engineFrame())?.evaluate(() => document.querySelector("h1")?.textContent?.trim());
 check("wikipedia: heading rendered", !!wikiHeading, wikiHeading);
+// The icon comes from the page's own navigate report (NavigateInfo.icon), not from reading the frame's DOM.
+check("wikipedia: icon reported by the page", /^https:\/\/en\.wikipedia\.org\/.*favicon/.test(info.icon || ""), info.icon);
+const tabIcon = await waitFor(
+	() =>
+		page.evaluate(() => {
+			const tabs = [...document.querySelectorAll("[data-url][id]")];
+			const img = tabs.map(t => t.querySelector("img")).find(Boolean);
+			return img?.getAttribute("src") || null;
+		}),
+	"the tab favicon image",
+	20000,
+).catch(() => null);
+check("wikipedia: tab shows the favicon", !!tabIcon, tabIcon ? tabIcon.slice(0, 60) : "no img in the tab");
+
+// --- the engine selector shows the controller's build ---
+const build = await page.evaluate(() => window.stompController?.build);
+const rowShowsBuild = await page.evaluate(b => [...document.querySelectorAll("span")].some(s => s.textContent === b), build);
+check("selector shows the controller build", typeof build === "string" && build.length > 0 && rowShowsBuild, build);
 
 // --- window.open from the page becomes a tab ---
 const tabsBefore = await page.evaluate(() => document.querySelectorAll("[data-url][id]").length);
@@ -163,11 +183,19 @@ check("new tab is current: address bar shows it", address === "https://example.o
 
 // --- error page for an unreachable site ---
 await go("https://nonexistent.invalid/");
+// The global the service worker sets on the error page is the per-build name (names.error), never the engine's default.
+const errorName = await page.evaluate(() => window.stompController?.config?.names?.error ?? null);
 const errorInfo = await waitFor(
 	async () => {
 		for (const f of page.frames()) {
 			if (!f.url().includes(ENGINE_DIR)) continue;
-			const e = await f.evaluate(() => (globalThis.stompError ? { ...globalThis.stompError, heading: document.getElementById("title")?.textContent, hasRetry: !!document.getElementById("retry") } : null)).catch(() => null);
+			const e = await f
+				.evaluate(name => {
+					const info = name ? globalThis[name] : null;
+					if (!info) return null;
+					return { ...info, heading: document.getElementById("title")?.textContent, shownUrl: document.getElementById("url")?.textContent, hasRetry: !!document.getElementById("retry"), defaultGlobal: "stompError" in globalThis };
+				}, errorName)
+				.catch(() => null);
 			if (e) return e;
 		}
 		return null;
@@ -177,6 +205,8 @@ const errorInfo = await waitFor(
 ).catch(() => null);
 check("error page shows for nonexistent.invalid", !!errorInfo, JSON.stringify(errorInfo));
 check("error page has Retry", !!errorInfo?.hasRetry);
+check("error global carries the per-build name", !!errorName && errorName !== "stompError" && errorInfo?.defaultGlobal === false, `${errorName}`);
+check("error page rendered the failure", errorInfo?.shownUrl === "https://nonexistent.invalid/" && !!errorInfo?.heading, `${errorInfo?.heading}: ${errorInfo?.shownUrl}`);
 address = await addressBar().inputValue();
 check("error page: address bar keeps the real url", address === "https://nonexistent.invalid/", address);
 
