@@ -11,7 +11,7 @@ export const quickLinks = [
 	{
 		title: "YouTube",
 		icon: "/youtube.svg",
-		color: "#ffffff",
+		color: "#ff4242",
 		href: "https://www.youtube.com",
 	},
 	{
@@ -23,14 +23,20 @@ export const quickLinks = [
 	{
 		title: "Krunker",
 		icon: "/krunker.png",
-		color: "#ffffff",
+		color: "#ffd95c",
 		href: "https://krunk.io",
 	},
 	{
 		title: "Estro AI Chat",
 		icon: "/estro.svg",
-		color: "#ffffff",
+		color: "#9a5ae7",
 		href: "https://estro.help/",
+	},
+	{
+		title: "Fracital Music",
+		icon: "/fm.svg",
+		color: "#e25bec",
+		href: "about:music",
 	},
 ];
 
