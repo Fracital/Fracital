@@ -13,7 +13,7 @@
  */
 import { create } from "zustand";
 import { createId } from "@paralleldrive/cuid2";
-import type { Assets, Frame, HelperNames, NavigateInfo, StaleInfo, StompController } from "stomp-rewrite";
+import type { Assets, Frame, HelperNames, NavigateInfo, RequestEvent, RequestRule, StaleInfo, StompController } from "stomp-rewrite";
 import { useTabsStore } from "../store";
 import { wispURL } from "../types";
 
@@ -24,6 +24,8 @@ declare global {
 	interface Window {
 		/** the booted engine, for the console and scripts/stomp-check.mjs (like scramjetController) */
 		stompController?: StompController;
+		/** the last requests the engine reported (newest last), for the console and the checks */
+		stompRequestLog?: RequestEvent[];
 	}
 }
 
@@ -48,8 +50,33 @@ type StompModule = typeof import("stomp-rewrite");
 
 export type StompStatus = "idle" | "booting" | "ready" | "failed";
 
+/** The origin presented to the Last.fm hosts below as the first party. */
+const FIRST_PARTY_ORIGIN = "https://fracital.xyz";
+const firstParty = { Origin: FIRST_PARTY_ORIGIN, Referer: `${FIRST_PARTY_ORIGIN}/` };
+/**
+ * Request rules applied in the service worker to the real URL, first match
+ * wins; `onRequest` reports the index applied as `rule`. Narrow on purpose:
+ * Last.fm's auth page (/api/auth and its continuation) and the API host get
+ * Fracital's first-party Origin and Referer, as a popup from fracital.xyz
+ * would send; the login form (POST /login) and every other Last.fm page keep
+ * the Origin the page itself implies, which their CSRF checks expect.
+ */
+export const STOMP_RULES: RequestRule[] = [
+	{ match: { url: "https://www.last.fm/api/auth*" }, action: { requestHeaders: firstParty } },
+	{ match: { url: "https://ws.audioscrobbler.com/*" }, action: { requestHeaders: firstParty } },
+];
+
+const REQUEST_LOG_SIZE = 200;
+const requestLog: RequestEvent[] = [];
+const logRequest = (info: RequestEvent) => {
+	requestLog.push(info);
+	if (requestLog.length > REQUEST_LOG_SIZE) requestLog.splice(0, requestLog.length - REQUEST_LOG_SIZE);
+};
+
 interface StompState {
 	status: StompStatus;
+	/** stomp is the engine the tabs run on (selected and allowed by the experimental setting) */
+	active: boolean;
 	controller: StompController | null;
 	/** the controller bundle's build (version plus commit), once booted */
 	build: string | null;
@@ -60,6 +87,7 @@ interface StompState {
 
 export const useStompStore = create<StompState>()(() => ({
 	status: "idle",
+	active: false,
 	controller: null,
 	build: null,
 	stale: null,
@@ -125,9 +153,11 @@ export const bootStomp = (): Promise<StompController> => {
 				cache: true,
 				errorPage: ERROR_PAGE,
 				names: __STOMP_NAMES__,
-				// `rules` (request header policy per host) would go here; Fracital
-				// has no such policy for Scramjet today, so none is expressed.
+				rules: STOMP_RULES,
 				onOpen: openTab,
+				// One report per proxied request; also dispatched as the controller's
+				// `request` event, which the Last.fm flow listens to.
+				onRequest: logRequest,
 			});
 			await controller.wait();
 			const syncStale = () => useStompStore.setState({ stale: controller.stale });
@@ -135,6 +165,7 @@ export const bootStomp = (): Promise<StompController> => {
 			controller.addEventListener("rebind", syncStale);
 			useStompStore.setState({ status: "ready", controller, build: controller.build, stale: controller.stale });
 			window.stompController = controller;
+			window.stompRequestLog = requestLog;
 			return controller;
 		} catch (error) {
 			bootPromise = undefined;
@@ -146,4 +177,4 @@ export const bootStomp = (): Promise<StompController> => {
 	return bootPromise;
 };
 
-export type { Frame as StompFrame, NavigateInfo as StompNavigateInfo };
+export type { Frame as StompFrame, NavigateInfo as StompNavigateInfo, RequestEvent as StompRequestInfo };

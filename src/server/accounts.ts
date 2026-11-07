@@ -10,7 +10,7 @@
  */
 import { createHash } from "node:crypto";
 import { betterAuth, type BetterAuthPlugin } from "better-auth";
-import { createAuthEndpoint, getSessionFromCtx } from "better-auth/api";
+import { APIError, createAuthEndpoint, getSessionFromCtx } from "better-auth/api";
 import { setSessionCookie } from "better-auth/cookies";
 import { getMigrations } from "better-auth/db/migration";
 import { Hono, type MiddlewareHandler } from "hono";
@@ -38,15 +38,35 @@ interface LastfmUserInfo {
 	user?: { name?: string; realname?: string; image?: { "#text"?: string; size?: string }[]; playcount?: string; url?: string; registered?: { unixtime?: string } };
 }
 
+const LASTFM_UNCONFIGURED = "Last.fm isn't configured on this server";
+const lastfmModeQuery = z.object({ mode: z.enum(["signin", "link"]).default("signin") });
+
+/**
+ * Begins Last.fm's web auth for the request: remembers the mode in the signed
+ * state cookie and returns Last.fm's auth page URL with our callback as `cb`.
+ * Shared by the redirecting start route (the popup path) and the JSON route
+ * (the proxied path, which opens the URL in a proxy tab instead).
+ */
+async function beginLastfmAuth(ctx: { query: { mode: "signin" | "link" }; context: { secret: string; baseURL: string }; setSignedCookie: (name: string, value: string, secret: string, opts: Record<string, unknown>) => Promise<unknown> }) {
+	const nonce = createHash("sha256").update(`${Math.random()}${Date.now()}`).digest("hex").slice(0, 24);
+	await ctx.setSignedCookie(STATE_COOKIE, JSON.stringify({ mode: ctx.query.mode, nonce }), ctx.context.secret, { maxAge: 600, httpOnly: true, sameSite: "lax", path: "/" });
+	const callback = `${ctx.context.baseURL}/lastfm/callback`;
+	return { url: `https://www.last.fm/api/auth/?api_key=${encodeURIComponent(lastfmKey())}&cb=${encodeURIComponent(callback)}`, callback };
+}
+
 const lastfmPlugin = (): BetterAuthPlugin => ({
 	id: "lastfm",
 	endpoints: {
-		lastfmStart: createAuthEndpoint("/lastfm/start", { method: "GET", query: z.object({ mode: z.enum(["signin", "link"]).default("signin") }) }, async ctx => {
-			if (!lastfmKey() || !lastfmSecret()) throw ctx.redirect(donePath("error", "Last.fm isn't configured on this server"));
-			const nonce = createHash("sha256").update(`${Math.random()}${Date.now()}`).digest("hex").slice(0, 24);
-			await ctx.setSignedCookie(STATE_COOKIE, JSON.stringify({ mode: ctx.query.mode, nonce }), ctx.context.secret, { maxAge: 600, httpOnly: true, sameSite: "lax", path: "/" });
-			const cb = `${ctx.context.baseURL}/lastfm/callback`;
-			throw ctx.redirect(`https://www.last.fm/api/auth/?api_key=${encodeURIComponent(lastfmKey())}&cb=${encodeURIComponent(cb)}`);
+		lastfmStart: createAuthEndpoint("/lastfm/start", { method: "GET", query: lastfmModeQuery }, async ctx => {
+			if (!lastfmKey() || !lastfmSecret()) throw ctx.redirect(donePath("error", LASTFM_UNCONFIGURED));
+			throw ctx.redirect((await beginLastfmAuth(ctx)).url);
+		}),
+		// The same beginning as /lastfm/start, answered as JSON instead of a redirect: the
+		// client opens `url` itself (in a proxy tab when the proxied flow is on) and
+		// watches for `callback`, which it then calls first-party with the token.
+		lastfmUrl: createAuthEndpoint("/lastfm/url", { method: "GET", query: lastfmModeQuery }, async ctx => {
+			if (!lastfmKey() || !lastfmSecret()) throw new APIError("SERVICE_UNAVAILABLE", { message: LASTFM_UNCONFIGURED });
+			return beginLastfmAuth(ctx);
 		}),
 		lastfmCallback: createAuthEndpoint("/lastfm/callback", { method: "GET", query: z.object({ token: z.string().optional() }) }, async ctx => {
 			const raw = await ctx.getSignedCookie(STATE_COOKIE, ctx.context.secret);

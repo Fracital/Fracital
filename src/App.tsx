@@ -14,7 +14,7 @@ import { Tab } from "./components/Tab";
 import Home from "./views/Home";
 import ExternalSite from "./views/ExternalSite";
 import StompSite from "./views/StompSite";
-import { bootStomp } from "./libs/stompEngine";
+import { bootStomp, useStompStore } from "./libs/stompEngine";
 
 import { Controller } from "@mercuryworkshop/scramjet-controller";
 import LibcurlTransport from "@mercuryworkshop/libcurl-transport";
@@ -240,6 +240,7 @@ const App = () => {
 	// is the selected engine; Scramjet keeps booting at startup as before.
 	const stompActive = proxy === "st" && settings[EXPERIMENTAL_PROXIES_SETTING] === true;
 	useEffect(() => {
+		useStompStore.setState({ active: stompActive });
 		if (stompActive && !isWebOS) void bootStomp().catch(() => undefined);
 	}, [stompActive]);
 
