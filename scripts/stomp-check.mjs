@@ -51,6 +51,43 @@ const appReady = async () => {
 	await waitFor(() => page.evaluate(() => !!window.appReady), "appReady to be assigned");
 	await page.evaluate(() => window.appReady);
 };
+// Opt in to the experimental engines and select stomp, then reload so the app
+// reads it. Fracital's own start-up writes settings.json too (loadTheme reads
+// the file, sets the theme and writes it back), so a write of ours that lands
+// between that read and that write is lost: write, wait for the file to read
+// back as written, and after the reload check again and repeat if it reverted.
+const selectStomp = async () => {
+	for (let attempt = 1; attempt <= 3; attempt++) {
+		const kept = await page.evaluate(async () => {
+			const path = "/settings.json";
+			const fs = window.fr.fs.promises;
+			for (let i = 0; i < 20; i++) {
+				let data = {};
+				try {
+					data = JSON.parse(await fs.readFile(path, "utf8"));
+				} catch {}
+				if (data["experimental-proxies"] === true && data.proxy === "st") return true;
+				data["experimental-proxies"] = true;
+				data.proxy = "st";
+				await fs.writeFile(path, JSON.stringify(data, null, 2), "utf8");
+				await new Promise(r => setTimeout(r, 250));
+			}
+			return false;
+		});
+		await page.reload({ waitUntil: "load" });
+		await appReady();
+		const selected = await page.evaluate(async () => {
+			try {
+				const data = JSON.parse(await window.fr.fs.promises.readFile("/settings.json", "utf8"));
+				return data["experimental-proxies"] === true && data.proxy === "st";
+			} catch {
+				return false;
+			}
+		});
+		if (kept && selected) return;
+	}
+	throw new Error("could not keep the stomp engine selected in settings.json");
+};
 
 // --- boot on the default engine: stomp must not have started ---
 await page.goto(base, { waitUntil: "load", timeout: 30000 });
@@ -63,18 +100,7 @@ const idle = await page.evaluate(async dir => {
 check("lazy boot: nothing of stomp runs while Scramjet is selected", !idle.controller && !idle.registered, JSON.stringify(idle));
 
 // --- opt in, select stomp, reload so the app reads the setting ---
-await page.evaluate(async () => {
-	const path = "/settings.json";
-	let data = {};
-	try {
-		data = JSON.parse(await window.fr.fs.promises.readFile(path, "utf8"));
-	} catch {}
-	data["experimental-proxies"] = true;
-	data.proxy = "st";
-	await window.fr.fs.promises.writeFile(path, JSON.stringify(data, null, 2), "utf8");
-});
-await page.reload({ waitUntil: "load" });
-await appReady();
+await selectStomp();
 
 // Like the live site, the host page must be a client of Fracital's root service
 // worker (sw.js at scope /) before stomp boots: stomp's worker is registered

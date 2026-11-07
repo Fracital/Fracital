@@ -62,6 +62,43 @@ const appReady = async () => {
 	await waitFor(() => page.evaluate(() => !!window.appReady), "appReady");
 	await page.evaluate(() => window.appReady);
 };
+// Opt in to the experimental engines and select stomp, then reload so the app
+// reads it. Fracital's own start-up writes settings.json too (loadTheme reads
+// the file, sets the theme and writes it back), so a write of ours that lands
+// between that read and that write is lost: write, wait for the file to read
+// back as written, and after the reload check again and repeat if it reverted.
+const selectStomp = async () => {
+	for (let attempt = 1; attempt <= 3; attempt++) {
+		const kept = await page.evaluate(async () => {
+			const path = "/settings.json";
+			const fs = window.fr.fs.promises;
+			for (let i = 0; i < 20; i++) {
+				let data = {};
+				try {
+					data = JSON.parse(await fs.readFile(path, "utf8"));
+				} catch {}
+				if (data["experimental-proxies"] === true && data.proxy === "st") return true;
+				data["experimental-proxies"] = true;
+				data.proxy = "st";
+				await fs.writeFile(path, JSON.stringify(data, null, 2), "utf8");
+				await new Promise(r => setTimeout(r, 250));
+			}
+			return false;
+		});
+		await page.reload({ waitUntil: "load" });
+		await appReady();
+		const selected = await page.evaluate(async () => {
+			try {
+				const data = JSON.parse(await window.fr.fs.promises.readFile("/settings.json", "utf8"));
+				return data["experimental-proxies"] === true && data.proxy === "st";
+			} catch {
+				return false;
+			}
+		});
+		if (kept && selected) return;
+	}
+	throw new Error("could not keep the stomp engine selected in settings.json");
+};
 const addressBar = () => page.locator("input#input:not(.pointer-events-none *)").first();
 const go = async url => {
 	const input = addressBar();
@@ -85,18 +122,7 @@ const requestLog = () => page.evaluate(() => (window.stompRequestLog || []).map(
 // --- select stomp, reload, boot ---
 await page.goto(base, { waitUntil: "load", timeout: 30000 });
 await appReady();
-await page.evaluate(async () => {
-	const path = "/settings.json";
-	let data = {};
-	try {
-		data = JSON.parse(await window.fr.fs.promises.readFile(path, "utf8"));
-	} catch {}
-	data["experimental-proxies"] = true;
-	data.proxy = "st";
-	await window.fr.fs.promises.writeFile(path, JSON.stringify(data, null, 2), "utf8");
-});
-await page.reload({ waitUntil: "load" });
-await appReady();
+await selectStomp();
 await waitFor(() => page.evaluate(() => !!window.stompController), "the engine to boot", 60000);
 
 // --- the Account page's Last.fm button ---
@@ -146,13 +172,17 @@ const login = await waitFor(() => frameWhere(() => (document.title === "Login | 
 check("login form renders through the proxy", !!login, JSON.stringify(login?.value));
 const loginGets = (await requestLog()).filter(r => isTabDocument(r) && /^https:\/\/www\.last\.fm\/login/.test(r.url));
 check("login page requests carry no rule", loginGets.length > 0 && loginGets.every(r => r.rule === null), loginGets.map(r => `${r.status} rule=${r.rule}`).join(", "));
-// The submission navigates the frame, which ends the evaluation context mid-call.
-await login?.frame
-	.evaluate(() => {
-		// submit(), not requestSubmit(): the empty required fields would otherwise stop the
-		// submission, and an empty POST is exactly what is wanted (no credentials).
-		// Through the prototype: a control named "submit" shadows form.submit on this form.
-		const form = document.querySelector("form input[type=password]")?.form;
+// Submitted from the host page with its own native submit(): Last.fm replaces
+// HTMLFormElement.prototype.submit in its realm with a wrapper that drops the
+// submission while its module loader is unhappy (it times out natively too), and
+// the tab document is same-origin with the host. submit(), not requestSubmit(): the
+// empty required fields would otherwise stop it, and an empty POST is what is
+// wanted (no credentials). Through the prototype: a control named "submit" shadows
+// form.submit on this form.
+const loginFrameElement = await login?.frame.frameElement().catch(() => null);
+await loginFrameElement
+	?.evaluate(iframe => {
+		const form = iframe.contentDocument?.querySelector("form input[type=password]")?.form;
 		if (form) HTMLFormElement.prototype.submit.call(form);
 	})
 	.catch(() => undefined);
