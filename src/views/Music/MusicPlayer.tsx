@@ -876,12 +876,12 @@ export const MusicPlayer = ({ query, className, onClose }: MusicPlayerProps) => 
 
 			<div className="relative flex h-full w-full flex-col">
 				<div className="flex items-center gap-3 px-3 pt-3 pb-2 @lg:px-6 @lg:pt-4">
-					<button title="Browse music" className="shrink-0 p-1 rounded-xl text-(--accent) drop-shadow-[0_2px_8px_#00000050] cursor-pointer hover:scale-105 active:scale-95 duration-150" onClick={openLibrary}>
-						<MusicalNoteIcon className="size-8 @lg:size-9" />
+					<button title="Browse music" className="shrink-0 text-(--accent) drop-shadow-[0_2px_8px_#00000050] cursor-pointer hover:scale-105 active:scale-95 duration-150" onClick={openLibrary}>
+						<img src="/fm.svg" className="size-8 @lg:size-9" />
 					</button>
-					<nav className="hidden @3xl:flex min-w-0 items-center gap-1" aria-label="Artist">
+					<nav className="hidden @3xl:flex min-w-0 items-center gap-0.5" aria-label="Artist">
 						{["Merch", "Playlists", "Videos", "Tours"].map(label => (
-							<button key={label} aria-disabled title={`${label} — coming soon`} className="shrink-0 px-2 py-1 rounded-lg text-lg @4xl:text-xl font-semibold text-(--text-primary) opacity-85 cursor-default">
+							<button key={label} aria-disabled title={`${label} — coming soon`} className="shrink-0 px-2 py-1 rounded-lg	text-sm font-semibold text-(--text-primary) opacity-85 hover:opacity-95 hover:scale-105 cursor-pointer duration-200">
 								{label}
 							</button>
 						))}
@@ -967,15 +967,15 @@ export const MusicPlayer = ({ query, className, onClose }: MusicPlayerProps) => 
 											<ArrowPathRoundedSquareIcon className="size-7" />
 										</button>
 									</div>
-									<div className="flex shrink-0 items-center gap-5 @lg:gap-7">
+									<div className="flex shrink-0 items-center gap-2 @lg:gap-3.5">
 										<button title="Previous" className={transportButton} onClick={previous}>
-											<BackwardIcon className="size-9 @lg:size-10" />
+											<BackwardIcon className="size-8 @lg:size-10" />
 										</button>
 										<button title={isPlaying ? "Pause" : "Play"} className={transportButton} onClick={() => void togglePlay()}>
-											{isPlaying ? <PauseIcon className="size-11 @lg:size-13 overflow-visible stroke-current stroke-2 [stroke-linejoin:round] [&_path]:[vector-effect:non-scaling-stroke]" /> : <PlayIcon className="size-11 @lg:size-13 translate-x-0.5" />}
+											{isPlaying ? <PauseIcon className="size-11 @lg:size-13 overflow-visible stroke-current stroke-3 [stroke-linejoin:round] [&_path]:[vector-effect:non-scaling-stroke]" /> : <PlayIcon className="size-11 @lg:size-13 translate-x-0.5" />}
 										</button>
 										<button title="Next" className={transportButton} onClick={next}>
-											<ForwardIcon className="size-9 @lg:size-10" />
+											<ForwardIcon className="size-8 @lg:size-10" />
 										</button>
 									</div>
 									<div className="flex flex-1 basis-0 justify-end">

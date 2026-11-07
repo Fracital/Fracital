@@ -1,7 +1,7 @@
 import { createId } from "@paralleldrive/cuid2";
 import { AD_UNITS, AdBanner, useShowAds } from "./components/AdBanner";
 import { useEffect, useRef, useState } from "react";
-import { RectangleStackIcon, PlusIcon, Cog6ToothIcon, ChevronLeftIcon, ChevronRightIcon, RadioIcon, XMarkIcon } from "@heroicons/react/24/solid";
+import { RectangleStackIcon, PlusIcon, Cog6ToothIcon, ChevronLeftIcon, ChevronRightIcon, XMarkIcon } from "@heroicons/react/24/solid";
 import type { detailProps } from "./libs/eventBus";
 import { useLocation } from "react-router-dom";
 
@@ -165,8 +165,6 @@ const App = () => {
 	const location = useLocation();
 	const pathname = location.pathname.replace("/", "");
 
-	const currentPanel = usePanelsStore(state => state.current);
-	const setCurrentPanel = usePanelsStore(state => state.setCurrent);
 	const setPanelsOpen = usePanelsStore(state => state.setPanelsOpen);
 
 	const tabs = useTabsStore(state => state.tabs);
@@ -600,7 +598,6 @@ const App = () => {
 										const tabEl = el?.closest("[data-url][id]") as HTMLElement | null;
 										if (tabEl && tabEl.id) {
 											const rect = tabEl.getBoundingClientRect();
-											const y = e.clientY - rect.top;
 											return;
 										}
 										const groupHeader = el?.closest("[data-group-id]") as HTMLElement | null;
@@ -768,7 +765,7 @@ function SideAd() {
 
 	if (!show || closed) return null;
 	return (
-		<div ref={panelRef} className="hidden lg:flex flex-col shrink-0 rounded-2xl bg-(--secondary) inset-shadow-(--inset-shadow-primary) overflow-y-auto overflow-x-hidden [scrollbar-width:none]">
+		<div ref={panelRef} className="hidden lg:flex flex-col shrink-0 rounded-2xl bg-(--secondary) inset-shadow-(--inset-shadow-primary) overflow-y-auto overflow-x-hidden scrollbar-none">
 			<div className="sticky top-0 z-10 m-2 p-2 pb-1.5 bg-(--secondary)">
 				<button className="flex items-center gap-1.5 w-full justify-center px-2 py-1 rounded-lg text-xs font-medium text-(--text-secondary) hover:text-(--text-primary) hover:bg-[#ffffff14] duration-150" title="Close ads" onClick={() => setClosed(true)}>
 					<XMarkIcon className="size-3.5" />
