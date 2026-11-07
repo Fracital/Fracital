@@ -1,4 +1,5 @@
 import { meFetch, refreshMe } from "./libs/auth";
+import { applySettingsDefaults } from "./libs/updater";
 import { startScrobbler } from "./libs/scrobbler";
 import { initRadio } from "./libs/radio";
 import { useSettingsStore } from "./store";
@@ -57,6 +58,8 @@ export const Api = async () => {
 					const settings = await meFetch<{ value: string | null }>("/api/me/settings");
 					if (!settings.value) return false;
 					await window.fr.fs.promises.writeFile(SettingsPath, settings.value);
+					// Settings saved by an older version lack newer keys; add their defaults.
+					await applySettingsDefaults();
 					return true;
 				} catch {
 					return false;
