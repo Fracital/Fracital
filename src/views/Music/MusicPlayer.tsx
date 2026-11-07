@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from "react";
-import { flushSync } from "react-dom";
 import { useShallow } from "zustand/react/shallow";
 import { AdjustmentsHorizontalIcon, ArrowPathRoundedSquareIcon, ArrowsPointingInIcon, BackspaceIcon, BackwardIcon, ChatBubbleBottomCenterTextIcon, FilmIcon, ForwardIcon, MusicalNoteIcon, PauseIcon, PhotoIcon, PlayIcon, QueueListIcon, SpeakerWaveIcon, SpeakerXMarkIcon } from "@heroicons/react/24/solid";
 import { useMusicStore, usePlaybackStore, useSettingsStore, useTabsStore } from "../../store";
@@ -24,11 +23,11 @@ interface MusicPlayerProps {
 
 const artistText = (track: Track | null) => (track ? (Array.isArray(track.artists) ? track.artists.join(", ") : track.artists) : "");
 
-const Cover = ({ track, className, vt }: { track: Track | null; className?: string; vt?: string }) =>
+const Cover = ({ track, className }: { track: Track | null; className?: string }) =>
 	track?.cover ? (
-		<img src={track.cover} alt={track.title} data-np={vt} className={`aspect-square object-cover ${className ?? ""}`} />
+		<img src={track.cover} alt={track.title} className={`aspect-square object-cover ${className ?? ""}`} />
 	) : (
-		<div data-np={vt} className={`aspect-square flex justify-center items-center bg-(--primary) text-(--text-secondary) inset-shadow-(--inset-shadow-primary) ${className ?? ""}`}>
+		<div className={`aspect-square flex justify-center items-center bg-(--primary) text-(--text-secondary) inset-shadow-(--inset-shadow-primary) ${className ?? ""}`}>
 			<MusicalNoteIcon className="size-1/3 opacity-90" />
 		</div>
 	);
@@ -741,7 +740,7 @@ const MusicVideo = ({ track, videoId, seconds, onUnplayable, className }: { trac
 
 	const params = new URLSearchParams({ enablejsapi: "1", origin: location.origin, controls: "0", disablekb: "1", fs: "0", iv_load_policy: "3", playsinline: "1", rel: "0", mute: "1" });
 	return (
-		<div data-np="cover" className={`relative overflow-hidden rounded-3xl bg-black shadow-[0_10px_40px_0px_#00000090] ${className ?? ""}`}>
+		<div className={`relative overflow-hidden rounded-3xl bg-black shadow-[0_10px_40px_0px_#00000090] ${className ?? ""}`}>
 			<iframe
 				ref={frameRef}
 				src={`${YT_ORIGIN}/embed/${videoId}?${params}`}
@@ -780,8 +779,6 @@ export const MusicPlayer = ({ query, className, onClose }: MusicPlayerProps) => 
 	const video = useMusicVideo(currentTrack);
 
 	const [mode, setMode] = useState<PlayerMode>(parsePlayerMode(query));
-	const rootRef = useRef<HTMLDivElement>(null);
-	const transitionId = useRef(0);
 	const [lastQuery, setLastQuery] = useState(query);
 	if (query !== lastQuery) {
 		setLastQuery(query);
@@ -790,23 +787,10 @@ export const MusicPlayer = ({ query, className, onClose }: MusicPlayerProps) => 
 
 	const changeMode = (nextMode: PlayerMode) => {
 		const target = nextMode === mode ? "cover" : nextMode;
-		const apply = () => {
-			setMode(target);
-			const { tabs, updateTab } = useTabsStore.getState();
-			const tab = tabs.find(t => t.current);
-			if (tab) updateTab(tab.id, { url: playerUrl(target), displayUrl: playerUrl(target) });
-		};
-		const root = rootRef.current;
-		if (!root || target === mode || !document.startViewTransition || matchMedia("(prefers-reduced-motion: reduce)").matches) return apply();
-		// The transition names live behind .np-vt (see index.css) so only this player animates, even with others mounted.
-		const id = ++transitionId.current;
-		root.classList.add("np-vt");
-		const transition = document.startViewTransition(() => flushSync(apply));
-		// Skipped transitions (another view switch, a hidden tab) reject these; the view still changes.
-		transition.ready.catch(() => {});
-		transition.finished.finally(() => {
-			if (transitionId.current === id) root.classList.remove("np-vt");
-		});
+		setMode(target);
+		const { tabs, updateTab } = useTabsStore.getState();
+		const tab = tabs.find(t => t.current);
+		if (tab) updateTab(tab.id, { url: playerUrl(target), displayUrl: playerUrl(target) });
 	};
 
 	// The Now Playing tab shows the song: its title and cover.
@@ -826,7 +810,11 @@ export const MusicPlayer = ({ query, className, onClose }: MusicPlayerProps) => 
 	const showVisualizer = settings["big-player-visualizer"] === true && settings["disable-visualizers"] !== true;
 	// Video mode shows the cover for songs without a music video.
 	const shown: PlayerMode = mode === "video" && !video.videoId && !video.loading ? "cover" : mode;
-	const sidePanel = shown !== "cover" && shown !== "video";
+	// The panel next to the album (video, queue, lyrics, credits). It keeps its last content while it
+	// slides shut, so closing animates instead of emptying first.
+	const panelOpen = shown !== "cover";
+	const [panel, setPanel] = useState<Exclude<PlayerMode, "cover">>(shown === "cover" ? "queue" : shown);
+	if (shown !== "cover" && shown !== panel) setPanel(shown);
 	const glass = dark ? "bg-[#ffffff1f] backdrop-blur-xl" : "bg-[#0000000f] backdrop-blur-xl";
 	const iconButton = "flex items-center justify-center p-2 rounded-full text-(--text-primary) opacity-85 hover:opacity-100 hover:bg-[#ffffff15] cursor-pointer duration-150";
 	const transportButton = "flex items-center justify-center text-(--accent) drop-shadow-[0_2px_10px_#00000040] cursor-pointer hover:scale-110 active:scale-95 duration-150";
@@ -841,7 +829,7 @@ export const MusicPlayer = ({ query, className, onClose }: MusicPlayerProps) => 
 	const trackInfo = (track: Track, align: "center" | "left") => {
 		const album = track.album && !/^unknown/i.test(track.album) ? cleanAlbumTitle(track.album) : null;
 		return (
-			<div data-np="info" className={`flex w-fit max-w-full min-w-0 flex-col ${align === "center" ? "mx-auto items-center text-center" : "items-start text-left"}`}>
+			<div className={`flex w-fit max-w-full min-w-0 flex-col ${align === "center" ? "mx-auto items-center text-center" : "items-start text-left"}`}>
 				<h1 className={`max-w-full text-3xl @lg:text-4xl font-bold leading-tight line-clamp-2 ${linkable ? "cursor-pointer hover:underline" : ""}`} title={linkable ? `Go to ${track.album || "album"}` : track.title} onClick={linkable ? () => openTrackAlbum(track) : undefined}>
 					{track.title}
 				</h1>
@@ -882,7 +870,7 @@ export const MusicPlayer = ({ query, className, onClose }: MusicPlayerProps) => 
 	};
 
 	return (
-		<div ref={rootRef} className={`${className ?? ""} @container overflow-hidden`}>
+		<div className={`${className ?? ""} @container overflow-hidden`}>
 			{currentTrack?.cover && <img src={currentTrack.cover} alt="" aria-hidden className="absolute inset-0 size-full object-cover scale-125 blur-3xl opacity-50 saturate-150 pointer-events-none" />}
 			<div className={`absolute inset-0 pointer-events-none ${dark ? "bg-[#00000060]" : "bg-[#ffffff60]"}`} />
 
@@ -931,40 +919,14 @@ export const MusicPlayer = ({ query, className, onClose }: MusicPlayerProps) => 
 					</div>
 				) : (
 					<>
-						{sidePanel ? (
-							<div className="flex flex-1 min-h-0 flex-col @3xl:flex-row gap-4 @3xl:gap-8 overflow-y-auto px-4 @lg:px-8 @3xl:px-12 pt-2 @3xl:pt-4">
-								<div className="flex shrink-0 items-center gap-4 @3xl:min-h-0 @3xl:w-[min(34%,22rem)] @3xl:flex-col @3xl:items-stretch @3xl:gap-5">
-									{/* Sized to the free space (container query units) so the cover stays square and the info below always fits. */}
-									<div className="@container-size relative shrink-0 size-24 @lg:size-28 @3xl:h-auto @3xl:w-full @3xl:flex-1 @3xl:min-h-24 @3xl:max-h-[min(calc(0.34*(100cqw_-_6rem)),22rem)]">
-										<Cover track={currentTrack} vt="cover" className={`size-[min(100cqw,100cqh)] rounded-xl @3xl:rounded-3xl shadow-[0_10px_40px_0px_#00000090] duration-300 ${isPlaying ? "scale-100" : "scale-95"}`} />
-										{showVisualizer && (
-											<div className="hidden @3xl:block absolute top-[calc(min(100cqw,100cqh)-3.5rem)] left-[min(50cqw,50cqh)] -translate-x-1/2 pointer-events-none drop-shadow-xl">
-												<AudvisVisualizer analyser={analyser} isPlaying={isPlaying} width={180} height={36} color={dark ? "#FFFFFF" : "#000000"} opacity={0.85} />
-											</div>
-										)}
-									</div>
-									{trackInfo(currentTrack, "left")}
-								</div>
-								<div data-np="panel" className={`flex-1 min-h-72 @3xl:min-h-0 rounded-3xl border ${dark ? "border-[#ffffff40] bg-[#ffffff12]" : "border-[#00000020] bg-[#ffffff40]"} backdrop-blur-sm overflow-hidden`}>
-									{mode === "lyrics" ? <LyricsPanel track={currentTrack} /> : mode === "credits" ? <CreditsPanel track={currentTrack} /> : <QueuePanel />}
-								</div>
-							</div>
-						) : (
-							<div className="flex flex-1 min-h-0 flex-col items-center justify-center-safe gap-4 @lg:gap-5 overflow-y-auto px-4 @lg:px-8 pt-4">
-								{/* The cover (or video) shrinks with the free height so the info and controls always fit. */}
-								<div className="@container-size relative flex w-full flex-1 min-h-40 max-h-[30rem] items-end justify-center">
-									{shown === "video" ? (
-										video.videoId ? (
-											<MusicVideo key={`${currentTrack.id}:${video.videoId}`} track={currentTrack} videoId={video.videoId} seconds={video.seconds} onUnplayable={() => video.videoId && video.markUnplayable(video.videoId)} className="aspect-video w-[min(100cqw,calc(100cqh*16/9))]" />
-										) : (
-											<div data-np="cover" className="relative aspect-video w-[min(100cqw,calc(100cqh*16/9))] overflow-hidden rounded-3xl bg-black shadow-[0_10px_40px_0px_#00000090]">
-												<VideoPoster track={currentTrack} />
-											</div>
-										)
-									) : (
-										<Cover track={currentTrack} vt="cover" className={`size-[min(85cqw,100cqh)] rounded-3xl shadow-[0_10px_40px_0px_#00000090] duration-300 ${isPlaying ? "scale-100" : "scale-95"}`} />
-									)}
-									{showVisualizer && shown !== "video" && (
+						{/* Album and panel share one row (one column when narrow). The album is always mounted; opening the
+						    panel only grows it, so the album shrinks and the cover follows its container. */}
+						<div className={`flex flex-1 min-h-0 flex-col @3xl:flex-row overflow-y-auto @3xl:overflow-y-visible px-4 @lg:px-8 @3xl:px-12 pt-2 @3xl:pt-4 transition-[gap] duration-300 ease-out ${panelOpen ? "gap-4 @3xl:gap-8" : "gap-0"}`}>
+							<div className="flex min-w-0 basis-0 grow flex-col items-center justify-center-safe gap-4 @lg:gap-5 @3xl:min-h-0">
+								{/* The cover shrinks with the free space so the info below always fits. */}
+								<div className="@container-size relative flex w-full flex-1 min-h-24 max-h-[30rem] items-end justify-center">
+									<Cover track={currentTrack} className={`size-[min(85cqw,100cqh)] rounded-3xl shadow-[0_10px_40px_0px_#00000090] transition-transform duration-300 ${isPlaying ? "scale-100" : "scale-95"}`} />
+									{showVisualizer && (
 										<div className="absolute bottom-4 left-1/2 -translate-x-1/2 pointer-events-none drop-shadow-xl">
 											<AudvisVisualizer analyser={analyser} isPlaying={isPlaying} width={220} height={40} color={dark ? "#FFFFFF" : "#000000"} opacity={0.85} />
 										</div>
@@ -972,10 +934,32 @@ export const MusicPlayer = ({ query, className, onClose }: MusicPlayerProps) => 
 								</div>
 								<div className="w-full max-w-2xl">{trackInfo(currentTrack, "center")}</div>
 							</div>
-						)}
+							<div
+								inert={!panelOpen}
+								aria-hidden={!panelOpen}
+								style={{ flexGrow: panelOpen ? 1.6 : 0 }}
+								className={`@container-size relative min-w-0 basis-0 overflow-hidden transition-[flex-grow,min-height,opacity,translate] duration-300 ease-out ${panelOpen ? "min-h-72 @3xl:min-h-0 opacity-100 translate-x-0" : "min-h-0 opacity-0 @3xl:translate-x-8"}`}
+							>
+								{panel === "video" ? (
+									<div className="flex size-full items-center justify-center">
+										{shown === "video" && video.videoId ? (
+											<MusicVideo key={`${currentTrack.id}:${video.videoId}`} track={currentTrack} videoId={video.videoId} seconds={video.seconds} onUnplayable={() => video.videoId && video.markUnplayable(video.videoId)} className="aspect-video w-[min(100cqw,calc(100cqh*16/9))]" />
+										) : (
+											<div className="relative aspect-video w-[min(100cqw,calc(100cqh*16/9))] overflow-hidden rounded-3xl bg-black shadow-[0_10px_40px_0px_#00000090]">
+												<VideoPoster track={currentTrack} />
+											</div>
+										)}
+									</div>
+								) : (
+									<div className={`size-full rounded-3xl border ${dark ? "border-[#ffffff40] bg-[#ffffff12]" : "border-[#00000020] bg-[#ffffff40]"} backdrop-blur-sm overflow-hidden`}>
+										{panel === "lyrics" ? <LyricsPanel track={currentTrack} /> : panel === "credits" ? <CreditsPanel track={currentTrack} /> : <QueuePanel />}
+									</div>
+								)}
+							</div>
+						</div>
 
 						<div className={`flex shrink-0 flex-col gap-2 @lg:gap-3 px-4 @lg:px-8 @3xl:px-12 pt-4 ${onClose ? "pb-4" : "pb-5 @lg:pb-7"}`}>
-							<div className={`mx-auto flex w-full flex-col gap-2 @lg:gap-3 ${sidePanel ? "" : "max-w-4xl"}`}>
+							<div className={`mx-auto flex w-full flex-col gap-2 @lg:gap-3 ${panelOpen ? "" : "max-w-4xl"}`}>
 								<SeekBar dark={dark} />
 								<div className="flex w-full items-center">
 									<div className="flex flex-1 basis-0 justify-start">
