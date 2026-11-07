@@ -36,17 +36,23 @@ export const clearLogin = async (): Promise<void> => {
 	}
 };
 
-export const getProxy = async (): Promise<"sj" | "uv"> => {
+/** The proxy engines a tab can run on: Scramjet (default), UV, and stomp ("st", behind the experimental proxies setting). */
+export type ProxyEngine = "sj" | "uv" | "st";
+export const PROXY_ENGINES: readonly ProxyEngine[] = ["sj", "uv", "st"];
+export const EXPERIMENTAL_PROXIES_SETTING = "experimental-proxies";
+export const isProxyEngine = (value: unknown): value is ProxyEngine => typeof value === "string" && (PROXY_ENGINES as readonly string[]).includes(value);
+
+export const getProxy = async (): Promise<ProxyEngine> => {
 	try {
 		if (!window.fr?.fs) return "sj";
 		const data = JSON.parse(await window.fr.fs.promises.readFile(SettingsPath, "utf8"));
-		return data.proxy === "uv" ? "uv" : "sj";
+		return isProxyEngine(data.proxy) ? data.proxy : "sj";
 	} catch {
 		return "sj";
 	}
 };
 
-export const changeProxy = async (proxy: "sj" | "uv"): Promise<void> => {
+export const changeProxy = async (proxy: ProxyEngine): Promise<void> => {
 	try {
 		if (!window.fr?.fs) return;
 		const data = JSON.parse(await window.fr.fs.promises.readFile(SettingsPath, "utf8"));

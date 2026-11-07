@@ -13,6 +13,8 @@ import { Tab } from "./components/Tab";
 
 import Home from "./views/Home";
 import ExternalSite from "./views/ExternalSite";
+import StompSite from "./views/StompSite";
+import { bootStomp } from "./libs/stompEngine";
 
 import { Controller } from "@mercuryworkshop/scramjet-controller";
 import LibcurlTransport from "@mercuryworkshop/libcurl-transport";
@@ -24,7 +26,7 @@ import { startGameSaveSync } from "./libs/gameSaves";
 import { View } from "./gui/View";
 import TabGroup from "./components/TabGroup";
 import { ModalProvider } from "./components/Modal/ModalContext";
-import { getProxy, isWebOS, SettingsPath, wispURL } from "./types";
+import { EXPERIMENTAL_PROXIES_SETTING, getProxy, isProxyEngine, isWebOS, SettingsPath, wispURL, type ProxyEngine } from "./types";
 import { aboutPages, getPageFromUrl, getQueryFromUrl } from "./libs/aboutPages";
 import { isPlayerUrl } from "./libs/playback";
 
@@ -182,7 +184,7 @@ const App = () => {
 	const updateTab = useTabsStore(state => state.updateTab);
 
 	const [platform, setPlatform] = useState<string>("");
-	const [, setProxy] = useState<"sj" | "uv">("sj");
+	const [proxy, setProxy] = useState<ProxyEngine>("sj");
 	const [proxyReady, setProxyReady] = useState(false);
 	const proxyUserChangedRef = useRef(false);
 
@@ -223,8 +225,8 @@ const App = () => {
 			if (!proxyUserChangedRef.current) setProxy(savedProxy);
 		};
 		const handleProxyChange = (event: Event) => {
-			const newProxy = (event as CustomEvent<{ proxy: "sj" | "uv" }>).detail.proxy;
-			if (newProxy === "sj" || newProxy === "uv") {
+			const newProxy = (event as CustomEvent<{ proxy: unknown }>).detail.proxy;
+			if (isProxyEngine(newProxy)) {
 				proxyUserChangedRef.current = true;
 				setProxy(newProxy);
 			}
@@ -233,6 +235,13 @@ const App = () => {
 		window.addEventListener("proxy-change", handleProxyChange);
 		return () => window.removeEventListener("proxy-change", handleProxyChange);
 	}, []);
+
+	// stomp is opt-in (the experimental proxies setting) and boots only once it
+	// is the selected engine; Scramjet keeps booting at startup as before.
+	const stompActive = proxy === "st" && settings[EXPERIMENTAL_PROXIES_SETTING] === true;
+	useEffect(() => {
+		if (stompActive && !isWebOS) void bootStomp().catch(() => undefined);
+	}, [stompActive]);
 
 	useEffect(() => {
 		// Use the store value; re-reading settings.json here races with loadTheme's write
@@ -509,6 +518,23 @@ const App = () => {
 													/>
 												</View>
 											</div>
+										);
+									} else if (stompActive) {
+										// The engine's view waits for its own controller; no url gate needed.
+										return (
+											<StompSite
+												id={item.id}
+												current={currentTab?.id === item.id}
+												key={`st-${item.id}`}
+												url={item.url}
+												className={
+													"absolute inset-0" +
+													" " +
+													`
+												${currentTab ? (currentTab.id !== item.id ? "opacity-0 pointer-events-none" : "") : ""}
+                                            `
+												}
+											/>
 										);
 									} else {
 										return (

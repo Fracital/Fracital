@@ -141,8 +141,10 @@ in any user-facing copy.
   itself emitted into the bundle.
 - Chunk and asset names are content hashes only (`assets/[hash]`). Never add a
   fixed or module-derived bundle name; `check-dist-refs.mjs` hard-fails on one.
-- The vendored proxy runtime ships only as the five renamed files under
-  `dist/vendor/` (see vite.config.ts). Never reintroduce a `/scramjet/`,
+- The vendored proxy runtimes ship only as renamed files under `dist/vendor/`:
+  Scramjet's five files, and the stomp engine's files under `dist/vendor/rt/`
+  (see vite.config.ts; `src/libs/stompEngine.ts` tells stomp those names
+  through its `assets` option). Never reintroduce a `/scramjet/`, `/stomp/`,
   `/controller/`, or similar fingerprint path, and never ship `.map`/`.d.ts`
   artifacts (`scripts/prune-dist.mjs` removes them; if it removed something,
   find out what shipped them).
