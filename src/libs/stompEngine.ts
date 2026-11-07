@@ -107,8 +107,8 @@ export const bootStomp = (): Promise<StompController> => {
 			if (!("serviceWorker" in navigator)) throw new Error("Service workers are not supported in this browser");
 			if (!wispURL) throw new Error("No relay URL");
 			// The default export is the controller class. The named export carries
-			// the engine's name, which the build's proxy transform renames in
-			// vendor files (scripts/obfuscate-build.mjs); the default has no name.
+			// the engine's name, which the build's proxy transform would rename in
+			// vendor files if the engine joined its list; the default has no name.
 			const { default: StompController } = (await import(/* @vite-ignore */ CONTROLLER_MODULE)) as StompModule;
 			// Scope: the directory; resolves once the worker is activated (30 s cap).
 			const registration = await StompController.register(STOMP_DIRECTORY, { assets: STOMP_ASSETS });

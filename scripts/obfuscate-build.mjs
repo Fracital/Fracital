@@ -416,7 +416,7 @@ export function obfuscateJs(source, sourceType = "module", nameHint = "") {
 // The per-build key is random, so the substitution is not reproducible outside
 // the build; it is cost-raising like the rest of this file, not secrecy.
 // ---------------------------------------------------------------------------
-const PROXY_SRC = "scramjet|stomp|bare[-_]?mux|wispurr|epoxy|libcurl";
+const PROXY_SRC = "scramjet|bare[-_]?mux|wispurr|epoxy|libcurl";
 const PROXY_RE = new RegExp(PROXY_SRC, "i");
 const PROXY_RE_G = new RegExp(PROXY_SRC, "gi");
 const PROXY_KEY = randomBytes(32);
