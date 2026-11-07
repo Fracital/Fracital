@@ -5,8 +5,11 @@
  * drives real tabs through the shell: a page's title and URL, the address bar
  * following the page, window.open becoming a tab, the error page for an
  * unreachable site (whose error global carries the per-build name, not the
- * engine's), the tab favicon from the page's navigate report, the build string
- * in the engine selector, and the controller id surviving a reload.
+ * engine's), the host page being controlled by Fracital's own root service
+ * worker before stomp boots (the live site always is; stomp once adopted that
+ * worker on a revive and hung), the tab favicon from the page's navigate
+ * report, the build string in the engine selector, and the controller id
+ * surviving a reload.
  *
  *   node scripts/stomp-check.mjs http://localhost:5173/
  */
@@ -73,8 +76,27 @@ await page.evaluate(async () => {
 await page.reload({ waitUntil: "load" });
 await appReady();
 
+// Like the live site, the host page must be a client of Fracital's root service
+// worker (sw.js at scope /) before stomp boots: stomp's worker is registered
+// under its own scope next to it, and the controller must only ever adopt its
+// own worker, never the root one.
+const rootWorker = await page.evaluate(async () => {
+	const origin = location.origin;
+	const regs = await navigator.serviceWorker.getRegistrations();
+	const root = regs.find(r => r.scope === `${origin}/`);
+	return {
+		controller: navigator.serviceWorker.controller?.scriptURL ?? null,
+		rootScope: root?.scope ?? null,
+		rootActive: root?.active?.scriptURL ?? null,
+		expected: `${origin}/sw.js`,
+	};
+});
+check("host page is controlled by the root service worker before stomp boots", rootWorker.controller === rootWorker.expected && rootWorker.rootActive === rootWorker.expected, JSON.stringify(rootWorker));
+
 // Selecting the engine boots it (one controller for this browser tab).
 await waitFor(() => page.evaluate(() => !!window.stompController), "the engine to boot once selected", 60000);
+const stillRoot = await page.evaluate(() => navigator.serviceWorker.controller?.scriptURL ?? null);
+check("host page stays with the root worker after stomp boots", stillRoot === rootWorker.expected, stillRoot);
 check("engine boots once selected", true);
 
 // --- navigate the current tab through the address bar ---
