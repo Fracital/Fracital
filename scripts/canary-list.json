@@ -30,6 +30,14 @@
 			"reason": "P1: proxy engine name, PascalCase (classes, labels)."
 		},
 		{
+			"value": "stomp",
+			"reason": "P1: second proxy engine name (vendored runtime under vendor/rt, message keys, storage names). Renamed by the proxy transform; the error page reads a per-build global, never this name."
+		},
+		{
+			"value": "Stomp",
+			"reason": "P1: second proxy engine name, PascalCase (class, selector label)."
+		},
+		{
 			"value": "wispurr",
 			"reason": "P1: wisp client library name. NOTE: bare 'wisp'/'Wisp' is deliberately NOT a canary (same as abulxt): the bundled wisp client declares identifiers (class names, this.wisp_url) in positions that cannot be veiled. The relay is protected by the gate-keyed opaque path instead."
 		},

@@ -144,12 +144,16 @@ in any user-facing copy.
 - The vendored proxy runtimes ship only as renamed files under `dist/vendor/`:
   Scramjet's five files, and the stomp engine's files under `dist/vendor/rt/`
   (see vite.config.ts; `src/libs/stompEngine.ts` tells stomp those names
-  through its `assets` option). stomp's error page (`src/stomp/error.html`)
-  reads a global minted per build, never the engine's default name, and the
-  adapter imports the controller as the module's default export, so the
-  engine's name is never part of a contract between files; it is not in the
-  proxy transform's rename list (a deploy build failed with it there, see
-  the stomp-obfuscate branch), so its internal literals ship as they are. Never reintroduce a `/scramjet/`, `/stomp/`,
+  through its `assets` option). Both engine names are in the proxy
+  transform's rename list and the canary list; stomp's error page
+  (`src/stomp/error.html`) reads a global minted per build, never the
+  engine's default name, and the adapter imports the controller as the
+  module's default export. The transform maps wasm only inside import/export
+  names, data segments and custom sections (`wasmNameRanges` in
+  `scripts/obfuscate-build.mjs`), never code: a name list entry can match
+  bytes in any vendored wasm (Ruffle's data spells `stomP`), and
+  `WebAssembly.validate` depends on the build host's CPU (terp has no SSE4.1,
+  so V8 rejects Ruffle's SIMD build there). Never reintroduce a `/scramjet/`, `/stomp/`,
   `/controller/`, or similar fingerprint path, and never ship `.map`/`.d.ts`
   artifacts (`scripts/prune-dist.mjs` removes them; if it removed something,
   find out what shipped them).

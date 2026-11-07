@@ -416,7 +416,7 @@ export function obfuscateJs(source, sourceType = "module", nameHint = "") {
 // The per-build key is random, so the substitution is not reproducible outside
 // the build; it is cost-raising like the rest of this file, not secrecy.
 // ---------------------------------------------------------------------------
-const PROXY_SRC = "scramjet|bare[-_]?mux|wispurr|epoxy|libcurl";
+const PROXY_SRC = "scramjet|stomp|bare[-_]?mux|wispurr|epoxy|libcurl";
 const PROXY_RE = new RegExp(PROXY_SRC, "i");
 const PROXY_RE_G = new RegExp(PROXY_SRC, "gi");
 const PROXY_KEY = randomBytes(32);
@@ -537,14 +537,172 @@ export function hasProxyName(s) {
 	return PROXY_RE.test(s);
 }
 
-// Wasm binaries (embedded base64 or a .wasm file) get the same-length mapping.
+// Wasm binaries (embedded base64 or a .wasm file) get the same-length mapping,
+// but only inside the bytes that hold names or data: import and export names,
+// data segment contents, and custom section contents (the `name` section entry
+// by entry). Code, types, LEB lengths and constant expressions are never
+// touched, so the module's structure and instructions are byte-for-byte the
+// input's and the result is valid wherever the input is. A proxy name spelled
+// by chance in other bytes (an instruction stream, a length) is not a name,
+// and a match never spans two strings. (Ruffle's wasm spells "stomP" inside
+// "initCustomPrototype", in its data section.)
+//
+// WebAssembly.validate cannot be the oracle: its answer depends on the build
+// host. V8 turns wasm SIMD off on x64 CPUs without SSE4.1, so on a host whose
+// virtual CPU has no SSE4.1 (terp's "Common KVM processor") Ruffle's SIMD
+// build fails validation before any byte is mapped. It stays as a cross-check
+// only when this host can validate the input.
+
+// The [start, end) byte ranges of a wasm module that hold names or data.
+// Throws on a module it cannot walk, rather than guessing.
+export function wasmNameRanges(buf) {
+	if (buf.length < 8 || buf.readUInt32LE(0) !== 0x6d736100 || buf.readUInt32LE(4) !== 1) throw new Error("not a wasm core module (version 1)");
+	const ranges = [];
+	let p = 8;
+	const fail = what => {
+		throw new Error(`cannot walk wasm module: ${what} at byte ${p}`);
+	};
+	const u = () => {
+		// LEB128 (unsigned or signed: only its length matters here)
+		for (let i = 0; i < 10; i++) {
+			if (p >= buf.length) fail("truncated LEB128");
+			if (!(buf[p++] & 0x80)) return;
+		}
+		fail("overlong LEB128");
+	};
+	const n = () => {
+		let r = 0;
+		for (let shift = 0; shift < 35; shift += 7) {
+			if (p >= buf.length) fail("truncated LEB128");
+			const b = buf[p++];
+			r += (b & 0x7f) * 2 ** shift;
+			if (!(b & 0x80)) return r;
+		}
+		fail("overlong u32");
+	};
+	const str = () => {
+		const len = n();
+		if (p + len > buf.length) fail("string past the end");
+		if (len) ranges.push([p, p + len]);
+		p += len;
+	};
+	const bytes = () => {
+		const len = n();
+		if (p + len > buf.length) fail("bytes past the end");
+		return [p, (p += len)];
+	};
+	const valtype = () => {
+		const t = buf[p++];
+		if (t === 0x63 || t === 0x64) u(); // (ref null? <heaptype>)
+	};
+	const limits = () => {
+		const flags = buf[p++];
+		if (flags > 0x0f) fail(`limits flags 0x${flags.toString(16)}`);
+		u();
+		if (flags & 1) u();
+		if (flags & 8) u(); // custom page size
+	};
+	const constExpr = () => {
+		for (;;) {
+			const op = buf[p++];
+			if (op === 0x0b) return;
+			if (op === 0x41 || op === 0x42 || op === 0x23 || op === 0xd0 || op === 0xd2) u();
+			else if (![0x6a, 0x6b, 0x6c, 0x7c, 0x7d, 0x7e].includes(op)) fail(`constant expression opcode 0x${op?.toString(16)}`);
+		}
+	};
+	const nameMap = () => {
+		for (let k = n(); k > 0; k--) {
+			u();
+			str();
+		}
+	};
+	while (p < buf.length) {
+		const id = buf[p++];
+		const size = n();
+		const end = p + size;
+		if (end > buf.length) fail("section past the end");
+		if (id === 0) {
+			const len = n();
+			const secName = buf.toString("latin1", p, p + len);
+			if (len) ranges.push([p, p + len]);
+			p += len;
+			if (secName === "name") {
+				// Subsections: module name, then name maps (indirect for locals, labels, fields).
+				while (p < end) {
+					const sub = buf[p++];
+					const subSize = n();
+					const subEnd = p + subSize;
+					if (subEnd > end) fail("name subsection past the end");
+					if (sub === 0) str();
+					else if ([1, 4, 5, 6, 7, 8, 9, 11].includes(sub)) nameMap();
+					else if (sub === 2 || sub === 3 || sub === 10)
+						for (let k = n(); k > 0; k--) {
+							u();
+							nameMap();
+						}
+					else p = subEnd; // unknown subsection: left as it is
+					if (p !== subEnd) fail(`name subsection ${sub} length mismatch`);
+				}
+			} else {
+				// Other custom sections are opaque to the engine: the content as one range.
+				if (end > p) ranges.push([p, end]);
+				p = end;
+			}
+		} else if (id === 2) {
+			for (let k = n(); k > 0; k--) {
+				str();
+				str();
+				const kind = buf[p++];
+				if (kind === 0x00) u();
+				else if (kind === 0x01) {
+					valtype();
+					limits();
+				} else if (kind === 0x02) limits();
+				else if (kind === 0x03) {
+					valtype();
+					p++; // mutability
+				} else if (kind === 0x04) {
+					p++; // tag attribute
+					u();
+				} else fail(`import kind 0x${kind?.toString(16)}`);
+			}
+		} else if (id === 7) {
+			for (let k = n(); k > 0; k--) {
+				str();
+				p++; // kind
+				u();
+			}
+		} else if (id === 11) {
+			for (let k = n(); k > 0; k--) {
+				const flags = n();
+				if (flags === 0) constExpr();
+				else if (flags === 2) {
+					u();
+					constExpr();
+				} else if (flags !== 1) fail(`data segment flags ${flags}`);
+				const [a, b] = bytes();
+				if (b > a) ranges.push([a, b]);
+			}
+		} else {
+			p = end; // code, types and the rest: never mapped
+		}
+		if (p !== end) fail(`section ${id} length mismatch`);
+	}
+	return ranges;
+}
+
 // Returns the mapped bytes, or the input unchanged when nothing matched.
-function mapWasmBytes(buf) {
-	const s = buf.toString("latin1");
-	const m = mapProxyText(s);
-	if (m === s) return buf;
-	const out = Buffer.from(m, "latin1");
-	if (out.length !== buf.length || !WebAssembly.validate(out)) {
+export function mapWasmBytes(buf) {
+	let out = null;
+	for (const [a, b] of wasmNameRanges(buf)) {
+		const s = buf.toString("latin1", a, b);
+		const m = mapProxyText(s);
+		if (m === s) continue;
+		out ??= Buffer.from(buf);
+		out.write(m, a, "latin1");
+	}
+	if (!out) return buf;
+	if (out.length !== buf.length || (WebAssembly.validate(buf) && !WebAssembly.validate(out))) {
 		throw new Error("proxy name mapping produced an invalid wasm module");
 	}
 	return out;
