@@ -179,6 +179,20 @@ bytecode integrity hash and the `toString` guard. Timing and environment checks
 (`isLikelyBot`, timing, mutation) only flag. Never make them wipe or block a
 user.
 
+## Discord verification and link dispenser (lives in abulxt)
+
+Fracital's Discord server is served by the abulxt community bot
+(`~/src/abulxt/main/src/server/community-service.ts`, relayed by holt), not by
+anything in this repo. It is the `fracital` **brand** in abulxt's
+`config.js` `discord.brands[]` (`~/src/abulxt/main/src/server/discord-brands.ts`):
+its own verified/alt/muted roles, its own link pool and monthly allowance, kept
+apart from Abstract's. Staff seed the pool in the Fracital server with
+`/linkadmin add <urls>` (the cloak domains from `~/src/cloaks-fracital` and the
+direct hosts), post the panel with `/linkadmin panel`, and members draw with
+`/links get`. Every draw tells the member to press Ctrl+E on the page, which is
+how `CloakGate` and the decoy loader open the app. Nothing here needs to change
+to add or rotate links; see "Discord brands" in `~/src/abulxt/AGENTS.md`.
+
 ## Repository layout
 
 | Path                               | What it is                                                                                                                                                                                                                                                                                             |
