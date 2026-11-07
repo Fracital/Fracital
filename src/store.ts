@@ -351,6 +351,10 @@ export const usePlaybackStore = create<{
 	volume: number;
 	muted: boolean;
 	analyser: AnalyserNode | null;
+	/** Equalizer gains in dB (-12 to 12); QuickPlayer applies them to the audio graph. */
+	eqBass: number;
+	eqMid: number;
+	eqTreble: number;
 	/** Id of the current track when its audio couldn't load (shown as "Couldn't play this song"). */
 	failedTrackId: string | null;
 
@@ -361,6 +365,9 @@ export const usePlaybackStore = create<{
 	setVolume: (value: Updater<number>) => void;
 	setMuted: (value: Updater<boolean>) => void;
 	setAnalyser: (analyser: AnalyserNode | null) => void;
+	setEqBass: (value: Updater<number>) => void;
+	setEqMid: (value: Updater<number>) => void;
+	setEqTreble: (value: Updater<number>) => void;
 }>()(set => ({
 	isPlaying: false,
 	currentTime: 0,
@@ -369,6 +376,9 @@ export const usePlaybackStore = create<{
 	volume: 1,
 	muted: false,
 	analyser: null,
+	eqBass: 0,
+	eqMid: 0,
+	eqTreble: 0,
 	failedTrackId: null,
 
 	setIsPlaying: value => set(state => ({ isPlaying: applyUpdater(value, state.isPlaying) })),
@@ -378,6 +388,9 @@ export const usePlaybackStore = create<{
 	setVolume: value => set(state => ({ volume: applyUpdater(value, state.volume) })),
 	setMuted: value => set(state => ({ muted: applyUpdater(value, state.muted) })),
 	setAnalyser: analyser => set({ analyser }),
+	setEqBass: value => set(state => ({ eqBass: applyUpdater(value, state.eqBass) })),
+	setEqMid: value => set(state => ({ eqMid: applyUpdater(value, state.eqMid) })),
+	setEqTreble: value => set(state => ({ eqTreble: applyUpdater(value, state.eqTreble) })),
 }));
 
 interface FileEntry {

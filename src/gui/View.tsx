@@ -26,12 +26,13 @@ export const View = ({ children, id }: ViewProps) => {
 		if (!pageName || !aboutPages[pageName]) return;
 
 		const pageConfig = aboutPages[pageName];
-		const title = pageConfig.titleFor?.(getQueryFromUrl(tab.url)) ?? pageConfig.title ?? pageName;
+		const query = getQueryFromUrl(tab.url);
+		const title = pageConfig.titleFor?.(query) ?? pageConfig.title ?? pageName;
 
 		if (tab.title !== title || !tab.icon) {
 			updateTab(id, {
 				title,
-				icon: pageConfig.icon,
+				icon: pageConfig.iconFor?.(query) ?? pageConfig.icon,
 			});
 		}
 	}, [id, tabs]);

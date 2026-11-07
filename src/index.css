@@ -138,3 +138,48 @@ html, body {
   height: 18px;
   box-shadow: 0 3px 12px rgba(0, 0, 0, 0.4);
 }
+/* Now Playing view switches (MusicPlayer changeMode): the cover and song info glide
+   between layouts, and the side panel fades and slides in or out. */
+.np-vt [data-np="cover"] {
+  view-transition-name: np-cover;
+}
+.np-vt [data-np="info"] {
+  view-transition-name: np-info;
+}
+.np-vt [data-np="panel"] {
+  view-transition-name: np-panel;
+}
+
+::view-transition-group(np-cover),
+::view-transition-group(np-info),
+::view-transition-group(np-panel) {
+  animation-duration: 0.5s;
+  animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* Text keeps its real size while it moves instead of stretching with the box. */
+::view-transition-old(np-info),
+::view-transition-new(np-info) {
+  width: auto;
+  height: auto;
+}
+
+::view-transition-new(np-panel):only-child {
+  animation: np-panel-in 0.45s cubic-bezier(0.22, 1, 0.36, 1) 0.08s both;
+}
+::view-transition-old(np-panel):only-child {
+  animation: np-panel-out 0.25s ease-in both;
+}
+
+@keyframes np-panel-in {
+  from {
+    opacity: 0;
+    transform: translateX(3rem) scale(0.98);
+  }
+}
+@keyframes np-panel-out {
+  to {
+    opacity: 0;
+    transform: translateX(3rem) scale(0.98);
+  }
+}

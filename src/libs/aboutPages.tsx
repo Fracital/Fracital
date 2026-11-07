@@ -1,12 +1,13 @@
 import { type ReactNode } from "react";
 import { createId } from "@paralleldrive/cuid2";
-import { useTabsStore } from "../store";
+import { useMusicStore, useTabsStore } from "../store";
+import { nowPlayingTitle } from "./playback";
 import { Cog6ToothIcon, MusicalNoteIcon, FolderIcon, UserCircleIcon, PlayIcon, PlayCircleIcon, GlobeAltIcon, DocumentIcon, SignalIcon, CheckBadgeIcon, ShieldCheckIcon } from "@heroicons/react/24/solid";
 
 import Home from "../views/Home";
 import Settings from "../views/Settings";
 import { MusicLibrary } from "../views/Music/MusicLibrary";
-import { MusicPlayer } from "../views/Music/MusicPlayer";
+import { MusicPlayer, NowPlayingTabIcon } from "../views/Music/MusicPlayer";
 import Files from "../views/Files/Files";
 import { Account } from "../views/Account";
 import { ArtistPanel } from "../views/ArtistPanel";
@@ -22,6 +23,8 @@ export interface AboutPage {
 	title?: string;
 	/** Tab title for a given query, when it depends on the section shown. */
 	titleFor?: (query: string | undefined) => string;
+	/** Tab icon for a given query, when it depends on the section shown. */
+	iconFor?: (query: string | undefined) => ReactNode | undefined;
 	queryFields?: string[];
 	hasQuery?: boolean;
 }
@@ -68,7 +71,12 @@ export const aboutPages: Record<string, AboutPage> = {
 		// The Digital Library is the default section (about:music, about:music?digilib&…).
 		titleFor: query => {
 			const section = (query ?? "").split("&")[0];
-			return section === "player" ? "Now Playing" : section === "library" ? "My Music" : section === "upload" ? "Upload Music" : "Music";
+			return section === "player" ? nowPlayingTitle() : section === "library" ? "My Music" : section === "upload" ? "Upload Music" : "Music";
+		},
+		// Now Playing shows the song's cover.
+		iconFor: query => {
+			const cover = (query ?? "").split("&")[0] === "player" ? useMusicStore.getState().currentTrack?.cover : undefined;
+			return cover ? <NowPlayingTabIcon cover={cover} /> : undefined;
 		},
 		hasQuery: true,
 	},

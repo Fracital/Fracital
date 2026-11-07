@@ -10,7 +10,26 @@ export const registerAudio = (audio: HTMLAudioElement | null, context?: AudioCon
 	if (context !== undefined) audioCtx = context;
 };
 
+export const getAudio = () => audioEl;
+
+/** Something else playing the song for now: a music video with its own audio (Now Playing's Video mode). */
+export interface PlaybackOwner {
+	play: () => void;
+	pause: () => void;
+	seek: (time: number) => void;
+	time: () => number;
+	paused: () => boolean;
+}
+
+let owner: PlaybackOwner | null = null;
+
+/** While set, the transport controls drive `next` instead of the <audio> element. */
+export const setPlaybackOwner = (next: PlaybackOwner | null) => {
+	owner = next;
+};
+
 export const play = async () => {
+	if (owner) return owner.play();
 	if (!audioEl) return;
 	if (audioCtx?.state === "suspended") await audioCtx.resume();
 	await audioEl.play();
@@ -18,17 +37,20 @@ export const play = async () => {
 };
 
 export const pause = () => {
+	if (owner) return owner.pause();
 	audioEl?.pause();
 	usePlaybackStore.getState().setIsPlaying(false);
 };
 
 export const togglePlay = async () => {
+	if (owner) return owner.paused() ? owner.play() : owner.pause();
 	if (!audioEl) return;
 	if (audioEl.paused) await play();
 	else pause();
 };
 
 export const seek = (time: number) => {
+	if (owner) return owner.seek(Math.max(0, time));
 	if (!audioEl) return;
 	const duration = Number.isFinite(audioEl.duration) ? audioEl.duration : usePlaybackStore.getState().duration;
 	const next = Math.max(0, duration ? Math.min(time, duration) : time);
@@ -38,8 +60,9 @@ export const seek = (time: number) => {
 
 /** Restarts the track if it's past the first few seconds, otherwise goes to the previous track. */
 export const previous = () => {
-	if (!audioEl) return;
-	if (audioEl.currentTime > 2.5 || !useMusicStore.getState().playPrev()) seek(0);
+	const time = owner ? owner.time() : audioEl?.currentTime;
+	if (time === undefined) return;
+	if (time > 2.5 || !useMusicStore.getState().playPrev()) seek(0);
 };
 
 export const next = () => useMusicStore.getState().playNext();
@@ -65,7 +88,7 @@ export const formatTime = (time: number): string => {
 	return hours > 0 ? `${hours}:${minutes.toString().padStart(2, "0")}:${seconds}` : `${minutes}:${seconds}`;
 };
 
-export type PlayerMode = "cover" | "lyrics" | "queue" | "credits";
+export type PlayerMode = "video" | "cover" | "lyrics" | "queue" | "credits";
 
 export const PLAYER_PAGE = "player";
 
@@ -74,7 +97,10 @@ export const isPlayerUrl = (url: string | undefined) => !!url && /^about:(player
 
 export const playerUrl = (mode: PlayerMode) => (mode === "cover" ? "about:music?player" : `about:music?player&${mode}`);
 
-export const parsePlayerMode = (query: string | undefined): PlayerMode => (query === "lyrics" || query === "queue" || query === "credits" ? query : "cover");
+export const parsePlayerMode = (query: string | undefined): PlayerMode => (query === "video" || query === "lyrics" || query === "queue" || query === "credits" ? query : "cover");
+
+/** The Now Playing tab is titled after the song. */
+export const nowPlayingTitle = () => useMusicStore.getState().currentTrack?.title || "Now Playing";
 
 /** Shows Now Playing in the open Music tab (switching it to `mode`) or opens a new one. */
 export const openMusicPlayer = (mode: PlayerMode = "cover") => {
@@ -83,9 +109,9 @@ export const openMusicPlayer = (mode: PlayerMode = "cover") => {
 	const isMusic = (u: string) => /^about:music(\?|$)/.test(u);
 	const existing = tabs.find(tab => tab.current && isMusic(tab.url)) ?? tabs.find(tab => isPlayerUrl(tab.url)) ?? tabs.find(tab => isMusic(tab.url));
 	if (existing) {
-		updateTab(existing.id, { url, displayUrl: url, title: "Now Playing" });
+		updateTab(existing.id, { url, displayUrl: url, title: nowPlayingTitle() });
 		setCurrentTab(existing.id);
 		return;
 	}
-	newTab({ id: createId(), title: "Now Playing", url, displayUrl: url });
+	newTab({ id: createId(), title: nowPlayingTitle(), url, displayUrl: url });
 };

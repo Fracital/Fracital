@@ -37,6 +37,12 @@ export const quickLinks = [
 export const init = async () => {
 	if (typeof window === "undefined" || !window.localStorage) throw Error("Cannot reach LocalStorage");
 
+	// Music streaming API — runs on the same server (Vite dev / production backend). Set first: copying
+	// the bundled games below can take a while, and music shouldn't wait on it.
+	configureMusicApi({
+		baseUrl: "/api/music",
+	});
+
 	if (!(await fileExists(SettingsPath))) {
 		console.log("%cFracital%c: %cinit%c() -> %csettings.json%c does not exist, creating default settings", "color: #fb74fe", "color: #ff7b72", "color: #c7a1f2", "color: #79c0ff", "color: #56d364", "color: #e2b340");
 		await window.fr.fs.promises.writeFile(
@@ -164,19 +170,25 @@ export const init = async () => {
 		const exists = await fileExists(destinationPath);
 		if (exists && isText) continue;
 
-		const response = await fetch(assetUrl, { cache: "no-store" });
-		const contentType = response.headers.get("content-type") ?? "";
-		if (!response.ok || (!isText && contentType.includes("text/html"))) {
-			console.warn(`Could not copy Flash game asset: ${sourcePath}`);
+		// A game that can't be fetched (or is cut off mid-download) is skipped; it must not stop the rest of init.
+		let text = "";
+		let bytes: Uint8Array;
+		try {
+			const response = await fetch(assetUrl, { cache: "no-store" });
+			const contentType = response.headers.get("content-type") ?? "";
+			if (!response.ok || (!isText && contentType.includes("text/html"))) throw new Error(`HTTP ${response.status}`);
+			if (isText) text = await response.text();
+			bytes = isText ? new Uint8Array() : new Uint8Array(await response.arrayBuffer());
+		} catch (error) {
+			console.warn(`Could not copy Flash game asset: ${sourcePath}`, error);
 			continue;
 		}
 
 		if (isText) {
-			await window.fr.fs.promises.writeFile(destinationPath, await response.text(), "utf8");
+			await window.fr.fs.promises.writeFile(destinationPath, text, "utf8");
 			continue;
 		}
 
-		const bytes = new Uint8Array(await response.arrayBuffer());
 		if (exists) {
 			try {
 				const stats = await window.fr.fs.promises.stat(destinationPath);
@@ -216,11 +228,6 @@ export const init = async () => {
 			window.localStorage.setItem("quicklinks-v2", "1");
 		}
 	}
-
-	// Music streaming API — runs on the same server (Vite dev / production backend)
-	configureMusicApi({
-		baseUrl: "/api/music",
-	});
 
 	// Mirror the persistent-tabs setting into localStorage so the stores can
 	// read it synchronously at module load (settings.json loads async).

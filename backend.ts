@@ -20,7 +20,7 @@ import { artistStats, lastfmKey, trackPlays } from "./src/server/music-stats";
 import { getAccountsApp, initAccounts } from "./src/server/accounts";
 import { artistExtras } from "./src/server/artist-extras";
 import { albumInfo, songCredits, songInfo } from "./src/server/song-info";
-import { findYoutubeMatch, isExplicitEdition, playbackHints } from "./src/server/youtube-match";
+import { findMusicVideo, findYoutubeMatch, isExplicitEdition, playbackHints } from "./src/server/youtube-match";
 import { upstreamRange } from "./src/server/stream-range";
 
 export function fsrv() {
@@ -99,6 +99,16 @@ export function fsrv() {
 		const credits = await songCredits(title, artist);
 		c.header("Cache-Control", credits.partial ? "no-store" : "public, max-age=3600");
 		return c.json(credits);
+	});
+
+	// Now Playing's Video mode: the song's official music video (a YouTube id to embed), if it has one.
+	app.get("/api/music/music-video", async c => {
+		const title = c.req.query("title")?.trim();
+		const artist = c.req.query("artist")?.trim();
+		if (!title || !artist) return c.json({ error: "title and artist are required" }, 400);
+		const video = await findMusicVideo({ title, artist });
+		c.header("Cache-Control", "public, max-age=3600");
+		return c.json({ videoId: video?.videoId ?? null, seconds: video?.seconds ?? null });
 	});
 
 	// A song's total YouTube streams across its official uploads.

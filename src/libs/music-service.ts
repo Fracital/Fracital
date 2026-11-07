@@ -330,6 +330,28 @@ export function getAlbumInfo(album: MusicAlbum): Promise<AlbumInfo> {
 	return apiFetch(`/album-info?${songParams(album.title, album.artist)}&id=${encodeURIComponent(album.id)}${album.trackCount ? `&tracks=${album.trackCount}` : ""}`);
 }
 
+export interface MusicVideoMatch {
+	videoId: string | null;
+	/** The video's length, which tells whether it plays in step with the song. */
+	seconds: number | null;
+}
+
+const musicVideoCache = new Map<string, Promise<MusicVideoMatch>>();
+
+/** The song's official music video on YouTube (Now Playing's Video mode); `videoId` is null when it has none. */
+export function getMusicVideo(title: string, artist: string): Promise<MusicVideoMatch> {
+	const key = `${artist}|${title}`.toLowerCase();
+	let found = musicVideoCache.get(key);
+	if (!found) {
+		found = apiFetch<MusicVideoMatch>(`/music-video?${songParams(title, artist)}`).catch(() => {
+			musicVideoCache.delete(key);
+			return { videoId: null, seconds: null };
+		});
+		musicVideoCache.set(key, found);
+	}
+	return found;
+}
+
 /** Writers, producers, engineers and musicians (MusicBrainz). */
 export function getSongCredits(title: string, artist: string): Promise<SongCredits> {
 	return apiFetch(`/song-credits?${songParams(title, artist)}`);

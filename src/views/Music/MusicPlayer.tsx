@@ -1,16 +1,18 @@
 import { useEffect, useRef, useState } from "react";
-import { ArrowPathRoundedSquareIcon, ArrowsPointingInIcon, BackspaceIcon, BackwardIcon, ChatBubbleBottomCenterTextIcon, ForwardIcon, MusicalNoteIcon, PauseIcon, PhotoIcon, PlayIcon, QueueListIcon, SpeakerWaveIcon, SpeakerXMarkIcon } from "@heroicons/react/24/solid";
+import { flushSync } from "react-dom";
+import { useShallow } from "zustand/react/shallow";
+import { AdjustmentsHorizontalIcon, ArrowPathRoundedSquareIcon, ArrowsPointingInIcon, BackspaceIcon, BackwardIcon, ChatBubbleBottomCenterTextIcon, FilmIcon, ForwardIcon, MusicalNoteIcon, PauseIcon, PhotoIcon, PlayIcon, QueueListIcon, SpeakerWaveIcon, SpeakerXMarkIcon } from "@heroicons/react/24/solid";
 import { useMusicStore, usePlaybackStore, useSettingsStore, useTabsStore } from "../../store";
 import type { Track } from "../../types";
 import { AudvisVisualizer } from "../../components/AudvisVisualizer";
-import { formatTime, next, parsePlayerMode, play, playerUrl, previous, seek, setVolume, toggleLoop, toggleMute, togglePlay, type PlayerMode } from "../../libs/playback";
+import { formatTime, getAudio, isPlayerUrl, next, nowPlayingTitle, parsePlayerMode, play, playerUrl, previous, seek, setPlaybackOwner, setVolume, toggleLoop, toggleMute, togglePlay, type PlaybackOwner, type PlayerMode } from "../../libs/playback";
 import { LYRICS_CHANGED_EVENT, LYRICS_SOURCE_LABELS, loadLyrics, type Lyrics } from "../../libs/lyrics";
 import { activeLineIndex } from "../../libs/lrc";
 import { PlayCount } from "../../components/PlayCount";
 import { RadioStatus } from "../../components/RadioStatus";
 import { clearQueue } from "../../libs/radio";
 import { UserGroupIcon } from "@heroicons/react/24/solid";
-import { cleanAlbumTitle, getSongCredits, getSongInfo, type SongCredits } from "../../libs/music-service";
+import { cleanAlbumTitle, getMusicVideo, getSongCredits, getSongInfo, type SongCredits } from "../../libs/music-service";
 import { isLinkable, openArtistByName, openTrackAlbum, openTrackArtist, trackArtists } from "../../libs/trackLinks";
 
 interface MusicPlayerProps {
@@ -22,11 +24,11 @@ interface MusicPlayerProps {
 
 const artistText = (track: Track | null) => (track ? (Array.isArray(track.artists) ? track.artists.join(", ") : track.artists) : "");
 
-const Cover = ({ track, className }: { track: Track | null; className?: string }) =>
+const Cover = ({ track, className, vt }: { track: Track | null; className?: string; vt?: string }) =>
 	track?.cover ? (
-		<img src={track.cover} alt={track.title} className={`aspect-square object-cover ${className ?? ""}`} />
+		<img src={track.cover} alt={track.title} data-np={vt} className={`aspect-square object-cover ${className ?? ""}`} />
 	) : (
-		<div className={`aspect-square flex justify-center items-center bg-(--primary) text-(--text-secondary) inset-shadow-(--inset-shadow-primary) ${className ?? ""}`}>
+		<div data-np={vt} className={`aspect-square flex justify-center items-center bg-(--primary) text-(--text-secondary) inset-shadow-(--inset-shadow-primary) ${className ?? ""}`}>
 			<MusicalNoteIcon className="size-1/3 opacity-90" />
 		</div>
 	);
@@ -141,6 +143,92 @@ const VolumeControl = ({ dark, buttonClassName }: { dark: boolean; buttonClassNa
 			<button title={muted ? "Unmute" : "Mute"} className={buttonClassName} onClick={toggleMute}>
 				{muted || volume === 0 ? <SpeakerXMarkIcon className="size-7" /> : <SpeakerWaveIcon className="size-7" />}
 			</button>
+		</div>
+	);
+};
+
+const EQ_BANDS = [
+	{ key: "eqBass", set: "setEqBass", label: "Bass" },
+	{ key: "eqMid", set: "setEqMid", label: "Mid" },
+	{ key: "eqTreble", set: "setEqTreble", label: "Treble" },
+] as const;
+
+/** Bass/mid/treble popover; shares its gains with the side panel player's equalizer. */
+const EqControl = ({ dark, buttonClassName }: { dark: boolean; buttonClassName: string }) => {
+	const [open, setOpen] = useState(false);
+	const ref = useRef<HTMLDivElement>(null);
+	const eq = usePlaybackStore(useShallow(state => ({ eqBass: state.eqBass, eqMid: state.eqMid, eqTreble: state.eqTreble })));
+	const adjusted = eq.eqBass !== 0 || eq.eqMid !== 0 || eq.eqTreble !== 0;
+
+	useEffect(() => {
+		if (!open) return;
+		const onPointer = (e: PointerEvent) => {
+			if (!ref.current?.contains(e.target as Node)) setOpen(false);
+		};
+		const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+		document.addEventListener("pointerdown", onPointer);
+		document.addEventListener("keydown", onKey);
+		return () => {
+			document.removeEventListener("pointerdown", onPointer);
+			document.removeEventListener("keydown", onKey);
+		};
+	}, [open]);
+
+	const rest = dark ? "#ffffff30" : "#00000020";
+	return (
+		<div ref={ref} className="relative flex">
+			<button title="Equalizer" aria-haspopup="dialog" aria-expanded={open} className={`${buttonClassName} ${open || adjusted ? "text-(--accent)!" : ""}`} onClick={() => setOpen(o => !o)}>
+				<AdjustmentsHorizontalIcon className="size-5" />
+			</button>
+			{open && (
+				<div
+					role="dialog"
+					aria-label="Equalizer"
+					className={`absolute top-full right-0 z-30 mt-2 flex w-64 max-w-[calc(100cqw-1.5rem)] flex-col gap-4 rounded-2xl p-4 backdrop-blur-xl shadow-[0_10px_40px_#00000060] ${dark ? "bg-[#1a1a1ad0] border border-[#ffffff26]" : "bg-[#ffffffd8] border border-[#00000014]"}`}
+				>
+					<h3 className="text-sm font-semibold text-(--text-primary)">Equalizer</h3>
+					{EQ_BANDS.map(band => {
+						const value = eq[band.key];
+						const pos = ((value + 12) / 24) * 100;
+						const [lo, hi] = [Math.min(50, pos), Math.max(50, pos)];
+						return (
+							<label key={band.key} className="flex flex-col gap-1.5">
+								<span className="flex justify-between text-xs text-(--text-secondary)">
+									{band.label}
+									<span className="font-mono tabular-nums">
+										{value > 0 ? "+" : ""}
+										{value.toFixed(1)} dB
+									</span>
+								</span>
+								{/* The fill grows out from 0 dB in the middle. */}
+								<input
+									type="range"
+									min={-12}
+									max={12}
+									step={0.5}
+									value={value}
+									onChange={e => usePlaybackStore.getState()[band.set](parseFloat(e.target.value))}
+									onDoubleClick={() => usePlaybackStore.getState()[band.set](0)}
+									className="eq-slider w-full"
+									style={{ background: `linear-gradient(to right, ${rest} ${lo}%, var(--accent) ${lo}%, var(--accent) ${hi}%, ${rest} ${hi}%)` }}
+								/>
+							</label>
+						);
+					})}
+					<button
+						disabled={!adjusted}
+						className={`self-end px-3 py-1 rounded-full text-xs font-semibold duration-150 enabled:cursor-pointer disabled:opacity-40 ${dark ? "bg-[#ffffff1f] enabled:hover:bg-[#ffffff33]" : "bg-[#00000012] enabled:hover:bg-[#00000022]"}`}
+						onClick={() => {
+							const { setEqBass, setEqMid, setEqTreble } = usePlaybackStore.getState();
+							setEqBass(0);
+							setEqMid(0);
+							setEqTreble(0);
+						}}
+					>
+						Reset
+					</button>
+				</div>
+			)}
 		</div>
 	);
 };
@@ -413,6 +501,273 @@ const QueuePanel = () => {
 	);
 };
 
+const YT_ORIGIN = "https://www.youtube-nocookie.com";
+/** Music videos that wouldn't play here (embedding disabled, removed): their songs fall back to the cover. */
+const unplayableVideos = new Set<string>();
+
+/** The song's music video, once looked up. `videoId` is null when it has none, or it can't play here. */
+const useMusicVideo = (track: Track | null) => {
+	const key = track ? songKey(track) : "";
+	const [found, setFound] = useState<{ key: string; videoId: string | null; seconds: number | null } | null>(null);
+	const [, setUnplayableCount] = useState(0);
+	useEffect(() => {
+		if (!track) return;
+		let alive = true;
+		getMusicVideo(track.title, trackArtists(track)[0]).then(r => alive && setFound({ key, ...r }));
+		return () => {
+			alive = false;
+		};
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [key]);
+	const result = found?.key === key ? found : null;
+	return {
+		loading: !!track && !result,
+		videoId: result?.videoId && !unplayableVideos.has(result.videoId) ? result.videoId : null,
+		seconds: result?.seconds ?? null,
+		markUnplayable: (videoId: string) => {
+			unplayableVideos.add(videoId);
+			setUnplayableCount(n => n + 1);
+		},
+	};
+};
+
+type YouTubeInfo = { currentTime?: number; duration?: number; playerState?: number };
+
+/**
+ * The song's music video: a YouTube embed driven over its postMessage API. A cut the same length as the
+ * song plays muted, in step with it. A different cut (intro, skit, outro) plays its own audio and takes
+ * over the transport; when Video mode closes, the song carries on from the matching point.
+ */
+const MusicVideo = ({ track, videoId, seconds, onUnplayable, className }: { track: Track; videoId: string; seconds: number | null; onUnplayable: () => void; className?: string }) => {
+	const frameRef = useRef<HTMLIFrameElement>(null);
+	const [started, setStarted] = useState(false);
+	const onUnplayableRef = useRef(onUnplayable);
+	const trackId = track.id;
+
+	useEffect(() => {
+		onUnplayableRef.current = onUnplayable;
+	});
+
+	useEffect(() => {
+		const frame = frameRef.current;
+		if (!frame) return;
+		const audio = getAudio();
+		const store = usePlaybackStore;
+		const send = (func: string, ...args: unknown[]) => frame.contentWindow?.postMessage(JSON.stringify({ event: "command", func, args, id: 1, channel: "widget" }), YT_ORIGIN);
+		const songLength = () => (audio && Number.isFinite(audio.duration) ? audio.duration : 0);
+		const isOn = (state: number) => state === 1 || state === 3; // playing or buffering
+
+		let role: "follow" | "own" | null = null;
+		let ready = false;
+		let state = -1;
+		let time = 0;
+		let timeAt = 0;
+		let length = seconds ?? 0;
+		let lastSeek = -Infinity;
+		let lastToggle = -Infinity;
+		let seekedAt = 0;
+		// How far ahead to seek so the video lands in step once it has buffered (learned from each seek).
+		let lead = 1;
+		let rate = 1;
+
+		const setRate = (next: number) => {
+			if (next === rate) return;
+			rate = next;
+			send("setPlaybackRate", next);
+		};
+
+		// Same cut as the song: keep to its position and play state. Small drift is evened out by
+		// speeding the (muted) video up or down; seeking makes it buffer, so that's left for big jumps.
+		const follow = (jumped = false) => {
+			if (role !== "follow" || !audio) return;
+			const now = performance.now();
+			const playing = state === 1;
+			const at = playing ? time + ((now - timeAt) / 1000) * rate : time;
+			const drift = at - audio.currentTime;
+			if (jumped || (Math.abs(drift) > 3 && now - lastSeek > 4000)) {
+				lastSeek = seekedAt = now;
+				time = Math.max(0, audio.currentTime + (audio.paused ? 0 : lead));
+				timeAt = now;
+				setRate(1);
+				send("seekTo", time, true);
+			} else if (playing && !audio.paused) setRate(drift < -0.25 ? 1.25 : drift > 0.25 ? 0.75 : 1);
+			// Re-sent until the video reports the change, in case a state message went missing.
+			const wantOn = !audio.paused;
+			if (wantOn !== isOn(state) && now - lastToggle > 1500) {
+				lastToggle = now;
+				send(wantOn ? "playVideo" : "pauseVideo");
+			}
+		};
+
+		const applyVolume = () => {
+			const { volume, muted } = store.getState();
+			if (muted) return send("mute");
+			send("unMute");
+			send("setVolume", Math.round(volume * 100));
+		};
+
+		const owner: PlaybackOwner = {
+			play: () => send("playVideo"),
+			pause: () => send("pauseVideo"),
+			seek: to => {
+				time = length ? Math.min(to, length) : to;
+				send("seekTo", time, true);
+				store.getState().setCurrentTime(time);
+			},
+			time: () => time,
+			paused: () => !isOn(state),
+		};
+
+		// A different cut: its own audio plays the song from here, starting at the same point.
+		const takeOver = () => {
+			const wasPlaying = !!audio && !audio.paused;
+			time = audio && songLength() ? (audio.currentTime / songLength()) * length : 0;
+			audio?.pause();
+			setPlaybackOwner(owner);
+			applyVolume();
+			send("seekTo", time, true);
+			store.setState({ duration: length, currentTime: time });
+			if (wasPlaying) send("playVideo");
+		};
+
+		const decide = () => {
+			if (role || !ready || !length) return;
+			const failed = store.getState().failedTrackId === trackId;
+			if (!songLength() && !failed) return;
+			role = !failed && Math.abs(length - songLength()) <= 3 ? "follow" : "own";
+			if (role === "own") takeOver();
+			else follow(true);
+		};
+
+		const onState = (value: number) => {
+			if (value === state) return;
+			if (value === 1 && seekedAt) {
+				lead = Math.min(3, Math.max(0.3, (performance.now() - seekedAt) / 1000));
+				seekedAt = 0;
+			}
+			state = value;
+			lastToggle = -Infinity;
+			if (isOn(value)) setStarted(true);
+			if (role !== "own") return;
+			if (value === 0) {
+				if (!store.getState().loop) return next();
+				owner.seek(0);
+				owner.play();
+			} else if (value === 1 || value === 2) store.getState().setIsPlaying(value === 1);
+		};
+
+		const onMessage = (e: MessageEvent) => {
+			if (e.source !== frame.contentWindow || e.origin !== YT_ORIGIN) return;
+			let data: { event?: string; info?: unknown };
+			try {
+				data = typeof e.data === "string" ? JSON.parse(e.data) : e.data;
+			} catch {
+				return;
+			}
+			if (!ready) {
+				ready = true;
+				window.clearInterval(greeting);
+				// Like YouTube's own API: state changes and errors are only reported once asked for.
+				send("addEventListener", "onStateChange");
+				send("addEventListener", "onError");
+			}
+			if (data.event === "onError") return onUnplayableRef.current();
+			if (data.event === "onStateChange" && typeof data.info === "number") onState(data.info);
+			if ((data.event === "infoDelivery" || data.event === "initialDelivery") && data.info && typeof data.info === "object") {
+				const info = data.info as YouTubeInfo;
+				if (typeof info.duration === "number" && info.duration > 0) {
+					length = info.duration;
+					if (role === "own" && store.getState().duration !== length) store.getState().setDuration(length);
+				}
+				if (typeof info.currentTime === "number") {
+					time = info.currentTime;
+					timeAt = performance.now();
+					if (role === "own") store.getState().setCurrentTime(time);
+				}
+				if (typeof info.playerState === "number") onState(info.playerState);
+			}
+			decide();
+			follow();
+		};
+
+		// The embed only reports to a page that says it's listening; repeat until it answers.
+		let greeting = 0;
+		const greet = () => frame.contentWindow?.postMessage(JSON.stringify({ event: "listening", id: 1, channel: "widget" }), YT_ORIGIN);
+		const onLoad = () => {
+			window.clearInterval(greeting);
+			greet();
+			greeting = window.setInterval(greet, 250);
+		};
+		// Something started the song itself (a retry, media keys): the video still has the floor.
+		const onSongPlay = () => {
+			if (role !== "own") return follow();
+			audio?.pause();
+			owner.play();
+		};
+		const onSongSeeked = () => follow(true);
+		const onSongPause = () => follow();
+		// The embed goes quiet while paused: keep checking the two stay together.
+		const watch = window.setInterval(follow, 500);
+		frame.addEventListener("load", onLoad);
+		window.addEventListener("message", onMessage);
+		audio?.addEventListener("play", onSongPlay);
+		audio?.addEventListener("pause", onSongPause);
+		audio?.addEventListener("seeked", onSongSeeked);
+		audio?.addEventListener("loadedmetadata", decide);
+		const unsubscribe = store.subscribe((now, before) => {
+			if (role === "own" && (now.volume !== before.volume || now.muted !== before.muted)) applyVolume();
+		});
+
+		return () => {
+			window.clearInterval(greeting);
+			window.clearInterval(watch);
+			frame.removeEventListener("load", onLoad);
+			window.removeEventListener("message", onMessage);
+			audio?.removeEventListener("play", onSongPlay);
+			audio?.removeEventListener("pause", onSongPause);
+			audio?.removeEventListener("seeked", onSongSeeked);
+			audio?.removeEventListener("loadedmetadata", decide);
+			unsubscribe();
+			if (role !== "own") return;
+			setPlaybackOwner(null);
+			// On to another song: it starts by itself.
+			if (!audio || useMusicStore.getState().currentTrack?.id !== trackId) return;
+			const total = songLength();
+			if (total && length) audio.currentTime = Math.max(0, Math.min((time / length) * total, total - 1));
+			store.setState({ duration: total || store.getState().duration, currentTime: audio.currentTime });
+			if (isOn(state)) void play();
+		};
+	}, [trackId, videoId, seconds]);
+
+	const params = new URLSearchParams({ enablejsapi: "1", origin: location.origin, controls: "0", disablekb: "1", fs: "0", iv_load_policy: "3", playsinline: "1", rel: "0", mute: "1" });
+	return (
+		<div data-np="cover" className={`relative overflow-hidden rounded-3xl bg-black shadow-[0_10px_40px_0px_#00000090] ${className ?? ""}`}>
+			<iframe
+				ref={frameRef}
+				src={`${YT_ORIGIN}/embed/${videoId}?${params}`}
+				title={`${track.title} music video`}
+				allow="autoplay; encrypted-media; picture-in-picture"
+				// YouTube refuses to play embeds that send no referrer.
+				referrerPolicy="strict-origin-when-cross-origin"
+				tabIndex={-1}
+				className="absolute inset-0 size-full pointer-events-none"
+			/>
+			<VideoPoster track={track} className={`duration-700 ${started ? "opacity-0" : "opacity-100"}`} />
+		</div>
+	);
+};
+
+/** Shown over the video until it starts (and while the lookup runs): the blurred cover with a spinner. */
+const VideoPoster = ({ track, className }: { track: Track; className?: string }) => (
+	<div className={`absolute inset-0 flex items-center justify-center pointer-events-none ${className ?? ""}`}>
+		{track.cover && <img src={track.cover} alt="" className="absolute inset-0 size-full object-cover scale-110 blur-2xl opacity-80" />}
+		<div className="relative size-9 rounded-full border-3 border-[#ffffff40] border-t-white animate-spin" />
+	</div>
+);
+
+/** The Now Playing tab's icon: the song's cover. */
+export const NowPlayingTabIcon = ({ cover }: { cover: string }) => <img src={cover} alt="" className="size-5 shrink-0 rounded object-cover" />;
+
 export const MusicPlayer = ({ query, className, onClose }: MusicPlayerProps) => {
 	const settings = useSettingsStore(state => state.settings);
 	const currentTrack = useMusicStore(state => state.currentTrack);
@@ -422,8 +777,11 @@ export const MusicPlayer = ({ query, className, onClose }: MusicPlayerProps) => 
 	const dark = settings.brightness !== "light";
 	const releaseYear = useReleaseYear(currentTrack);
 	const failed = usePlaybackStore(state => !!currentTrack && state.failedTrackId === currentTrack.id);
+	const video = useMusicVideo(currentTrack);
 
 	const [mode, setMode] = useState<PlayerMode>(parsePlayerMode(query));
+	const rootRef = useRef<HTMLDivElement>(null);
+	const transitionId = useRef(0);
 	const [lastQuery, setLastQuery] = useState(query);
 	if (query !== lastQuery) {
 		setLastQuery(query);
@@ -432,11 +790,31 @@ export const MusicPlayer = ({ query, className, onClose }: MusicPlayerProps) => 
 
 	const changeMode = (nextMode: PlayerMode) => {
 		const target = nextMode === mode ? "cover" : nextMode;
-		setMode(target);
-		const { tabs, updateTab } = useTabsStore.getState();
-		const tab = tabs.find(t => t.current);
-		if (tab) updateTab(tab.id, { url: playerUrl(target), displayUrl: playerUrl(target) });
+		const apply = () => {
+			setMode(target);
+			const { tabs, updateTab } = useTabsStore.getState();
+			const tab = tabs.find(t => t.current);
+			if (tab) updateTab(tab.id, { url: playerUrl(target), displayUrl: playerUrl(target) });
+		};
+		const root = rootRef.current;
+		if (!root || target === mode || !document.startViewTransition || matchMedia("(prefers-reduced-motion: reduce)").matches) return apply();
+		// The transition names live behind .np-vt (see index.css) so only this player animates, even with others mounted.
+		const id = ++transitionId.current;
+		root.classList.add("np-vt");
+		const transition = document.startViewTransition(() => flushSync(apply));
+		// Skipped transitions (another view switch, a hidden tab) reject these; the view still changes.
+		transition.ready.catch(() => {});
+		transition.finished.finally(() => {
+			if (transitionId.current === id) root.classList.remove("np-vt");
+		});
 	};
+
+	// The Now Playing tab shows the song: its title and cover.
+	useEffect(() => {
+		const { tabs, updateTab } = useTabsStore.getState();
+		const icon = currentTrack?.cover ? <NowPlayingTabIcon cover={currentTrack.cover} /> : <MusicalNoteIcon className="size-5" />;
+		for (const tab of tabs) if (isPlayerUrl(tab.url)) updateTab(tab.id, { title: nowPlayingTitle(), icon });
+	}, [currentTrack?.title, currentTrack?.cover]);
 
 	const closePlayer = () => {
 		if (onClose) return onClose();
@@ -446,21 +824,24 @@ export const MusicPlayer = ({ query, className, onClose }: MusicPlayerProps) => 
 	};
 
 	const showVisualizer = settings["big-player-visualizer"] === true && settings["disable-visualizers"] !== true;
-	const sidePanel = mode !== "cover";
+	// Video mode shows the cover for songs without a music video.
+	const shown: PlayerMode = mode === "video" && !video.videoId && !video.loading ? "cover" : mode;
+	const sidePanel = shown !== "cover" && shown !== "video";
 	const glass = dark ? "bg-[#ffffff1f] backdrop-blur-xl" : "bg-[#0000000f] backdrop-blur-xl";
 	const iconButton = "flex items-center justify-center p-2 rounded-full text-(--text-primary) opacity-85 hover:opacity-100 hover:bg-[#ffffff15] cursor-pointer duration-150";
 	const transportButton = "flex items-center justify-center text-(--accent) drop-shadow-[0_2px_10px_#00000040] cursor-pointer hover:scale-110 active:scale-95 duration-150";
 	const segment = (on: boolean) =>
-		`flex items-center justify-center size-9 @lg:size-10 rounded-full cursor-pointer duration-150 ${
-			on ? `text-(--text-primary) ${dark ? "bg-[#ffffff2b] shadow-[inset_0_0_0_1px_#ffffff4d,0_2px_8px_#00000030]" : "bg-[#ffffffb0] shadow-[inset_0_0_0_1px_#00000014,0_2px_8px_#00000018]"}` : "text-(--text-secondary) hover:text-(--text-primary)"
+		`flex items-center justify-center size-9 @lg:size-10 rounded-full cursor-pointer duration-150 disabled:opacity-35 disabled:cursor-default ${
+			on ? `text-(--text-primary) ${dark ? "bg-[#ffffff2b] shadow-[inset_0_0_0_1px_#ffffff4d,0_2px_8px_#00000030]" : "bg-[#ffffffb0] shadow-[inset_0_0_0_1px_#00000014,0_2px_8px_#00000018]"}` : "text-(--text-secondary) enabled:hover:text-(--text-primary)"
 		}`;
+	const roundButton = `flex items-center justify-center size-9 rounded-full text-(--text-secondary) hover:text-(--text-primary) cursor-pointer duration-150 ${glass}`;
 	const linkable = isLinkable(currentTrack);
 	const openLibrary = () => (onClose ? onClose() : void import("../../libs/aboutPages").then(m => m.openLibraryPage("")));
 
 	const trackInfo = (track: Track, align: "center" | "left") => {
 		const album = track.album && !/^unknown/i.test(track.album) ? cleanAlbumTitle(track.album) : null;
 		return (
-			<div className={`flex min-w-0 flex-col ${align === "center" ? "items-center text-center" : "items-start text-left"}`}>
+			<div data-np="info" className={`flex w-fit max-w-full min-w-0 flex-col ${align === "center" ? "mx-auto items-center text-center" : "items-start text-left"}`}>
 				<h1 className={`max-w-full text-3xl @lg:text-4xl font-bold leading-tight line-clamp-2 ${linkable ? "cursor-pointer hover:underline" : ""}`} title={linkable ? `Go to ${track.album || "album"}` : track.title} onClick={linkable ? () => openTrackAlbum(track) : undefined}>
 					{track.title}
 				</h1>
@@ -501,7 +882,7 @@ export const MusicPlayer = ({ query, className, onClose }: MusicPlayerProps) => 
 	};
 
 	return (
-		<div className={`${className ?? ""} @container overflow-hidden`}>
+		<div ref={rootRef} className={`${className ?? ""} @container overflow-hidden`}>
 			{currentTrack?.cover && <img src={currentTrack.cover} alt="" aria-hidden className="absolute inset-0 size-full object-cover scale-125 blur-3xl opacity-50 saturate-150 pointer-events-none" />}
 			<div className={`absolute inset-0 pointer-events-none ${dark ? "bg-[#00000060]" : "bg-[#ffffff60]"}`} />
 
@@ -519,17 +900,21 @@ export const MusicPlayer = ({ query, className, onClose }: MusicPlayerProps) => 
 					</nav>
 					<div className="ml-auto flex shrink-0 items-center gap-2 @lg:gap-3">
 						<div className={`flex items-center gap-0.5 p-1 rounded-full ${glass}`} role="group" aria-label="Player view">
-							<button title="Queue" aria-pressed={mode === "queue"} className={segment(mode === "queue")} onClick={() => changeMode("queue")}>
-								<QueueListIcon className="size-5" />
+							<button title={video.videoId ? "Music video" : video.loading ? "Looking for a music video…" : "No music video for this song"} aria-pressed={shown === "video"} disabled={!video.videoId && shown !== "video"} className={segment(shown === "video")} onClick={() => changeMode("video")}>
+								<FilmIcon className="size-5" />
 							</button>
-							<button title="Cover only" aria-pressed={mode === "cover"} className={segment(mode === "cover")} onClick={() => changeMode("cover")}>
+							<button title="Cover only" aria-pressed={shown === "cover"} className={segment(shown === "cover")} onClick={() => changeMode("cover")}>
 								<PhotoIcon className="size-5" />
 							</button>
-							<button title="Lyrics" aria-pressed={mode === "lyrics"} className={segment(mode === "lyrics")} onClick={() => changeMode("lyrics")}>
+							<button title="Queue" aria-pressed={shown === "queue"} className={segment(shown === "queue")} onClick={() => changeMode("queue")}>
+								<QueueListIcon className="size-5" />
+							</button>
+							<button title="Lyrics" aria-pressed={shown === "lyrics"} className={segment(shown === "lyrics")} onClick={() => changeMode("lyrics")}>
 								<ChatBubbleBottomCenterTextIcon className="size-5" />
 							</button>
 						</div>
-						<button title={onClose ? "Back to browsing (side panel player)" : "Close player (back to side panel)"} className={`flex items-center justify-center size-9 rounded-full text-(--text-secondary) hover:text-(--text-primary) cursor-pointer duration-150 ${glass}`} onClick={closePlayer}>
+						<EqControl dark={dark} buttonClassName={roundButton} />
+						<button title={onClose ? "Back to browsing (side panel player)" : "Close player (back to side panel)"} className={roundButton} onClick={closePlayer}>
 							<ArrowsPointingInIcon className="size-5" />
 						</button>
 					</div>
@@ -551,7 +936,7 @@ export const MusicPlayer = ({ query, className, onClose }: MusicPlayerProps) => 
 								<div className="flex shrink-0 items-center gap-4 @3xl:min-h-0 @3xl:w-[min(34%,22rem)] @3xl:flex-col @3xl:items-stretch @3xl:gap-5">
 									{/* Sized to the free space (container query units) so the cover stays square and the info below always fits. */}
 									<div className="@container-size relative shrink-0 size-24 @lg:size-28 @3xl:h-auto @3xl:w-full @3xl:flex-1 @3xl:min-h-24 @3xl:max-h-[min(calc(0.34*(100cqw_-_6rem)),22rem)]">
-										<Cover track={currentTrack} className={`size-[min(100cqw,100cqh)] rounded-xl @3xl:rounded-3xl shadow-[0_10px_40px_0px_#00000090] duration-300 ${isPlaying ? "scale-100" : "scale-95"}`} />
+										<Cover track={currentTrack} vt="cover" className={`size-[min(100cqw,100cqh)] rounded-xl @3xl:rounded-3xl shadow-[0_10px_40px_0px_#00000090] duration-300 ${isPlaying ? "scale-100" : "scale-95"}`} />
 										{showVisualizer && (
 											<div className="hidden @3xl:block absolute top-[calc(min(100cqw,100cqh)-3.5rem)] left-[min(50cqw,50cqh)] -translate-x-1/2 pointer-events-none drop-shadow-xl">
 												<AudvisVisualizer analyser={analyser} isPlaying={isPlaying} width={180} height={36} color={dark ? "#FFFFFF" : "#000000"} opacity={0.85} />
@@ -560,16 +945,26 @@ export const MusicPlayer = ({ query, className, onClose }: MusicPlayerProps) => 
 									</div>
 									{trackInfo(currentTrack, "left")}
 								</div>
-								<div className={`flex-1 min-h-72 @3xl:min-h-0 rounded-3xl border ${dark ? "border-[#ffffff40] bg-[#ffffff12]" : "border-[#00000020] bg-[#ffffff40]"} backdrop-blur-sm overflow-hidden`}>
+								<div data-np="panel" className={`flex-1 min-h-72 @3xl:min-h-0 rounded-3xl border ${dark ? "border-[#ffffff40] bg-[#ffffff12]" : "border-[#00000020] bg-[#ffffff40]"} backdrop-blur-sm overflow-hidden`}>
 									{mode === "lyrics" ? <LyricsPanel track={currentTrack} /> : mode === "credits" ? <CreditsPanel track={currentTrack} /> : <QueuePanel />}
 								</div>
 							</div>
 						) : (
 							<div className="flex flex-1 min-h-0 flex-col items-center justify-center-safe gap-4 @lg:gap-5 overflow-y-auto px-4 @lg:px-8 pt-4">
-								{/* The cover shrinks with the free height so the info and controls always fit. */}
+								{/* The cover (or video) shrinks with the free height so the info and controls always fit. */}
 								<div className="@container-size relative flex w-full flex-1 min-h-40 max-h-[30rem] items-end justify-center">
-									<Cover track={currentTrack} className={`size-[min(85cqw,100cqh)] rounded-3xl shadow-[0_10px_40px_0px_#00000090] duration-300 ${isPlaying ? "scale-100" : "scale-95"}`} />
-									{showVisualizer && (
+									{shown === "video" ? (
+										video.videoId ? (
+											<MusicVideo key={`${currentTrack.id}:${video.videoId}`} track={currentTrack} videoId={video.videoId} seconds={video.seconds} onUnplayable={() => video.videoId && video.markUnplayable(video.videoId)} className="aspect-video w-[min(100cqw,calc(100cqh*16/9))]" />
+										) : (
+											<div data-np="cover" className="relative aspect-video w-[min(100cqw,calc(100cqh*16/9))] overflow-hidden rounded-3xl bg-black shadow-[0_10px_40px_0px_#00000090]">
+												<VideoPoster track={currentTrack} />
+											</div>
+										)
+									) : (
+										<Cover track={currentTrack} vt="cover" className={`size-[min(85cqw,100cqh)] rounded-3xl shadow-[0_10px_40px_0px_#00000090] duration-300 ${isPlaying ? "scale-100" : "scale-95"}`} />
+									)}
+									{showVisualizer && shown !== "video" && (
 										<div className="absolute bottom-4 left-1/2 -translate-x-1/2 pointer-events-none drop-shadow-xl">
 											<AudvisVisualizer analyser={analyser} isPlaying={isPlaying} width={220} height={40} color={dark ? "#FFFFFF" : "#000000"} opacity={0.85} />
 										</div>
@@ -593,7 +988,7 @@ export const MusicPlayer = ({ query, className, onClose }: MusicPlayerProps) => 
 											<BackwardIcon className="size-9 @lg:size-10" />
 										</button>
 										<button title={isPlaying ? "Pause" : "Play"} className={transportButton} onClick={() => void togglePlay()}>
-											{isPlaying ? <PauseIcon className="size-11 @lg:size-13" /> : <PlayIcon className="size-11 @lg:size-13 translate-x-0.5" />}
+											{isPlaying ? <PauseIcon className="size-11 @lg:size-13 overflow-visible stroke-current stroke-2 [stroke-linejoin:round] [&_path]:[vector-effect:non-scaling-stroke]" /> : <PlayIcon className="size-11 @lg:size-13 translate-x-0.5" />}
 										</button>
 										<button title="Next" className={transportButton} onClick={next}>
 											<ForwardIcon className="size-9 @lg:size-10" />

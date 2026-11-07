@@ -5,7 +5,7 @@ import { ArrowsPointingOutIcon, ChatBubbleBottomCenterTextIcon } from "@heroicon
 import { useMusicStore, usePlaybackStore, useSettingsStore } from "../store";
 import { ContextMenu, type MenuItem } from "../components/ContextMenu";
 import { AudvisVisualizer } from "../components/AudvisVisualizer";
-import { openMusicPlayer, registerAudio } from "../libs/playback";
+import { openMusicPlayer, previous, registerAudio, seek, togglePlay } from "../libs/playback";
 import { openLibraryPage } from "../libs/aboutPages";
 import { isLinkable, openTrackAlbum, openTrackArtist } from "../libs/trackLinks";
 import { PlayCount } from "../components/PlayCount";
@@ -34,7 +34,6 @@ export const QuickPlayer = ({ panelsOpen, className, onOpenPanels }: QuickPlayer
 	const addTrack = useMusicStore(state => state.addTrack);
 	const removeTrack = useMusicStore(state => state.removeTrack);
 	const playNext = useMusicStore(state => state.playNext);
-	const playPrev = useMusicStore(state => state.playPrev);
 	const reorderQueue = useMusicStore(state => state.reorderQueue);
 	const playerView = useMusicStore(state => state.playerView);
 	const changeView = useMusicStore(state => state.changeView);
@@ -89,9 +88,12 @@ export const QuickPlayer = ({ panelsOpen, className, onOpenPanels }: QuickPlayer
 
 	// Audio EQ state
 	const [showEQ, setShowEQ] = useState(false);
-	const [eqBass, setEqBass] = useState(0);
-	const [eqMid, setEqMid] = useState(0);
-	const [eqTreble, setEqTreble] = useState(0);
+	const eqBass = usePlaybackStore(state => state.eqBass);
+	const eqMid = usePlaybackStore(state => state.eqMid);
+	const eqTreble = usePlaybackStore(state => state.eqTreble);
+	const setEqBass = usePlaybackStore(state => state.setEqBass);
+	const setEqMid = usePlaybackStore(state => state.setEqMid);
+	const setEqTreble = usePlaybackStore(state => state.setEqTreble);
 	const controlsRef = useRef<HTMLDivElement>(null);
 	const audioContextRef = useRef<AudioContext | null>(null);
 	const sourceNodeRef = useRef<MediaElementAudioSourceNode | null>(null);
@@ -168,15 +170,6 @@ export const QuickPlayer = ({ panelsOpen, className, onOpenPanels }: QuickPlayer
 			}
 		}
 	}, [currentTrack]);
-
-	const resumeAndPlay = async () => {
-		if (!audioRef.current) return;
-		if (audioContextRef.current?.state === "suspended") {
-			await audioContextRef.current.resume();
-		}
-		await audioRef.current.play();
-		setIsPlaying(true);
-	};
 
 	useEffect(() => {
 		let detectedPlatform = "";
@@ -321,8 +314,7 @@ export const QuickPlayer = ({ panelsOpen, className, onOpenPanels }: QuickPlayer
 		const percent = Math.min(Math.max(clickX / rect.width, 0), 1);
 		const newTime = percent * duration;
 
-		audioRef.current.currentTime = newTime;
-		setCurrentTime(newTime);
+		seek(newTime);
 	};
 
 	const handleMouseDown = (e: React.MouseEvent) => {
@@ -893,34 +885,11 @@ export const QuickPlayer = ({ panelsOpen, className, onOpenPanels }: QuickPlayer
 												ref={playRef}
 												title={platform.includes("Mac") ? "Play ⌃ + P" : "Play: Alt + S"}
 												className="flex items-center justify-center p-2 hover:bg-[#ffffff10] text-(--text-secondary) hover:text-(--text-primary) rounded-lg cursor-pointer duration-150"
-												onClick={async () => {
-													if (audioRef.current?.paused) {
-														await resumeAndPlay();
-													} else {
-														audioRef.current?.pause();
-														setIsPlaying(false);
-													}
-												}}
+												onClick={() => void togglePlay()}
 											>
 												{isPlaying === false ? <PlayIcon className="size-5 text-current stroke-current stroke-0.5 pointer-events-none" /> : <PauseIcon className="size-5 text-current stroke-current stroke-0.5 pointer-events-none" />}
 											</button>
-											<button
-												title={platform.includes("Mac") ? "Previous Track ⌃ + ," : "Previous Track: Alt + ,"}
-												className="flex items-center justify-center p-2 hover:bg-[#ffffff10] text-(--text-secondary) hover:text-(--text-primary) rounded-lg cursor-pointer duration-150"
-												onClick={() => {
-													if (!audioRef.current) return;
-													if (audioRef.current.currentTime > 2.5) {
-														audioRef.current.currentTime = 0;
-														setCurrentTime(0);
-														return;
-													}
-													const didGoBack = playPrev();
-													if (!didGoBack) {
-														audioRef.current.currentTime = 0;
-														setCurrentTime(0);
-													}
-												}}
-											>
+											<button title={platform.includes("Mac") ? "Previous Track ⌃ + ," : "Previous Track: Alt + ,"} className="flex items-center justify-center p-2 hover:bg-[#ffffff10] text-(--text-secondary) hover:text-(--text-primary) rounded-lg cursor-pointer duration-150" onClick={previous}>
 												<BackwardIcon className="size-5 text-current pointer-events-none" />
 											</button>
 											<button
@@ -979,19 +948,7 @@ export const QuickPlayer = ({ panelsOpen, className, onOpenPanels }: QuickPlayer
 					) : (
 						<div className={"relative flex flex-col w-full items-center flex-1 min-h-0 overflow-auto gap-2 p-2.5 px-2.5 duration-200"}>
 							<div className="flex flex-col items-center justify-evenly h-full w-full">
-								<div
-									className="group relative flex items-center justify-center w-4/5 cursor-pointer"
-									onMouseEnter={() => setIsHoveringCover(true)}
-									onMouseLeave={() => setIsHoveringCover(false)}
-									onClick={async () => {
-										if (audioRef.current?.paused) {
-											await resumeAndPlay();
-										} else {
-											audioRef.current?.pause();
-											setIsPlaying(false);
-										}
-									}}
-								>
+								<div className="group relative flex items-center justify-center w-4/5 cursor-pointer" onMouseEnter={() => setIsHoveringCover(true)} onMouseLeave={() => setIsHoveringCover(false)} onClick={() => void togglePlay()}>
 									{currentTrack?.cover ? (
 										<img src={currentTrack.cover} alt={currentTrack.title} className="w-full aspect-square object-cover rounded-xl shadow-[0_0_20px_0px_#00000080]" />
 									) : (
@@ -1010,17 +967,7 @@ export const QuickPlayer = ({ panelsOpen, className, onOpenPanels }: QuickPlayer
 											style={{ filter: "drop-shadow(0px 0px 10px #000)" }}
 											onClick={e => {
 												e.stopPropagation();
-												if (!audioRef.current) return;
-												if (audioRef.current.currentTime > 2.5) {
-													audioRef.current.currentTime = 0;
-													setCurrentTime(0);
-													return;
-												}
-												const didGoBack = playPrev();
-												if (!didGoBack) {
-													audioRef.current.currentTime = 0;
-													setCurrentTime(0);
-												}
+												previous();
 											}}
 										>
 											<BackwardIcon className="size-12" />

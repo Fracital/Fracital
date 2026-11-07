@@ -139,3 +139,87 @@ export async function findYoutubeMatch(hints: MatchHints): Promise<string | null
 	const ranked = candidates.map(v => ({ v, s: score(v, hints) })).sort((a, b) => b.s - a.s);
 	return ranked[0].s > -20 ? ranked[0].v.videoId! : (candidates[0].videoId ?? null);
 }
+
+// --- Music videos (Now Playing's Video mode) ---
+
+const VIDEO_LABEL = /\b(official (music )?video|music video|official mv)\b/;
+// Uploads that are the song over still art, not a music video.
+const NOT_A_VIDEO = /\b(official audio|audio|lyrics?|lyric video|visuali[sz]er|full album|static)\b/;
+const FAN_MADE = /\b(un ?official|fan ?made|ai)\b/;
+const EXTRAS = /\b(behind the scenes|bts|making of|interview|trailer|dance practice|choreography|vertical)\b/;
+
+/** Higher is a better music-video match; below 70 isn't this song's video. Exported for tests. */
+export function scoreMusicVideo(v: Video, hints: MatchHints): number {
+	const title = norm(v.title ?? "");
+	const author = norm(v.author?.name ?? "");
+	const compact = (x: string) => x.replace(/ /g, "");
+	const song = norm(hints.title);
+	const wanted = (re: RegExp) => re.test(song);
+	const artists = hints.artist
+		.split(/,|&| feat\.? | ft\.? | x | and /i)
+		.map(norm)
+		.filter(a => a.length > 1);
+
+	const titleWords = words(v.title ?? "");
+	const songWords = song.split(" ").filter(w => w.length > 0 && !["feat", "ft", "with", "featuring"].includes(w));
+	const hit = songWords.filter(w => titleWords.has(w)).length / Math.max(1, songWords.length);
+	if (hit < 0.75) return -100;
+
+	const labeled = VIDEO_LABEL.test(title);
+	// "Artist - Topic" uploads are album art; unlabeled audio/lyric uploads aren't videos either.
+	if (author.endsWith(" topic") || (NOT_A_VIDEO.test(title) && !labeled && !wanted(NOT_A_VIDEO))) return -100;
+	if (FAN_MADE.test(title) && !wanted(FAN_MADE)) return -100;
+	const official = artists.some(a => [a, `${a} official`, `${compact(a)}vevo`].includes(author) || compact(author) === `${compact(a)}vevo`);
+	const vevo = author.includes("vevo");
+	const bare = bareTitle(v.title ?? "", artists);
+	const bareSong = bareTitle(hints.title, []);
+	// It has to say it's the video, or be on VEVO, or be the artist's upload titled exactly "Artist - Song".
+	// Their other unlabeled uploads are art tracks (titled just "Song"), sessions or tape versions.
+	const exact = artists.some(a => title.includes(a)) && artists.reduce((t, a) => ` ${t} `.replace(` ${a} `, " ").trim(), title) === song;
+	if (!labeled && !vevo && !(official && exact)) return -100;
+
+	let s = hit * 40;
+	if (bare === bareSong) s += 20;
+	else if (bare && bareSong && compact(bare) !== compact(bareSong)) {
+		const extra = [...words(bare)].filter(w => !words(hints.title).has(w) && !artists.some(a => a.split(" ").includes(w)));
+		s -= Math.min(30, extra.length * 10);
+	}
+	if (official) s += 40;
+	else if (vevo) s += 25;
+	else if (artists.some(a => compact(author).includes(compact(a)))) s += 10;
+	if (labeled) s += 30;
+	if (OFF_VERSION.test(title) && !wanted(OFF_VERSION)) s -= 50;
+	if (EXTRAS.test(title) && !wanted(EXTRAS)) s -= 60;
+	if (CLEAN.test(title) && !wanted(CLEAN)) s -= 10;
+	// Music videos run long with intros and outros, but not twice the song.
+	if (hints.duration && v.seconds && (v.seconds < hints.duration * 0.7 || v.seconds > hints.duration * 2 + 60)) s -= 40;
+	return s;
+}
+
+export interface MusicVideo {
+	videoId: string;
+	seconds: number | null;
+}
+
+const musicVideoCache = new Map<string, Promise<MusicVideo | null>>();
+
+/** The song's official music video on YouTube, or null when it doesn't seem to have one. Cached per song. */
+export function findMusicVideo(hints: Pick<MatchHints, "title" | "artist">): Promise<MusicVideo | null> {
+	const key = `${hints.artist}|${hints.title}`.toLowerCase();
+	let found = musicVideoCache.get(key);
+	if (!found) {
+		found = search(`${hints.artist} ${hints.title} official music video`).then(videos => {
+			// No results usually means the search failed: don't remember it, so the next request retries.
+			if (!videos.length) musicVideoCache.delete(key);
+			const ranked = videos
+				.filter(v => v.videoId && videoIdPattern.test(v.videoId))
+				.map(v => ({ v, s: scoreMusicVideo(v, hints) }))
+				.sort((a, b) => b.s - a.s);
+			const top = ranked[0];
+			return top && top.s >= 70 ? { videoId: top.v.videoId!, seconds: top.v.seconds ?? null } : null;
+		});
+		if (musicVideoCache.size >= 2000) musicVideoCache.delete(musicVideoCache.keys().next().value!);
+		musicVideoCache.set(key, found);
+	}
+	return found;
+}

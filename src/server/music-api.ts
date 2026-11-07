@@ -7,7 +7,7 @@ import { getRequestListener } from "@hono/node-server";
 import { getAccountsApp, initAccounts } from "./accounts";
 import { artistExtras } from "./artist-extras";
 import { albumInfo, songCredits, songInfo } from "./song-info";
-import { findYoutubeMatch, isExplicitEdition, playbackHints } from "./youtube-match";
+import { findMusicVideo, findYoutubeMatch, isExplicitEdition, playbackHints } from "./youtube-match";
 import { upstreamRange } from "./stream-range";
 import type { SimilarArtist } from "./music-radio";
 
@@ -459,6 +459,18 @@ function registerMusicApi(server: { middlewares: ViteDevServer["middlewares"] },
 		const credits = await songCredits(title, artist);
 		res.setHeader("Cache-Control", credits.partial ? "no-store" : "public, max-age=3600");
 		sendJson(res, 200, credits);
+	});
+
+	// Now Playing's Video mode: the song's official music video (a YouTube id to embed), if it has one.
+	server.middlewares.use(`${apiBase}/music-video`, async (req, res) => {
+		if (req.method !== "GET") return sendJson(res, 405, { error: "Method not allowed" });
+		const q = parseUrl(req.url).searchParams;
+		const title = q.get("title")?.trim();
+		const artist = q.get("artist")?.trim();
+		if (!title || !artist) return sendJson(res, 400, { error: "title and artist are required" });
+		const video = await findMusicVideo({ title, artist });
+		res.setHeader("Cache-Control", "public, max-age=3600");
+		sendJson(res, 200, { videoId: video?.videoId ?? null, seconds: video?.seconds ?? null });
 	});
 
 	// A song's total YouTube streams across its official uploads.
