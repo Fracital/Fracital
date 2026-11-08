@@ -10,6 +10,8 @@ import { hostOf, useStompStore, type StompFrame, type StompNavigateInfo } from "
 // and the tab follow.
 interface StompSiteProps {
 	url: string | undefined;
+	// Bumped by the store for every navigation the user asks for, so the same url again still runs a go().
+	navNonce?: number;
 	className?: string;
 	current?: boolean;
 	id: string;
@@ -25,10 +27,11 @@ const iconFor = (info: StompNavigateInfo): string | null => {
 	}
 };
 
-const StompSite = ({ url, className, current, id }: StompSiteProps) => {
+const StompSite = ({ url, navNonce, className, current, id }: StompSiteProps) => {
 	const frameRef = useRef<HTMLIFrameElement>(null);
 	const stFrameRef = useRef<StompFrame | null>(null);
-	const navigatedUrlRef = useRef<string | undefined>(undefined);
+	// The last navigation request run (nonce and url), not the page's current URL.
+	const navigatedRef = useRef<string | undefined>(undefined);
 	const updateTab = useTabsStore(state => state.updateTab);
 	const controller = useStompStore(state => state.controller);
 
@@ -37,19 +40,23 @@ const StompSite = ({ url, className, current, id }: StompSiteProps) => {
 		if (!iframe || !controller) return null;
 		if (stFrameRef.current?.element !== iframe) {
 			stFrameRef.current = controller.createFrame(iframe);
-			navigatedUrlRef.current = undefined;
+			navigatedRef.current = undefined;
 		}
 		return stFrameRef.current;
 	}, [controller]);
 
+	// One go() per navigation request. Page-made navigations only update the
+	// display (handleNavigate below) and leave url and navNonce alone, so asking
+	// for the url the tab was last sent to, or the page's own URL, still goes.
 	useEffect(() => {
 		if (url === undefined) return;
 		const frame = getFrame();
+		const request = `${navNonce ?? 0} ${url}`;
 		// StrictMode re-runs effects; skip the duplicate go() so the first load isn't aborted.
-		if (!frame || navigatedUrlRef.current === url) return;
-		navigatedUrlRef.current = url;
+		if (!frame || navigatedRef.current === request) return;
+		navigatedRef.current = request;
 		frame.go(url).catch(error => console.warn("stomp navigation failed:", url, error));
-	}, [url, getFrame]);
+	}, [url, navNonce, getFrame]);
 
 	useEffect(() => {
 		const frame = getFrame();

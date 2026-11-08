@@ -274,7 +274,8 @@ const App = () => {
 		const handler = (e: Event) => {
 			const detail = (e as CustomEvent<detailProps>).detail;
 
-			updateTab(detail.id, {
+			// Every navigate event is one the user asked for: bump the tab's navNonce so a stomp tab runs it even when url is unchanged.
+			useTabsStore.getState().navigateTab(detail.id, {
 				url: detail.url,
 				title: detail.title,
 				icon: detail.icon,
@@ -528,6 +529,7 @@ const App = () => {
 												current={currentTab?.id === item.id}
 												key={`st-${item.id}`}
 												url={item.url}
+												navNonce={item.navNonce}
 												className={
 													"absolute inset-0" +
 													" " +

@@ -17,6 +17,13 @@ export const usePanelsStore = create<{
 	setPanelsOpen: (open: boolean) => set({ panelsOpen: open }),
 }));
 
+const normalizeTabChanges = (rawChanges: Partial<TabProps>): Partial<TabProps> => {
+	const changes = { ...rawChanges };
+	if ("url" in changes) changes.url = normalizeAboutUrl(changes.url);
+	if ("displayUrl" in changes) changes.displayUrl = normalizeAboutUrl(changes.displayUrl);
+	return changes;
+};
+
 const baseId = createId();
 export const useTabsStore = create<{
 	tabs: TabProps[];
@@ -26,6 +33,7 @@ export const useTabsStore = create<{
 	newTab: (props: TabProps) => void;
 	closeTab: (id: string) => void;
 	updateTab: (id: string, changes: Partial<TabProps>) => void;
+	navigateTab: (id: string, changes: Partial<TabProps>) => void;
 	refreshTab: (id: string) => void;
 	getHistory: (id: string) => { url: string; title: string; icon?: string; displayUrl?: string }[] | null;
 	setHistory: (id: string, history: { url: string; title: string; icon?: string; displayUrl?: string }[]) => void;
@@ -93,11 +101,19 @@ export const useTabsStore = create<{
 		});
 	},
 	updateTab: (id: string, rawChanges: Partial<TabProps>) => {
-		const changes = { ...rawChanges };
-		if ("url" in changes) changes.url = normalizeAboutUrl(changes.url);
-		if ("displayUrl" in changes) changes.displayUrl = normalizeAboutUrl(changes.displayUrl);
+		const changes = normalizeTabChanges(rawChanges);
 		set(state => ({
 			tabs: state.tabs.map(tab => (tab.id === id ? { ...tab, ...changes } : tab)),
+		}));
+	},
+	// A navigation the user asked for (address bar, quick link, back/forward):
+	// the same writes as updateTab plus a new navNonce, so a proxied tab runs it
+	// even when `url` is unchanged (the page moved itself elsewhere since, or
+	// this is the same URL again). Page-made navigations use updateTab.
+	navigateTab: (id: string, rawChanges: Partial<TabProps>) => {
+		const changes = normalizeTabChanges(rawChanges);
+		set(state => ({
+			tabs: state.tabs.map(tab => (tab.id === id ? { ...tab, ...changes, navNonce: (tab.navNonce ?? 0) + 1 } : tab)),
 		}));
 	},
 	refreshTab: (id: string) =>

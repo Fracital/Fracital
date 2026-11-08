@@ -8,8 +8,10 @@
  * engine's), the host page being controlled by Fracital's own root service
  * worker before stomp boots (the live site always is; stomp once adopted that
  * worker on a revive and hung), the tab favicon from the page's navigate
- * report, the build string in the engine selector, and the controller id
- * surviving a reload.
+ * report, the build string in the engine selector, the address bar running
+ * every navigation asked of it (the url the tab was sent to after the page
+ * moved itself away, and the page's own url as a reload), and the controller
+ * id surviving a reload.
  *
  *   node scripts/stomp-check.mjs http://localhost:5173/
  */
@@ -167,6 +169,54 @@ let address = await addressBar().inputValue();
 check("example.com: address bar follows onNavigate", address === "https://example.com/", address);
 const bodyText = await (await engineFrame())?.evaluate(() => document.body?.innerText?.slice(0, 60));
 check("example.com: body rendered", (bodyText || "").length > 20, JSON.stringify(bodyText));
+
+// --- every navigation the user asks for runs, even to the url the tab was last sent to ---
+// The tab was sent to example.com; the page moves itself to example.org (the
+// store's url stays example.com, only the display follows). Submitting
+// example.com again must take the tab back there, and submitting the page's
+// own URL must reload it rather than do nothing.
+// The navigation runs as a script the page inserts, so it is page code the engine sees, not the test reaching in.
+await (await engineFrame())?.evaluate(() => {
+	const script = document.createElement("script");
+	script.textContent = 'location.href = "https://example.org/";';
+	document.body.appendChild(script);
+});
+info = await waitFor(
+	async () => {
+		const i = await frameInfo();
+		return i?.url?.startsWith("https://example.org") && i.title ? i : null;
+	},
+	"the page to navigate itself to example.org",
+	45000,
+).catch(() => null);
+address = await addressBar().inputValue();
+check("page-made navigation: tab follows to example.org", info?.url === "https://example.org/" && address === "https://example.org/", `${info?.url} / ${address}`);
+await go("https://example.com/");
+info = await waitFor(
+	async () => {
+		const i = await frameInfo();
+		return i?.url?.startsWith("https://example.com") && i.title ? i : null;
+	},
+	"example.com again after the page left it",
+	30000,
+).catch(() => null);
+address = await addressBar().inputValue();
+check("address bar: the url the tab was sent to runs again after the page moved", info?.url === "https://example.com/" && address === "https://example.com/", `${info?.url ?? (await frameInfo())?.url} / ${address}`);
+// Mark the live document, submit its own URL, and expect a fresh document (no marker).
+await (await engineFrame())?.evaluate(() => {
+	window.__renavMarker = 2;
+});
+await go("https://example.com/");
+const reloaded = await waitFor(
+	async () => {
+		const f = await engineFrame();
+		const state = await f?.evaluate(() => ({ marker: window.__renavMarker ?? null, title: document.title })).catch(() => null);
+		return state && state.marker === null && state.title === "Example Domain" ? state : null;
+	},
+	"the same url to load a fresh document",
+	30000,
+).catch(() => null);
+check("address bar: the page's own url reloads it", !!reloaded, JSON.stringify(reloaded));
 
 await go("https://en.wikipedia.org/wiki/Web_proxy");
 info = await waitFor(
