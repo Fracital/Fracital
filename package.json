@@ -46,7 +46,7 @@
 		"react": "^19.3.1",
 		"react-dom": "^19.3.1",
 		"react-router-dom": "^7.18.5",
-		"stomp-rewrite": "git+https://github.com/Fracital/powerMouse.git#a8b140fb28f7dde69db83f8427d1a4cb2433454d",
+		"stomp-rewrite": "git+https://github.com/Fracital/powerMouse.git#efca9d7f7de12ba2f75ae55b68599d6663641db6",
 		"svg-parser": "^2.1.0",
 		"tailwindcss": "^4.3.4",
 		"tsx": "^4.23.15",

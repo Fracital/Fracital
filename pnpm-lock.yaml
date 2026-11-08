@@ -102,8 +102,8 @@ importers:
         specifier: ^7.18.5
         version: 7.18.5(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
       stomp-rewrite:
-        specifier: git+https://github.com/Fracital/powerMouse.git#a8b140fb28f7dde69db83f8427d1a4cb2433454d
-        version: https://codeload.github.com/Fracital/powerMouse/tar.gz/a8b140fb28f7dde69db83f8427d1a4cb2433454d
+        specifier: git+https://github.com/Fracital/powerMouse.git#efca9d7f7de12ba2f75ae55b68599d6663641db6
+        version: https://codeload.github.com/Fracital/powerMouse/tar.gz/efca9d7f7de12ba2f75ae55b68599d6663641db6
       svg-parser:
         specifier: ^2.1.0
         version: 2.1.0
@@ -2230,8 +2230,8 @@ packages:
   state-local@1.0.7:
     resolution: {integrity: sha512-HTEHMNieakEnoe33shBYcZ7NX83ACUjCu8c40iOGEZsngj9zRnkqS9j1pqQPXwobB0ZcVTk27REb7COQ0UR59w==}
 
-  stomp-rewrite@https://codeload.github.com/Fracital/powerMouse/tar.gz/a8b140fb28f7dde69db83f8427d1a4cb2433454d:
-    resolution: {gitHosted: true, integrity: sha512-fERk2OvJLGIU+IougTE2H+HFQLI1PMIiqCBRecem4pYEr+foR0lgTpgruMjBHz+vf/BadDFUcRpBR2ukQfI22Q==, tarball: https://codeload.github.com/Fracital/powerMouse/tar.gz/a8b140fb28f7dde69db83f8427d1a4cb2433454d}
+  stomp-rewrite@https://codeload.github.com/Fracital/powerMouse/tar.gz/efca9d7f7de12ba2f75ae55b68599d6663641db6:
+    resolution: {gitHosted: true, integrity: sha512-O1f2mLVxnHA2a6LBY4S+V418TXJvxVybNp0/RbTv7lVOR3mvP76iaj6EJpMeL7m7zqK0doeP6ODmFJfmD4TPBg==, tarball: https://codeload.github.com/Fracital/powerMouse/tar.gz/efca9d7f7de12ba2f75ae55b68599d6663641db6}
     version: 4.2.0
     engines: {node: '>=22'}
 
@@ -4279,7 +4279,7 @@ snapshots:
 
   state-local@1.0.7: {}
 
-  stomp-rewrite@https://codeload.github.com/Fracital/powerMouse/tar.gz/a8b140fb28f7dde69db83f8427d1a4cb2433454d:
+  stomp-rewrite@https://codeload.github.com/Fracital/powerMouse/tar.gz/efca9d7f7de12ba2f75ae55b68599d6663641db6:
     dependencies:
       '@javascript-obfuscator/escodegen': 2.4.2
       '@mercuryworkshop/proxy-transports': 1.0.2
