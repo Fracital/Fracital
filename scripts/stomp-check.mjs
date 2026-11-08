@@ -247,6 +247,11 @@ const tabIcon = await waitFor(
 	20000,
 ).catch(() => null);
 check("wikipedia: tab shows the favicon", !!tabIcon, tabIcon ? tabIcon.slice(0, 60) : "no img in the tab");
+// The engine's rewrite workers (rw.js, vendor/rt) took scripts off the service
+// worker: the request log reports where each script it rewrote was rewritten.
+// Missing from the build, every script would say "service-worker".
+const rewrittenIn = await page.evaluate(() => (window.stompRequestLog || []).filter(r => r.rewriteIn).map(r => r.rewriteIn));
+check("scripts are rewritten by the rewrite workers", rewrittenIn.includes("pool"), `${rewrittenIn.filter(w => w === "pool").length} pool, ${rewrittenIn.filter(w => w !== "pool").length} service worker`);
 
 // --- the engine selector shows the controller's build ---
 const build = await page.evaluate(() => window.stompController?.build);
