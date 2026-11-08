@@ -37,6 +37,7 @@ const STOMP_ASSETS: Assets = {
 	injectDocument: "doc.js",
 	injectWorker: "wk.js",
 	transportWorker: "tw.js",
+	rewriteWorker: "rw.js",
 };
 const CONTROLLER_MODULE = `${STOMP_DIRECTORY}api.mjs`;
 /** The epoxy transport module (Fracital build), imported by stomp's transport worker, never by a page. */

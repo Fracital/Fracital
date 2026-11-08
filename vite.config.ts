@@ -23,6 +23,7 @@ const STOMP_FILES: [string, string][] = [
 	["injectDocument.js", "doc.js"],
 	["injectWorker.js", "wk.js"],
 	["transportWorker.js", "tw.js"],
+	["rewriteWorker.js", "rw.js"],
 	["controller.mjs", "api.mjs"],
 ];
 // Source maps are pruned from dist; drop the pointer so nothing references a
