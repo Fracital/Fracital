@@ -167,8 +167,17 @@ check("Last.fm auth page continued to its sign-in form (or answered its 503 for 
 if (authDoc?.unavailable) console.log("  note: Last.fm answered 503 Temporarily Unavailable (placeholder API key); the login form is checked on /login below");
 
 // --- the login form is not touched by the rule: GET /login and an empty POST ---
+// The tab is still on the /login?next= document the auth page sent it to, which
+// has the same title and form: mark every document there now, so the wait below
+// takes only the one this navigation loads (a form found on the old document
+// was submitted just before the navigation replaced it, and no POST was made).
+for (const f of engineFrames()) await f.evaluate(() => (window.__checkStale = true)).catch(() => undefined);
 await go("https://www.last.fm/login");
-const login = await waitFor(() => frameWhere(() => (document.title === "Login | Last.fm" && document.querySelector("form input[type=password]") ? { title: document.title, action: document.querySelector("form input[type=password]")?.form?.action } : null)), "the login form", 60000).catch(() => null);
+const login = await waitFor(
+	() => frameWhere(() => (!window.__checkStale && document.title === "Login | Last.fm" && document.readyState !== "loading" && document.querySelector("form input[type=password]") ? { title: document.title, action: document.querySelector("form input[type=password]")?.form?.action } : null)),
+	"the login form",
+	60000,
+).catch(() => null);
 check("login form renders through the proxy", !!login, JSON.stringify(login?.value));
 const loginGets = (await requestLog()).filter(r => isTabDocument(r) && /^https:\/\/www\.last\.fm\/login/.test(r.url));
 check("login page requests carry no rule", loginGets.length > 0 && loginGets.every(r => r.rule === null), loginGets.map(r => `${r.status} rule=${r.rule}`).join(", "));
