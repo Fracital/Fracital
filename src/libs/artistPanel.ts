@@ -228,6 +228,8 @@ export const admin = {
 	removeMember: (artistId: string, userId: string) => meFetch(`/api/admin/artists/${encodeURIComponent(artistId)}/members/${userId}`, { method: "DELETE" }),
 	users: (q: string) => meFetch<{ users: AdminUser[] }>(`/api/admin/users?q=${encodeURIComponent(q)}`),
 	updateUser: (id: string, change: { role?: "admin" | "user"; banned?: boolean; reason?: string; premium?: boolean }) => meFetch(`/api/admin/users/${id}`, { method: "POST", body: JSON.stringify(change) }),
+	/** Deletes the account and its data; the owner can download a copy for 30 days (the link is emailed when the account has an email). */
+	deleteUser: (id: string) => meFetch<{ download: string; expires: string; emailed: boolean }>(`/api/admin/users/${encodeURIComponent(id)}`, { method: "DELETE" }),
 };
 
 /** A per-browser anonymous id, so Fracital play stats can count unique listeners. */

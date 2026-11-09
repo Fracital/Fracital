@@ -45,26 +45,30 @@ export async function migratePresence(pool: Pool) {
 		error_at timestamptz,
 		updated_at timestamptz not null default now()
 	)`);
+	// "On Discord" (discord-bot.ts) on the account page; users can turn it off.
+	await pool.query("alter table fracital_discord_presence add column if not exists show_activity boolean not null default true");
 }
 
 export interface PresenceRow {
 	enabled: boolean;
+	/** Show what the user is doing on Discord on their account page. */
+	show_activity: boolean;
 	session_token: string;
 	error: string;
 	error_at: Date | null;
 }
 
 export async function readPresence(pool: Pool, userId: string): Promise<PresenceRow> {
-	const { rows } = await pool.query<PresenceRow>("select enabled, session_token, error, error_at from fracital_discord_presence where user_id = $1", [userId]);
-	return rows[0] ?? { enabled: true, session_token: "", error: "", error_at: null };
+	const { rows } = await pool.query<PresenceRow>("select enabled, show_activity, session_token, error, error_at from fracital_discord_presence where user_id = $1", [userId]);
+	return rows[0] ?? { enabled: true, show_activity: true, session_token: "", error: "", error_at: null };
 }
 
 export async function writePresence(pool: Pool, userId: string, patch: Partial<Omit<PresenceRow, "error_at">>) {
 	const row = { ...(await readPresence(pool, userId)), ...patch };
 	await pool.query(
-		`insert into fracital_discord_presence (user_id, enabled, session_token, error, error_at, updated_at) values ($1, $2, $3, $4, $5, now())
-		 on conflict (user_id) do update set enabled = excluded.enabled, session_token = excluded.session_token, error = excluded.error, error_at = excluded.error_at, updated_at = now()`,
-		[userId, row.enabled, row.session_token, row.error, patch.error === undefined ? row.error_at : patch.error ? new Date() : null],
+		`insert into fracital_discord_presence (user_id, enabled, show_activity, session_token, error, error_at, updated_at) values ($1, $2, $3, $4, $5, $6, now())
+		 on conflict (user_id) do update set enabled = excluded.enabled, show_activity = excluded.show_activity, session_token = excluded.session_token, error = excluded.error, error_at = excluded.error_at, updated_at = now()`,
+		[userId, row.enabled, row.show_activity, row.session_token, row.error, patch.error === undefined ? row.error_at : patch.error ? new Date() : null],
 	);
 }
 

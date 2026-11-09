@@ -343,6 +343,18 @@ export function cloakMiddleware(options: { distDir: string; cloaksDir?: string }
 	};
 }
 
+let decoyHostSet: Set<string> | null = null;
+
+/** Whether a Host header is one of the decoy sites (CLOAKS_DIR), where nothing may reveal the app. */
+export function isDecoyHost(rawHostHeader: string): boolean {
+	decoyHostSet ??= new Set(
+		discoverCloakSites()
+			.hosts.map(h => h.toLowerCase())
+			.filter(h => !directHosts.has(h)),
+	);
+	return decoyHostSet.has(hostnameOf(rawHostHeader));
+}
+
 export function isValidHostname(name: string): boolean {
 	if (!name || name.length > 253) return false;
 	if (name.startsWith(".") || name.endsWith(".") || name.startsWith("_")) return false;

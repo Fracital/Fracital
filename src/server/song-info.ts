@@ -1,6 +1,6 @@
 /**
- * Now Playing details: a song's release date (iTunes) and its credits — writers,
- * producers, engineers and musicians (MusicBrainz). Both keyless; cached a day.
+ * Now Playing details: release date (iTunes), optional Last.fm bio/stats, and
+ * credits — writers, producers, engineers and musicians (MusicBrainz).
  */
 import { musicbrainz } from "./artist-extras";
 
@@ -19,7 +19,15 @@ export interface SongCredits {
 	partial?: boolean;
 }
 
-const infoCache = new Map<string, { at: number; value: { releaseDate: string | null } }>();
+export interface SongInfo {
+	releaseDate: string | null;
+	bio: { summary: string; full: string; url: string | null } | null;
+	sourceUrl: string | null;
+	listeners: number | null;
+	playcount: number | null;
+}
+
+const infoCache = new Map<string, { at: number; value: SongInfo; ttl?: number }>();
 const creditsCache = new Map<string, { at: number; value: SongCredits; ttl?: number }>();
 
 const cached = <T>(map: Map<string, { at: number; value: T; ttl?: number }>, key: string) => {
@@ -43,27 +51,54 @@ async function itunes<T>(path: string): Promise<T | null> {
 }
 
 type ItunesResult = { wrapperType?: string; trackName?: string; artistName?: string; releaseDate?: string };
+type LfmTrack = {
+	track?: {
+		listeners?: string;
+		playcount?: string;
+		url?: string;
+		wiki?: { summary?: string; content?: string };
+	};
+};
 
-/** Release date of the song's album/single (falls back to a search by title + artist). */
-export async function songInfo(title: string, artist: string, albumId?: string): Promise<{ releaseDate: string | null }> {
+/** Song bio/stats and release date (falls back to a search by title + artist). */
+export async function songInfo(title: string, artist: string, albumId?: string): Promise<SongInfo> {
 	const key = `${albumId ?? ""}|${norm(artist)}|${norm(title)}`;
 	const hit = cached(infoCache, key);
 	if (hit) return hit;
 
-	let releaseDate: string | null = null;
-	if (albumId && /^\d+$/.test(albumId)) {
-		const r = await itunes<{ results?: ItunesResult[] }>(`lookup?id=${albumId}&country=US`);
-		releaseDate = r?.results?.find(x => x.releaseDate)?.releaseDate ?? null;
-	}
-	if (!releaseDate) {
-		const r = await itunes<{ results?: ItunesResult[] }>(`search?term=${encodeURIComponent(`${artist} ${title}`)}&entity=song&limit=10&country=US`);
-		const songs = r?.results?.filter(x => x.wrapperType === "track") ?? [];
-		const match = songs.find(x => norm(x.trackName ?? "") === norm(title) && norm(x.artistName ?? "").includes(norm(artist).slice(0, 12))) ?? songs.find(x => norm(x.trackName ?? "") === norm(title));
-		releaseDate = match?.releaseDate ?? null;
-	}
-
-	const value = { releaseDate };
-	infoCache.set(key, { at: Date.now(), value });
+	const releaseDateRequest = async () => {
+		let releaseDate: string | null = null;
+		if (albumId && /^\d+$/.test(albumId)) {
+			const r = await itunes<{ results?: ItunesResult[] }>(`lookup?id=${albumId}&country=US`);
+			releaseDate = r?.results?.find(x => x.releaseDate)?.releaseDate ?? null;
+		}
+		if (!releaseDate) {
+			const r = await itunes<{ results?: ItunesResult[] }>(`search?term=${encodeURIComponent(`${artist} ${title}`)}&entity=song&limit=10&country=US`);
+			const songs = r?.results?.filter(x => x.wrapperType === "track") ?? [];
+			const match = songs.find(x => norm(x.trackName ?? "") === norm(title) && norm(x.artistName ?? "").includes(norm(artist).slice(0, 12))) ?? songs.find(x => norm(x.trackName ?? "") === norm(title));
+			releaseDate = match?.releaseDate ?? null;
+		}
+		return releaseDate;
+	};
+	const trackInfoRequest = import("./lastfm")
+		.then(({ lastfmCall }) => lastfmCall<LfmTrack>({ method: "track.getInfo", artist, track: title, autocorrect: "1" }))
+		.catch(error => {
+			console.warn("Last.fm track info lookup failed:", error);
+			return null;
+		});
+	const [releaseDate, lfm] = await Promise.all([releaseDateRequest(), trackInfoRequest]);
+	const track = lfm?.track;
+	const full = cleanWiki(track?.wiki?.content);
+	const summary = cleanWiki(track?.wiki?.summary) || full.slice(0, 400);
+	const bioText = full || summary;
+	const value: SongInfo = {
+		releaseDate,
+		bio: bioText ? { summary: summary || bioText.slice(0, 400), full: bioText, url: track?.url ?? null } : null,
+		sourceUrl: track?.url ?? null,
+		listeners: Number(track?.listeners) || null,
+		playcount: Number(track?.playcount) || null,
+	};
+	infoCache.set(key, { at: Date.now(), value, ttl: track ? TTL : 2 * 60_000 });
 	return value;
 }
 

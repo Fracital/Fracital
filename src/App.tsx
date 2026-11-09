@@ -22,6 +22,7 @@ import { ResilientTransport } from "./libs/resilientTransport";
 import { useMusicStore, usePanelsStore, useSettingsStore, useTabsStore } from "./store";
 import { init, quickLinks } from "./libs/init";
 import { initTheme } from "./libs/theme";
+import { applyMotionSetting, MOTION_SETTING } from "./libs/motion";
 import { startGameSaveSync } from "./libs/gameSaves";
 import { View } from "./gui/View";
 import { SpinnerLoader } from "./components/SsrLoader";
@@ -175,9 +176,18 @@ const App = () => {
 	const currentTab = tabs.find(tab => tab.current === true);
 	const setCurrentTab = useTabsStore(state => state.setCurrentTab);
 	const panelsOpen = usePanelsStore(state => state.panelsOpen);
+	const tabsLeft = useSettingsStore(state => state.settings["tabs-position"] === "left");
+	/** How clicks inside the collapsed side panel open it: "anywhere", "except-tabs" (default) or "off". */
+	const panelClickOpen = useSettingsStore(state => (["anywhere", "except-tabs", "off"].includes(state.settings["panel-click-open"]) ? state.settings["panel-click-open"] : "except-tabs")) as "anywhere" | "except-tabs" | "off";
+	const rail = !panelsOpen && settings["compact-tabs"] === true;
+	const peek = !panelsOpen && settings["compact-tabs"] !== true;
+	// Rail containers use rounded-3xl, not rounded-full: on the 40px rail 24px is clamped to a full pill, and
+	// unlike rounded-full it animates smoothly from the open panel's rounded-2xl.
 	const playerView = useMusicStore(state => state.playerView);
-	// The side player stays mounted (it owns the <audio> element) but is hidden while the full player tab is focused.
+	// The side player stays mounted (it owns the <audio> element) but is hidden while the full player tab is
+	// focused, and while there's no song and nothing queued.
 	const playerTabOpen = isPlayerUrl(currentTab?.url);
+	const hasMusic = useMusicStore(state => !!state.currentTrack || state.queue.length > 0);
 
 	const newGroup = useTabsStore(state => state.newGroup);
 	const newTab = useTabsStore(state => state.newTab);
@@ -282,6 +292,10 @@ const App = () => {
 	}, [settings.theme]);
 
 	useEffect(() => {
+		applyMotionSetting(settings[MOTION_SETTING]);
+	}, [settings[MOTION_SETTING]]);
+
+	useEffect(() => {
 		const getSettings = async () => {
 			if (window.appReady) await window.appReady.catch(() => undefined);
 			try {
@@ -296,7 +310,7 @@ const App = () => {
 				setSettings("theme", "default");
 				setSettings("proxy", "sj");
 				setSettings("quicklinks", quickLinks);
-				setSettings("floating-tabs", false);
+				setSettings("compact-tabs", false);
 			}
 		};
 		getSettings();
@@ -495,10 +509,10 @@ const App = () => {
 
 	return (
 		<ModalProvider>
-			<div className="flex flex-col h-screen w-full gap-2.5 p-3 overflow-hidden">
+			<div className="relative flex flex-col h-screen w-full gap-2.5 p-3 overflow-hidden">
 				<Shell />
 				<div className="flex flex-col flex-1 min-h-0">
-					<div id="main" className="relative flex flex-1 min-h-0 gap-2.5">
+					<div id="main" className={`relative flex flex-1 min-h-0 gap-2.5 ${tabsLeft ? "flex-row-reverse" : ""}`}>
 						{/* Ad panel (hidden for premium accounts and on narrow windows) */}
 						<SideAd />
 						<div className={"relative flex-1 min-h-0 h-[calc(100%+2px)] bg-(--secondary) inset-shadow-(--inset-shadow-primary) rounded-2xl overflow-hidden"}>
@@ -617,23 +631,21 @@ const App = () => {
 						</div>
 						<div
 							className={
-								(settings["floating-tabs"] && "absolute py-2 h-full") +
-								" " +
-								"flex flex-col shrink-0 duration-150" +
+								"flex flex-col shrink-0 gap-2.5 duration-150" +
 								" " +
 								`
-                            ${settings["floating-tabs"] === true ? (panelsOpen ? "w-74 right-2" : "w-10 -right-1") : panelsOpen ? "w-78" : "w-10"}
-                            ${settings["floating-tabs"] ? "gap-2" : "gap-2.5"}
+                            ${panelsOpen ? "w-78" : "w-10"}
+                            ${peek && tabsLeft ? "items-end" : ""}
 						`
 							}
 						>
 							<div
 								className={
-									"flex w-full h-max p-1.5 py-2 gap-2 items-center justify-between bg-(--secondary) hover:bg-(--tertiary) inset-shadow-(--inset-shadow-primary) *:pointer-events-none cursor-pointer duration-150" +
+									"flex w-full h-max py-2 gap-2 items-center bg-(--secondary) hover:bg-(--tertiary) inset-shadow-(--inset-shadow-primary) *:pointer-events-none cursor-pointer duration-150" +
 									" " +
 									`
-                                ${settings["floating-tabs"] && panelsOpen ? "rounded-lg" : "rounded-xl"}
-                                ${settings["floating-tabs"] && panelsOpen ? "shadow-[0_0_16px_3px_#00000035]" : ""}
+                                ${panelsOpen ? "px-2.5 justify-between" : "px-2 justify-center"}
+                                ${rail ? "rounded-3xl" : "rounded-2xl"}
                             `
 								}
 								title={panelsOpen ? "Close Panels" : "Open Panels"}
@@ -641,19 +653,29 @@ const App = () => {
 									panelsOpen ? setPanelsOpen(false) : setPanelsOpen(true);
 								}}
 							>
-								<ChevronLeftIcon
-									className={
-										"size-6 stroke-2 stroke-current" +
-										" " +
-										`
+								{tabsLeft ? (
+									<>
+										{panelsOpen ? <ChevronLeftIcon className="size-6 stroke-2 stroke-current" /> : <ChevronRightIcon className="size-6 stroke-2 stroke-current" />}
+										{panelsOpen && <span className="font-semibold">Close Panels</span>}
+										{panelsOpen && <span className="size-6" />}
+									</>
+								) : (
+									<>
+										<ChevronLeftIcon
+											className={
+												"size-6 stroke-2 stroke-current" +
+												" " +
+												`
                                     ${panelsOpen ? "opacity-0" : "opacity-100"}
                                 `
-									}
-								/>
-								{panelsOpen && (
-									<>
-										<span className="font-semibold">Close Panels</span>
-										<ChevronRightIcon className="size-6 stroke-2 stroke-current" />
+											}
+										/>
+										{panelsOpen && (
+											<>
+												<span className="font-semibold">Close Panels</span>
+												<ChevronRightIcon className="size-6 stroke-2 stroke-current" />
+											</>
+										)}
 									</>
 								)}
 							</div>
@@ -664,17 +686,20 @@ const App = () => {
 									"flex flex-col flex-1 min-h-0 bg-(--secondary) inset-shadow-(--inset-shadow-primary) overflow-hidden duration-150" +
 									" " +
 									`
-                                ${panelsOpen ? "w-full" : "w-50"}
-                                ${settings["floating-tabs"] && panelsOpen ? "rounded-xl" : "rounded-2xl"}
-                                ${settings["floating-tabs"] && "shadow-[0_0_16px_3px_#00000035]"}
+                                ${peek ? "w-50" : "w-full"}
+                                ${rail ? "rounded-3xl" : "rounded-2xl"}
                             `
 								}
 								// Open on click (capture), not mousedown: widening on mousedown moved the button out from
-								// under the cursor before mouseup, so collapsed items (new tab, tabs…) never got their click.
-								onClickCapture={() => setPanelsOpen(true)}
+								// under the cursor before mouseup, so collapsed items never got their click.
+								onClickCapture={e => {
+									if (panelsOpen || panelClickOpen === "off") return;
+									if (panelClickOpen === "except-tabs" && (e.target as Element).closest?.("[data-url][id]")) return;
+									setPanelsOpen(true);
+								}}
 							>
 								<div
-									className={"relative flex w-full flex-1 min-h-0 overflow-auto gap-2 p-2 flex-col items-stretch duration-200"}
+									className={`relative flex w-full flex-1 min-h-0 overflow-auto flex-col items-stretch duration-200 ${rail ? "gap-1 p-1 [scrollbar-width:none]" : "gap-2 p-2"}`}
 									onDragOver={e => {
 										e.preventDefault();
 										const el = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null;
@@ -764,7 +789,9 @@ const App = () => {
 								</div>
 								<div
 									className={
-										"flex min-max-1 w-[calc(100%-1rem)] m-2 p-1 rounded-xl items-start justify-between gap-1" +
+										(rail
+											? "flex w-[calc(100%-0.5rem)] m-1 p-0 rounded-3xl justify-center [&_button:not(:first-child)]:hidden [&_button]:p-1.5 [&_button]:rounded-3xl"
+											: `flex min-max-1 w-[calc(100%-1rem)] m-2 p-1 rounded-xl items-start justify-between gap-1 ${peek && tabsLeft ? "flex-row-reverse [&>div]:flex-row-reverse" : ""}`) +
 										" " +
 										`
                                     ${settings.brightness === "dark" ? "bg-[#ffffff10]" : "bg-[#00000025]"}
@@ -804,11 +831,11 @@ const App = () => {
 							</div>
 							<QuickPlayer
 								className={`
-                                ${playerView === "bigplayer" ? "flex-[1.3]" : "flex-1"} min-h-0
-                                ${playerTabOpen ? "hidden!" : ""}
+                                ${rail ? "flex-none" : playerView === "bigplayer" ? "flex-[1.3]" : "flex-1"} min-h-0
+                                ${playerTabOpen || !hasMusic ? "hidden!" : ""}
                             `}
 								panelsOpen={panelsOpen}
-								onOpenPanels={() => setPanelsOpen(true)}
+								onOpenPanels={() => panelClickOpen !== "off" && setPanelsOpen(true)}
 							/>
 						</div>
 					</div>
@@ -820,7 +847,6 @@ const App = () => {
 
 export default App;
 
-/** Left-side 160×600 ads plus a 160×300 when space remains; each refreshes every 5–10 minutes (random). */
 function SideAd() {
 	const show = useShowAds();
 	const [closed, setClosed] = useState(false);
@@ -859,8 +885,7 @@ function SideAd() {
 				</button>
 			</div>
 			<div className="flex flex-col items-center gap-2 px-2 pb-2">
-				{/* RevIQ fills this rail slot by its data-ad name when js.rev.iq runs. */}
-				<div data-ad="left-rail-1" />
+				<div data-ad="left-rail-2" />
 				{Array.from({ length: slots }, (_, i) => (
 					<AdBanner key={i} unit={AD_UNITS.side} refreshMinutes={[5, 10]} className="rounded-lg" />
 				))}

@@ -41,13 +41,17 @@ import { YourLibrary } from "./YourLibrary";
 import { ensureSavedLoaded, useSavedStore } from "../libs/savedLibrary";
 import { CheckCircleIcon, PlusCircleIcon, UserPlusIcon } from "@heroicons/react/24/outline";
 import { songKey, useLastfmStore } from "../libs/lastfmState";
-import { CheckBadgeIcon, CheckIcon, GlobeAltIcon, HeartIcon } from "@heroicons/react/24/solid";
+import { CheckBadgeIcon, CheckIcon, GlobeAltIcon, HeartIcon, ListBulletIcon } from "@heroicons/react/24/solid";
 import { HeartIcon as HeartOutlineIcon, SquaresPlusIcon } from "@heroicons/react/24/outline";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { portalTarget } from "../libs/cloak";
+import { PlaylistNameDialog, usePlaylistMenu } from "../components/PlaylistMenu";
+import { useModal } from "../components/Modal/ModalContext";
+import { HolyText } from "../components/common/HolyText";
+import { deletePlaylist, ensurePlaylistsLoaded, isLiked, removeFromPlaylist, toggleLike, usePlaylistStore } from "../libs/playlists";
 import { faApple, faBandcamp, faDeezer, faFacebook, faInstagram, faSoundcloud, faSpotify, faTidal, faTiktok, faXTwitter, faYoutube, type IconDefinition } from "@fortawesome/free-brands-svg-icons";
 
-type Page = "home" | "search" | "album" | "artist";
+type Page = "home" | "search" | "album" | "artist" | "playlist";
 
 const LINK_ICONS: Partial<Record<ArtistLinkKind, IconDefinition>> = {
 	instagram: faInstagram,
@@ -289,6 +293,13 @@ export const DigitalLibrary = ({ query, urlPage = "library", urlPrefix, nav, ove
 	const [bioExpanded, setBioExpanded] = useState(false);
 	const [topSongsExpanded, setTopSongsExpanded] = useState(false);
 	const [songMenu, setSongMenu] = useState<{ items: MenuItem[]; position: { x: number; y: number } } | null>(null);
+	// The open playlist ("liked" for Liked Songs, whose songs come live from the playlist store).
+	const [playlistView, setPlaylistView] = useState<{ id: string; name: string; tracks: MusicTrack[] } | null>(null);
+	const [confirmDelete, setConfirmDelete] = useState(false);
+	const likedSongs = usePlaylistStore(s => s.liked);
+	const playlistSummaries = usePlaylistStore(s => s.playlists);
+	const playlistMenu = usePlaylistMenu();
+	const { openModal } = useModal();
 	const [extras, setExtras] = useState<ArtistExtras | null>(null);
 	/** The artist's own customizations from Fracital for Artists (null when unclaimed). */
 	const [artistProfile, setArtistProfile] = useState<ArtistProfile | null>(null);
@@ -467,6 +478,28 @@ export const DigitalLibrary = ({ query, urlPage = "library", urlPrefix, nav, ove
 		}
 	};
 
+	const openPlaylist = async (id: string, sync = true) => {
+		ensurePlaylistsLoaded();
+		setConfirmDelete(false);
+		if (id === "liked") {
+			setPlaylistView({ id, name: "Liked Songs", tracks: [] });
+			setPage("playlist");
+			if (sync) syncUrl("playlist=liked", "Liked Songs");
+			return;
+		}
+		setLoading(true);
+		try {
+			const playlist = await library.playlist(id);
+			setPlaylistView(playlist);
+			setPage("playlist");
+			if (sync) syncUrl(`playlist=${encodeURIComponent(id)}`, playlist.name);
+		} catch (err) {
+			console.error("Failed to load playlist:", err);
+		} finally {
+			setLoading(false);
+		}
+	};
+
 	/** Opens an artist page from a bare name (for collab credits without an id) by resolving it through search. */
 	const openArtistByName = async (name: string) => {
 		setLoading(true);
@@ -525,7 +558,9 @@ export const DigitalLibrary = ({ query, urlPage = "library", urlPrefix, nav, ove
 		const q = params.get("q");
 		const artistName = params.get("artistName");
 		const trackTitle = params.get("track");
+		const playlist = params.get("playlist");
 		if (artist) openArtist(artist, false);
+		else if (playlist) openPlaylist(playlist, false);
 		else if (album) openAlbum(album, false);
 		// Name-based links (e.g. from the quick player) resolve to an id, then rewrite the URL.
 		else if (artistName) openArtistByName(artistName);
@@ -537,13 +572,14 @@ export const DigitalLibrary = ({ query, urlPage = "library", urlPrefix, nav, ove
 			setPage("home");
 			setAlbumDetail(null);
 			setArtistDetail(null);
+			setPlaylistView(null);
 		}
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [query, configured]);
 
 	/** Plays a song and replaces the queue: with the rest of `list` after it when given, otherwise empty. */
 	const handlePlay = (track: MusicTrack, list?: MusicTrack[]) => {
-		const playable = (list ?? [track]).filter(t => t === track || t.streamUrl || t.previewUrl);
+		const playable = (list ?? [track]).filter(t => t === track || t.streamUrl);
 		const index = Math.max(0, playable.indexOf(track));
 		if (playable.length > 1)
 			playList(
@@ -563,7 +599,7 @@ export const DigitalLibrary = ({ query, urlPage = "library", urlPrefix, nav, ove
 
 	/** Plays a whole list from the top, replacing the queue. */
 	const handlePlayAll = (trackList: MusicTrack[]) => {
-		const playable = trackList.filter(t => t.streamUrl || t.previewUrl);
+		const playable = trackList.filter(t => t.streamUrl);
 		if (playable.length) handlePlay(playable[0], playable);
 	};
 
@@ -710,13 +746,14 @@ export const DigitalLibrary = ({ query, urlPage = "library", urlPrefix, nav, ove
 	/** Opens the "⋯" menu for a song card. */
 	const openSongMenu = (e: React.MouseEvent, track: MusicTrack) => {
 		e.stopPropagation();
-		const isLoved = lovedSongs[songKey(track.title, track.artist)];
+		const liked = isLiked(usePlaylistStore.getState(), track.title, track.artist);
 		const items: MenuItem[] = [
 			{ title: "Play", onClick: () => handlePlay(track), icon: <PlayIcon className="size-5" /> },
 			{ title: "Play next", onClick: () => handlePlayNext(track), icon: <BarsArrowUpIcon className="size-5" /> },
 			{ title: "Add to queue", onClick: () => handleQueue(track), icon: <QueueListIcon className="size-5" /> },
 			isTrackSaved(track.id) ? { title: "Remove from Library", onClick: () => toggleTrack(track), icon: <CheckCircleIcon className="size-5" /> } : { title: "Add to Library", onClick: () => toggleTrack(track), icon: <PlusCircleIcon className="size-5" /> },
-			...(lastfmUser ? [{ title: isLoved ? "Remove from Liked Songs" : "Add to Liked Songs", onClick: () => void toggleLove(track.title, track.artist), icon: isLoved ? <HeartIcon className="size-5 text-[#ff3b5c]" /> : <HeartOutlineIcon className="size-5" /> }] : []),
+			{ title: liked ? "Remove from Liked Songs" : "Add to Liked Songs", onClick: () => toggleLike(track), icon: liked ? <HeartIcon className="size-5 text-[#ff3b5c]" /> : <HeartOutlineIcon className="size-5" /> },
+			playlistMenu(track),
 			{ title: "Start radio", onClick: () => startRadio(track.artist, track.title), icon: <RadioIcon className="size-5" /> },
 			{
 				title: "Go to album",
@@ -829,7 +866,7 @@ export const DigitalLibrary = ({ query, urlPage = "library", urlPrefix, nav, ove
 
 	const HomePage = () => (
 		<div className="flex flex-col gap-6">
-			<YourLibrary mode="browse" dark={brightness === "dark"} onPlayList={playListFrom} onOpenArtist={openArtistByName} onOpenAlbum={openAlbumByName} onOpenAlbumId={openAlbum} onSongMenu={openSongMenu} />
+			<YourLibrary mode="browse" dark={brightness === "dark"} onPlayList={playListFrom} onOpenArtist={openArtistByName} onOpenAlbum={openAlbumByName} onOpenAlbumId={openAlbum} onOpenPlaylist={openPlaylist} onSongMenu={openSongMenu} />
 			{chartAlbums.length > 0 && (
 				<div className="flex flex-col gap-2">
 					<h2 className="text-lg font-bold px-1">Popular Right Now</h2>
@@ -870,10 +907,102 @@ export const DigitalLibrary = ({ query, urlPage = "library", urlPrefix, nav, ove
 		};
 	const MyMusicPage = () => (
 		<div className="flex flex-col gap-6">
-			<YourLibrary mode="library" dark={brightness === "dark"} onPlayList={playListFrom} onOpenArtist={viaBrowse(openArtistByName)} onOpenAlbum={viaBrowse(openAlbumByName)} onOpenAlbumId={viaBrowse(openAlbum)} onSongMenu={openSongMenu} />
+			<YourLibrary mode="library" dark={brightness === "dark"} onPlayList={playListFrom} onOpenArtist={viaBrowse(openArtistByName)} onOpenAlbum={viaBrowse(openAlbumByName)} onOpenAlbumId={viaBrowse(openAlbum)} onOpenPlaylist={viaBrowse(openPlaylist)} onSongMenu={openSongMenu} />
 			{myMusic}
 		</div>
 	);
+
+	const PlaylistPage = () => {
+		if (!playlistView) return null;
+		const liked = playlistView.id === "liked";
+		const list = liked ? likedSongs : playlistView.tracks;
+		// Live name, so a rename shows right away.
+		const name = liked ? "Liked Songs" : (playlistSummaries.find(p => p.id === playlistView.id)?.name ?? playlistView.name);
+		const covers = [...new Set(list.map(t => t.artwork).filter(Boolean))].slice(0, 4);
+		const pill = `flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-sm font-semibold cursor-pointer duration-150 ${brightness === "dark" ? "bg-[#ffffff15] hover:bg-[#ffffff25]" : "bg-[#00000010] hover:bg-[#00000020]"}`;
+		const remove = (track: MusicTrack) => {
+			if (liked) return toggleLike(track);
+			setPlaylistView(v => v && { ...v, tracks: v.tracks.filter(t => t.id !== track.id) });
+			removeFromPlaylist(playlistView.id, track.id).catch(() => void openPlaylist(playlistView.id, false));
+		};
+		return (
+			<div className="flex flex-col gap-4">
+				<div className="flex flex-wrap items-end gap-5 px-1">
+					<div className="size-36 shrink-0 rounded-xl overflow-hidden shadow-lg bg-(--tertiary)">
+						{liked ? (
+							<div className="flex items-center justify-center size-full bg-linear-to-br from-[#ff3b5c] to-[#7b2ff7]">
+								<HeartIcon className="size-16 text-white" />
+							</div>
+						) : covers.length >= 4 ? (
+							<div className="grid grid-cols-2 size-full">
+								{covers.map(src => (
+									<img key={src} src={src} alt="" className="size-full object-cover" />
+								))}
+							</div>
+						) : covers[0] ? (
+							<img src={covers[0]} alt="" className="size-full object-cover" />
+						) : (
+							<div className="flex items-center justify-center size-full">
+								<ListBulletIcon className="size-14 text-(--text-tertiary)" />
+							</div>
+						)}
+					</div>
+					<div className="flex flex-col gap-1.5 min-w-0">
+						<span className="text-xs font-semibold uppercase tracking-wide text-(--text-tertiary)">
+							<HolyText text="Playlist" />
+						</span>
+						{/* Playlist names are the user's own text. */}
+						<h1 className="text-3xl font-bold truncate">{liked ? <HolyText text="Liked Songs" /> : name}</h1>
+						<span className="text-sm text-(--text-tertiary)">
+							<HolyText text={`${list.length} ${list.length === 1 ? "song" : "songs"}`} />
+						</span>
+						<div className="flex flex-wrap gap-2 pt-1">
+							<button className={`${pill} text-white! bg-(--accent)! hover:brightness-110`} disabled={!list.length} onClick={() => handlePlayAll(list)}>
+								<PlayIcon className="size-4" /> <HolyText text="Play" />
+							</button>
+							{!liked && (
+								<button className={pill} onClick={() => openModal(<PlaylistNameDialog playlist={{ id: playlistView.id, name }} />)}>
+									<HolyText text="Rename" />
+								</button>
+							)}
+							{!liked && (
+								<button
+									className={`${pill} ${confirmDelete ? "text-white! bg-[#c4302b]!" : ""}`}
+									onClick={() => {
+										if (!confirmDelete) return setConfirmDelete(true);
+										void deletePlaylist(playlistView.id).then(() => {
+											setPlaylistView(null);
+											setPage("home");
+											syncUrl();
+										});
+									}}
+								>
+									<HolyText text={confirmDelete ? "Delete for good?" : "Delete"} />
+								</button>
+							)}
+						</div>
+					</div>
+				</div>
+				{list.length === 0 ? (
+					<EmptyState message={liked ? "Songs you like show up here." : "Add songs from any song's menu (⋯ → Add to playlist)."} />
+				) : (
+					<div className="flex flex-col">
+						{list.map((track, i) => (
+							<div key={`${track.id}-${i}`} className="group/row flex items-center gap-1">
+								<div className="flex-1 min-w-0">
+									<TrackRow track={track} index={i} list={list} />
+								</div>
+								{/* Plain title: the icon button's only accessible name. */}
+								<button title={liked ? "Remove from Liked Songs" : "Remove from playlist"} className="shrink-0 p-1.5 rounded-full opacity-0 group-hover/row:opacity-100 text-(--text-secondary) hover:text-(--text-primary) hover:bg-[#ffffff20] cursor-pointer duration-150" onClick={() => remove(track)}>
+									<XMarkIcon className="size-4" />
+								</button>
+							</div>
+						))}
+					</div>
+				)}
+			</div>
+		);
+	};
 
 	const SearchPage = () => (
 		<div className="flex flex-col gap-6">
@@ -1507,6 +1636,7 @@ export const DigitalLibrary = ({ query, urlPage = "library", urlPrefix, nav, ove
 				{!showMyMusic && page === "album" && AlbumPage()}
 				{/* Called, not mounted as <ArtistPage />: a fresh component identity each render would remount it as play counts stream in. */}
 				{!showMyMusic && page === "artist" && ArtistPage()}
+				{!showMyMusic && page === "playlist" && PlaylistPage()}
 			</div>
 			{override && <div className={`flex-1 min-h-0 px-4 pb-4 ${overrideShown ? "" : "hidden"}`}>{override}</div>}
 			{songMenu && <ContextMenu items={songMenu.items} position={songMenu.position} onClose={() => setSongMenu(null)} />}

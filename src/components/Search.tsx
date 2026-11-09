@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef, type ChangeEvent } from "react";
+import { useEffect, useLayoutEffect, useState, useRef, type ChangeEvent } from "react";
 import { XMarkIcon, MagnifyingGlassIcon, Cog6ToothIcon, FolderIcon, MusicalNoteIcon, IdentificationIcon, DocumentIcon } from "@heroicons/react/24/solid";
 import type { TabProps } from "./Tab";
 import { useTabsStore } from "../store";
@@ -7,6 +7,12 @@ import { useNavigate } from "react-router-dom";
 import { createId } from "@paralleldrive/cuid2";
 import XOR from "../libs/XOR";
 import { appRoot } from "../libs/cloak";
+
+/**
+ * Large screens: the bar fits its URL, between 22rem and half the screen, leaving room for the rest of the
+ * top bar. Smaller screens: it fills the space it has.
+ */
+const URL_WIDTH = "xl:flex-none xl:w-[clamp(22rem,var(--url-w),50vw)]";
 
 interface SearchProps {
 	tab?: TabProps;
@@ -102,27 +108,38 @@ export const Search = ({ tab }: SearchProps) => {
 		}
 	};
 
+	// On large screens the bar is sized to its text (see URL_WIDTH below), so track what it shows.
+	const [text, setText] = useState("");
+	const measureRef = useRef<HTMLSpanElement>(null);
+	const [textWidth, setTextWidth] = useState(0);
+	useLayoutEffect(() => {
+		if (measureRef.current) setTextWidth(measureRef.current.scrollWidth);
+	}, [text]);
+
 	useEffect(() => {
 		if (inputRef.current && currentTab) {
 			inputRef.current.value = currentTab.displayUrl;
 			setHasQuery(!!currentTab.displayUrl);
+			setText(currentTab.displayUrl);
 		}
 	}, [currentTab]);
 
 	return (
 		<div
 			className={
-				"flex items-center justify-center gap-1.5 duration-250" +
+				"flex w-full min-w-0 items-center gap-1.5 duration-250" +
 				" " +
 				`
-					${tabs && tabs.length > 0 && tab && tab.current !== true ? "absolute translate-y-8 opacity-0 pointer-events-none" : ""}
+					${tabs && tabs.length > 0 && tab && tab.current !== true ? "absolute inset-x-0 translate-y-8 opacity-0 pointer-events-none" : ""}
 				`
 			}
 		>
 			<div
 				ref={searchRef}
+				// The text plus the side padding and search button.
+				style={{ "--url-w": `${textWidth + 88}px` } as React.CSSProperties}
 				className={
-					"flex items-center bg-(--secondary) h-12 gap-1 rounded-2xl cursor-text duration-150" +
+					`flex flex-1 min-w-0 ${URL_WIDTH} items-center bg-(--secondary) h-12 gap-1 rounded-2xl cursor-text duration-150` +
 					" " +
 					`
                 ${searchFocused ? "inset-shadow-(--inset-shadow-accent)" : "inset-shadow-(--inset-shadow-secondary)"}
@@ -137,10 +154,14 @@ export const Search = ({ tab }: SearchProps) => {
 					}
 				}}
 			>
-				<div className={"relative flex items-center justify-start h-full z-10 duration-150"}>
+				<div className={"relative flex flex-1 min-w-0 items-center justify-start h-full z-10 overflow-hidden duration-150"}>
+					{/* Invisible copy of the text, only used to measure its width. */}
+					<span ref={measureRef} aria-hidden className="invisible absolute left-0 top-0 whitespace-pre font-semibold pointer-events-none">
+						{text || "Search or enter a URL"}
+					</span>
 					<span
 						className={
-							"absolute left-4 font-semibold ease-in-out pointer-events-none w-max" +
+							"absolute left-4 right-0 truncate font-semibold ease-in-out pointer-events-none" +
 							" " +
 							`
                         ${hasQuery ? "opacity-0 -translate-x-1 duration-100" : "duration-150"}
@@ -154,7 +175,7 @@ export const Search = ({ tab }: SearchProps) => {
 						id="input"
 						ref={inputRef}
 						type="text"
-						className="size-full pl-4 text-(--text-secondary) font-medium focus:outline-none focus:ring-0 z-10"
+						className="size-full min-w-0 pl-4 text-(--text-secondary) font-medium focus:outline-none focus:ring-0 z-10"
 						onFocus={() => {
 							setSearchFocused(true);
 						}}
@@ -163,6 +184,7 @@ export const Search = ({ tab }: SearchProps) => {
 						}}
 						onChange={(e: ChangeEvent) => {
 							const value = (e.target as HTMLInputElement).value;
+							setText(value);
 							if (value !== "") {
 								setHasQuery(true);
 							} else {

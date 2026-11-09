@@ -27,7 +27,8 @@ export const isExplicitEdition = (explicitness: string | undefined) => explicitn
 
 /** Query-string hints added to a song's playback URL so the resolver knows which version to find. */
 export function playbackHints(t: { preview?: string; title: string; artist: string; explicit?: boolean; duration?: number }): string {
-	const params = new URLSearchParams({ fallback: t.preview || "", title: t.title, artist: t.artist });
+	// `preview` is accepted for callers' convenience but never used: playback must not fall back to it.
+	const params = new URLSearchParams({ title: t.title, artist: t.artist });
 	if (t.explicit) params.set("explicit", "1");
 	if (t.duration && t.duration > 0) params.set("dur", String(Math.round(t.duration)));
 	return params.toString();

@@ -15,6 +15,7 @@
 		"check": "biome check --write ."
 	},
 	"dependencies": {
+		"@better-auth/infra": "^0.4.27",
 		"@better-auth/passkey": "^1.7.18",
 		"@biomejs/biome": "^2.6.5",
 		"@fortawesome/fontawesome-svg-core": "^7.3.1",

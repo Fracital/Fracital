@@ -1,4 +1,4 @@
-import { HeartIcon, MusicalNoteIcon, PlayIcon, UserCircleIcon } from "@heroicons/react/24/solid";
+import { HeartIcon, ListBulletIcon, MusicalNoteIcon, PlayIcon, PlusIcon, UserCircleIcon } from "@heroicons/react/24/solid";
 import { faLastfm } from "@fortawesome/free-brands-svg-icons";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { createId } from "@paralleldrive/cuid2";
@@ -12,6 +12,9 @@ import { cleanAlbumTitle, formatCount, library, type LastfmPeriod, type LibraryA
 import { loadBrowseFeed, pickSeeds, type BrowseFeed } from "../libs/browseFeed";
 import { useTabsStore } from "../store";
 import { ensureSavedLoaded, useSavedStore } from "../libs/savedLibrary";
+import { ensurePlaylistsLoaded, requireSignIn, usePlaylistStore } from "../libs/playlists";
+import { PlaylistNameDialog } from "../components/PlaylistMenu";
+import { useModal } from "../components/Modal/ModalContext";
 
 const PERIODS: { id: LastfmPeriod; label: string }[] = [
 	{ id: "1month", label: "4 weeks" },
@@ -29,6 +32,7 @@ interface Props {
 	onOpenArtist: (name: string) => void;
 	onOpenAlbum: (title: string, artist: string) => void;
 	onOpenAlbumId: (id: string) => void;
+	onOpenPlaylist: (id: string) => void;
 	onSongMenu: (e: React.MouseEvent, track: LibraryTrack) => void;
 }
 
@@ -52,7 +56,7 @@ interface Data {
 }
 
 /** The user's music (My Music) or their personal Browse feed, from Last.fm listening and saved music. */
-export const YourLibrary = ({ mode, dark, onPlayList, onOpenArtist, onOpenAlbum, onOpenAlbumId, onSongMenu }: Props) => {
+export const YourLibrary = ({ mode, dark, onPlayList, onOpenArtist, onOpenAlbum, onOpenAlbumId, onOpenPlaylist, onSongMenu }: Props) => {
 	const username = useLastfmStore(s => s.username);
 	const service = useLastfmStore(s => s.service);
 	const loved = useLastfmStore(s => s.loved);
@@ -66,6 +70,9 @@ export const YourLibrary = ({ mode, dark, onPlayList, onOpenArtist, onOpenAlbum,
 	const savedTracks = useSavedStore(s => s.tracks);
 	const savedAlbums = useSavedStore(s => s.albums);
 	const followed = useSavedStore(s => s.artists);
+	const playlists = usePlaylistStore(s => s.playlists);
+	const likedCount = usePlaylistStore(s => s.liked.length);
+	const { openModal } = useModal();
 	const [feed, setFeed] = useState<BrowseFeed | null>(null);
 	const browse = mode === "browse";
 
@@ -75,6 +82,7 @@ export const YourLibrary = ({ mode, dark, onPlayList, onOpenArtist, onOpenAlbum,
 		load();
 		window.addEventListener("account-upd", load);
 		ensureSavedLoaded();
+		ensurePlaylistsLoaded();
 		return () => window.removeEventListener("account-upd", load);
 	}, []);
 
@@ -261,9 +269,66 @@ export const YourLibrary = ({ mode, dark, onPlayList, onOpenArtist, onOpenAlbum,
 		</div>
 	);
 
+	const playlistTile = (key: string, art: React.ReactNode, title: React.ReactNode, meta: React.ReactNode, onClick: () => void) => (
+		<div key={key} className={`flex flex-col gap-1.5 w-32 shrink-0 p-1.5 rounded-lg cursor-pointer duration-150 ${hover}`} onClick={onClick}>
+			<div className="w-full aspect-square rounded-md overflow-hidden bg-(--tertiary)">{art}</div>
+			<div className="flex flex-col min-w-0 leading-tight">
+				<span className="text-xs font-semibold truncate">{title}</span>
+				<span className="text-[11px] text-(--text-tertiary) truncate">{meta}</span>
+			</div>
+		</div>
+	);
+	const songCount = (n: number) => <HolyText text={`${n} ${n === 1 ? "song" : "songs"}`} />;
+
+	const playlistShelf = (
+		<Shelf title="Playlists" count={playlists.length + 1} dark={dark}>
+			{playlistTile(
+				"liked",
+				<div className="flex items-center justify-center size-full bg-linear-to-br from-[#ff3b5c] to-[#7b2ff7]">
+					<HeartIcon className="size-10 text-white" />
+				</div>,
+				<HolyText text="Liked Songs" />,
+				songCount(likedCount),
+				() => onOpenPlaylist("liked"),
+			)}
+			{playlists.map(p =>
+				playlistTile(
+					p.id,
+					p.artwork.length >= 4 ? (
+						<div className="grid grid-cols-2 size-full">
+							{p.artwork.map(src => (
+								<img key={src} src={src} alt="" className="size-full object-cover" loading="lazy" />
+							))}
+						</div>
+					) : p.artwork[0] ? (
+						<img src={p.artwork[0]} alt="" className="size-full object-cover" loading="lazy" />
+					) : (
+						<div className="flex items-center justify-center size-full">
+							<ListBulletIcon className="size-10 text-(--text-tertiary)" />
+						</div>
+					),
+					// The playlist's name is the user's own text.
+					p.name,
+					songCount(p.count),
+					() => onOpenPlaylist(p.id),
+				),
+			)}
+			{playlistTile(
+				"new",
+				<div className={`flex items-center justify-center size-full border-2 border-dashed rounded-md ${dark ? "border-[#ffffff30]" : "border-[#00000030]"}`}>
+					<PlusIcon className="size-10 text-(--text-tertiary)" />
+				</div>,
+				<HolyText text="New playlist" />,
+				<HolyText text="Make a playlist" />,
+				() => requireSignIn() && openModal(<PlaylistNameDialog onDone={onOpenPlaylist} />),
+			)}
+		</Shelf>
+	);
+
 	// Songs, albums and artists saved with the "add to library" / Follow buttons (Fracital account).
 	const savedShelves = (
 		<>
+			{playlistShelf}
 			<Shelf title="Saved Songs" count={savedTracks.length || undefined} dark={dark}>
 				{savedTracks.map((t, i, list) => (
 					<TrackTile key={t.id} track={t} list={list} index={i} />
@@ -363,7 +428,7 @@ export const YourLibrary = ({ mode, dark, onPlayList, onOpenArtist, onOpenAlbum,
 			{connectCard}
 			{me && savedShelves}
 
-			<Shelf title="Liked Songs" count={data.loved ? formatCount(data.loved.total) : undefined} dark={dark}>
+			<Shelf title={service === "listenbrainz" ? "Loved on ListenBrainz" : "Loved on Last.fm"} count={data.loved ? formatCount(data.loved.total) : undefined} dark={dark}>
 				{(data.loved?.tracks ?? []).map((t, i, list) => (
 					<TrackTile key={`${t.id}-${i}`} track={t} list={list} index={i} />
 				))}

@@ -9,9 +9,11 @@
  *
  * Env: DATABASE_URL, BETTER_AUTH_SECRET, LASTFM_API_KEY, LASTFM_API_SECRET,
  *      optional BETTER_AUTH_URL (public origin) and BETTER_AUTH_TRUSTED_ORIGINS (comma list),
- *      DISCORD_PRESENCE=1 (Discord status; needs the Discord sign-in credentials too).
+ *      DISCORD_PRESENCE=1 (Discord status; needs the Discord sign-in credentials too),
+ *      BETTER_AUTH_API_KEY (Better Auth dashboard via @better-auth/infra's dash(); off when unset).
  */
-import { createHash } from "node:crypto";
+import { createHash, randomInt } from "node:crypto";
+import { dash } from "@better-auth/infra";
 import { betterAuth, type BetterAuthPlugin } from "better-auth";
 import { APIError, createAuthEndpoint, createAuthMiddleware, getSessionFromCtx } from "better-auth/api";
 import { setSessionCookie } from "better-auth/cookies";
@@ -22,13 +24,16 @@ import * as z from "zod";
 import { asArray, lastfmCall, LastfmError, lastfmImage, lastfmKey, lastfmSecret, toCount } from "./lastfm";
 import { findDeezerArtist, findDeezerTrack, type RadioTrack } from "./music-radio";
 import { isBanned, migrateArtistTables, registerArtistRoutes, userMeta } from "./artists";
-import { mailEnabled, sendPasswordResetEmail, sendVerificationEmail } from "./mail";
+import { mailEnabled, sendAccountDeletedEmail, sendDeleteAccountEmail, sendPasswordResetEmail, sendVerificationEmail } from "./mail";
 import { enabledSocialProviders, passkeyPlugin, passkeyRpId, socialProviders, terbiumEnabled, terbiumPlugin } from "./auth-providers";
 import { setStatStore } from "./music-stats";
 import { clientNegotiated } from "./api-crypto";
 import { authOrigin, handoffPlugin, hubOrigin, ownOrigin, registerHubRoutes } from "./cross-site";
 import { lbFeedback, lbListenCount, lbLookupRecording, lbLoved, lbRecent, lbRevoked, lbSubmit, lbTemporary, lbTopAlbums, lbTopArtists, lbTopTracks, lbValidateToken, type ListenTrack } from "./listenbrainz";
 import { discordPresenceEnabled, hasPresenceScope, migratePresence, readPresence, sendPresence, writePresence, type NowPlaying } from "./discord-presence";
+import { discordBotStatus, discordBotToken, discordPresenceFor } from "./discord-bot";
+import { migratePlaylists, registerPlaylistRoutes } from "./playlists";
+import { buildExport, migrateExports, purgeExpiredExports, registerExportRoutes, saveExport } from "./data-export";
 
 const MUSIC_API = "/api/music";
 const STATE_COOKIE = "fracital_lastfm_state";
@@ -228,7 +233,13 @@ const authOptions = (pool: Pool) => ({
 	},
 	advanced: { ipAddress: { ipAddressHeaders: ["x-forwarded-for"], trustedProxies: CLOUDFLARE_PROXIES } },
 	session: { expiresIn: 60 * 60 * 24 * 30 },
-	plugins: [lastfmPlugin(), passkeyPlugin(), terbiumPlugin(userId => invalidateUser(userId)), handoffPlugin()],
+	plugins: [
+		lastfmPlugin(),
+		passkeyPlugin(),
+		terbiumPlugin(userId => invalidateUser(userId)),
+		handoffPlugin(),
+		...(process.env.BETTER_AUTH_API_KEY?.trim() ? [dash()] : []),
+	],
 	hooks: {
 		// Removing the last passkey from an account with no other sign-in method would lock it out.
 		before: createAuthMiddleware(async ctx => {
@@ -326,6 +337,10 @@ function init() {
 				updated_at timestamptz not null default now()
 			)`);
 			await migratePresence(pool);
+			await migratePlaylists(pool);
+			// Deleted accounts' downloadable copies are erased after 30 days.
+			await migrateExports(pool);
+			setInterval(() => void purgeExpiredExports(pool), 6 * 60 * 60 * 1000).unref();
 			// Play/listener counts survive restarts and are shared between deploys on the same database.
 			await pool.query(`create table if not exists fracital_stat_cache (
 				key text primary key,
@@ -495,6 +510,9 @@ else setTimeout(() => location.replace("/"), 1500);
 		oauthErrorMessage,
 	);
 
+	// Downloads of deleted accounts' data (data-export.ts): public, the link's token is the key.
+	registerExportRoutes(app, async () => (await init())?.pool ?? null);
+
 	// Which sign-in methods this server offers (public; the sign-in page builds its buttons from it).
 	app.get("/api/me/options", c => {
 		// Redirect-based sign-in comes back to BETTER_AUTH_URL's host, so it only works there.
@@ -541,6 +559,7 @@ else setTimeout(() => location.replace("/"), 1500);
 	app.use("/api/me", requireUser);
 	app.use("/api/me/*", requireUser);
 	registerArtistRoutes(app, { init, requireUser });
+	registerPlaylistRoutes(app);
 
 	type Ctx = { get: <K extends keyof Env["Variables"]>(k: K) => Env["Variables"][K] };
 
@@ -653,6 +672,7 @@ else setTimeout(() => location.replace("/"), 1500);
 			lastfmAvailable: !!(lastfmKey() && lastfmSecret()),
 			listenbrainz,
 			discordPresence,
+			discordActivity: !!discordBotToken(),
 			isAdmin,
 			username,
 			premium,
@@ -1225,6 +1245,120 @@ else setTimeout(() => location.replace("/"), 1500);
 		}
 		const attr = res.data.scrobbles?.["@attr"];
 		return c.json({ ok: true, accepted: toCount(attr?.accepted), ignored: toCount(attr?.ignored), retry: false });
+	});
+
+	// A code typed into the account page rather than an emailed link, because a link only works in a
+	// browser signed in on the site it points at, and accounts are used across all of our sites.
+
+	const DELETE_CODE_TTL_MS = 15 * 60_000;
+	const DELETE_MAX_TRIES = 5;
+	const deleteCodeId = (userId: string) => `delete-account:${userId}`;
+	const hashCode = (code: string) => createHash("sha256").update(code).digest("hex");
+	type DeleteCode = { hash: string; tries: number; sentAt: number };
+
+	app.post("/api/me/delete/request", async c => {
+		const user = c.get("user");
+		if (user.email.endsWith("@lastfm.invalid")) return c.json({ error: "Your account has no email address to confirm with. Email contact@fracit.al and tell us your username to delete it.", noEmail: true }, 409);
+		if (!mailEnabled()) return c.json({ error: "We can't send email right now. Email contact@fracit.al to delete your account." }, 503);
+		const adapter = (await c.get("auth").$context).internalAdapter;
+		const existing = await adapter.findVerificationValue(deleteCodeId(user.id));
+		const previous = existing ? (JSON.parse(existing.value) as DeleteCode) : null;
+		if (previous && Date.now() - previous.sentAt < 60_000) return c.json({ error: "We just sent a code. Wait a minute before asking for another." }, 429);
+		const code = String(randomInt(0, 1_000_000)).padStart(6, "0");
+		await adapter.deleteVerificationByIdentifier(deleteCodeId(user.id));
+		await adapter.createVerificationValue({ identifier: deleteCodeId(user.id), value: JSON.stringify({ hash: hashCode(code), tries: 0, sentAt: Date.now() } satisfies DeleteCode), expiresAt: new Date(Date.now() + DELETE_CODE_TTL_MS) });
+		try {
+			await sendDeleteAccountEmail(user.email, code);
+		} catch (err) {
+			console.error("Delete account email failed:", err instanceof Error ? err.message : err);
+			await adapter.deleteVerificationByIdentifier(deleteCodeId(user.id));
+			return c.json({ error: "Couldn't send the email. Try again." }, 502);
+		}
+		return c.json({ ok: true, email: user.email });
+	});
+
+	app.post("/api/me/delete/confirm", async c => {
+		const body = z.object({ code: z.string().regex(/^\d{6}$/) }).safeParse(await c.req.json().catch(() => null));
+		if (!body.success) return c.json({ error: "Enter the 6-digit code from the email" }, 400);
+		const user = c.get("user");
+		const adapter = (await c.get("auth").$context).internalAdapter;
+		const row = await adapter.findVerificationValue(deleteCodeId(user.id));
+		if (!row || new Date(row.expiresAt).getTime() < Date.now()) return c.json({ error: "That code expired. Ask for a new one." }, 400);
+		const record = JSON.parse(row.value) as DeleteCode;
+		if (hashCode(body.data.code) !== record.hash) {
+			await adapter.deleteVerificationByIdentifier(deleteCodeId(user.id));
+			if (record.tries + 1 >= DELETE_MAX_TRIES) return c.json({ error: "Too many wrong codes. Ask for a new one." }, 400);
+			await adapter.createVerificationValue({ identifier: deleteCodeId(user.id), value: JSON.stringify({ ...record, tries: record.tries + 1 }), expiresAt: new Date(row.expiresAt) });
+			return c.json({ error: "That code isn't right." }, 400);
+		}
+		const res = await removeUser(c.get("auth"), c.get("pool"), user.id, c.req.raw.headers, false);
+		return c.json({ ok: true, ...res });
+	});
+
+	/**
+	 * Deletes a user, keeping a 30-day downloadable copy (data-export.ts). Connections are deleted
+	 * explicitly, not only by cascade, so the same provider accounts can be linked to a new account
+	 * right away. Returns the download link (null when there's no such user).
+	 */
+	const removeUser = async (auth: Auth, pool: Pool, userId: string, headers: Headers, byAdmin: boolean) => {
+		const adapter = (await auth.$context).internalAdapter;
+		const user = await adapter.findUserById(userId);
+		if (!user) return null;
+		// The copy comes first, so nothing is deleted unless it was saved.
+		const { path, expires } = await saveExport(pool, user.name, await buildExport(pool, userId));
+		const download = `${authOrigin() ?? ownOrigin(headers) ?? ""}${path}`;
+		// A Discord status Fracital set would otherwise linger until it times out.
+		const presence = await readPresence(pool, userId).catch(() => null);
+		const discord = (await adapter.findAccounts(userId)).find(a => a.providerId === "discord");
+		if (presence?.session_token && discord) {
+			const token = await auth.api.getAccessToken({ body: { accountId: discord.id, userId } }).catch(() => null);
+			if (token?.accessToken) await sendPresence(token.accessToken, presence.session_token, null).catch(() => undefined);
+		}
+		// Plays stay in the totals, no longer tied to anyone.
+		await pool.query("update music_play_events set user_id = null where user_id = $1", [userId]);
+		await adapter.deleteAccounts(userId);
+		await pool.query("delete from fracital_listenbrainz where user_id = $1", [userId]);
+		await pool.query('delete from passkey where "userId" = $1', [userId]).catch(() => undefined);
+		await pool.query("delete from fracital_discord_presence where user_id = $1", [userId]);
+		// Cross-site sign-in links, codes in flight and a pending deletion code all point at the user.
+		await pool.query("delete from verification where value = $1 or identifier = $2", [userId, deleteCodeId(userId)]);
+		await adapter.deleteUserSessions(userId);
+		// The rest (settings, saved music, playlists, game saves, profile…) goes with the user row.
+		await adapter.deleteUser(userId);
+		invalidateUser(userId);
+		const emailed = mailEnabled() && !user.email.endsWith("@lastfm.invalid");
+		if (emailed) void sendAccountDeletedEmail(user.email, download, expires, byAdmin).catch(err => console.error("Account deleted email failed:", err instanceof Error ? err.message : err));
+		return { download, expires, emailed };
+	};
+
+	// Admins delete accounts the same way (with the same 30-day copy and email), except admins'.
+	app.delete("/api/admin/users/:id", async c => {
+		const target = c.req.param("id");
+		if (target === c.get("user").id) return c.json({ error: "Delete your own account from your account page" }, 400);
+		const pool = c.get("pool");
+		const user = await (await c.get("auth").$context).internalAdapter.findUserById(target);
+		if (!user) return c.json({ error: "No such account" }, 404);
+		if ((await userMeta(pool, user)).isAdmin) return c.json({ error: "Remove their admin role before deleting the account" }, 400);
+		const res = await removeUser(c.get("auth"), pool, target, c.req.raw.headers, true);
+		return c.json({ ok: true, ...res });
+	});
+
+
+	app.get("/api/me/discord/activity", async c => {
+		if (!discordBotToken()) return c.json({ available: false });
+		const { discord } = await lastfmLink(c);
+		if (!discord) return c.json({ available: true, connected: false });
+		if (!(await readPresence(c.get("pool"), c.get("user").id)).show_activity) return c.json({ available: true, connected: true, disabled: true });
+		const bot = discordBotStatus();
+		if (bot.state !== "ready") return c.json({ available: true, connected: true, bot: bot.state });
+		return c.json({ available: true, connected: true, bot: bot.state, presence: discordPresenceFor(discord.accountId) });
+	});
+
+	app.put("/api/me/discord/activity/settings", async c => {
+		const body = z.object({ enabled: z.boolean() }).safeParse(await c.req.json().catch(() => null));
+		if (!body.success) return c.json({ error: "Invalid request" }, 400);
+		await writePresence(c.get("pool"), c.get("user").id, { show_activity: body.data.enabled });
+		return c.json({ ok: true, enabled: body.data.enabled });
 	});
 
 	// --- Discord status (discord-presence.ts; off unless DISCORD_PRESENCE=1) ---

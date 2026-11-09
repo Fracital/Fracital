@@ -1,4 +1,4 @@
-import { ArrowLeftStartOnRectangleIcon, ArrowPathIcon, CheckCircleIcon, CubeTransparentIcon, ExclamationTriangleIcon, FingerPrintIcon, KeyIcon, MusicalNoteIcon, UserCircleIcon } from "@heroicons/react/24/solid";
+import { ArrowLeftStartOnRectangleIcon, ArrowPathIcon, CheckCircleIcon, ComputerDesktopIcon, CubeTransparentIcon, ExclamationTriangleIcon, FingerPrintIcon, KeyIcon, MusicalNoteIcon, SpeakerWaveIcon, UserCircleIcon, VideoCameraIcon } from "@heroicons/react/24/solid";
 import { faDiscord, faGithub, faGoogle, faLastfm, faMicrosoft } from "@fortawesome/free-brands-svg-icons";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import type { IconDefinition } from "@fortawesome/fontawesome-svg-core";
@@ -9,6 +9,7 @@ import { HolyText } from "../components/common/HolyText";
 import { useHolyAttr } from "../libs/holy-attr";
 import {
 	addPasskey,
+	confirmAccountDeletion,
 	connectDiscordPresence,
 	connectLastfm,
 	connectListenbrainz,
@@ -18,6 +19,7 @@ import {
 	disconnectListenbrainz,
 	disconnectProvider,
 	getAuthOptions,
+	getDiscordActivity,
 	getMe,
 	importLastfmLoved,
 	importListenbrainzLoved,
@@ -26,9 +28,11 @@ import {
 	passkeysUsable,
 	refreshLastfm,
 	refreshMe,
+	requestAccountDeletion,
 	requestPasswordReset,
 	resetPassword,
 	sendVerificationEmail,
+	setDiscordActivityShown,
 	setDiscordPresence,
 	signIn,
 	signInWithPasskey,
@@ -38,6 +42,7 @@ import {
 	updateProfile,
 	uploadAvatar,
 	type AuthOptions,
+	type DiscordActivityState,
 	type Me,
 	type PasskeyInfo,
 	type SocialProvider,
@@ -93,6 +98,8 @@ function useAuthOptions() {
 /** about:account — Fracital Accounts sign-in / sign-up, and account management once signed in. */
 export const Account = ({ query }: AccountProps) => {
 	const [me, setMe] = useState<Me | null | undefined>(undefined);
+	/** Just deleted: the link to download the account's data (kept 30 days). */
+	const [deleted, setDeleted] = useState<{ download?: string; expires?: string; emailed?: boolean } | null>(null);
 	const params = new URLSearchParams(query || "");
 
 	useEffect(() => {
@@ -110,10 +117,21 @@ export const Account = ({ query }: AccountProps) => {
 	const notice = params.has("verified") ? "verified" : params.has("verify-error") ? "verify-error" : params.has("reset-error") ? "reset-error" : undefined;
 	const resetToken = params.get("reset") || undefined;
 
+	if (deleted) return <AccountDeleted {...deleted} onContinue={() => setDeleted(null)} />;
 	if (me === undefined) return <div className="flex items-center justify-center size-full text-(--text-tertiary)">Loading…</div>;
 	// A reset link works signed in or out.
 	if (resetToken || !me) return <SignIn initialPage={resetToken ? "reset" : params.has("register") ? "register" : "login"} resetToken={resetToken} notice={notice} onSignedIn={setMe} />;
-	return <Manage me={me} notice={notice} onChange={setMe} />;
+	return (
+		<Manage
+			me={me}
+			notice={notice}
+			onChange={setMe}
+			onDeleted={res => {
+				setDeleted(res);
+				setMe(null);
+			}}
+		/>
+	);
 };
 
 export interface SignInBranding {
@@ -327,7 +345,7 @@ export const SignIn = ({ initialPage, resetToken, notice, onSignedIn, branding =
 	);
 };
 
-const Manage = ({ me, notice, onChange }: { me: Me; notice?: string; onChange: (me: Me | null) => void }) => {
+const Manage = ({ me, notice, onChange, onDeleted }: { me: Me; notice?: string; onChange: (me: Me | null) => void; onDeleted: (res: { download?: string; expires?: string; emailed?: boolean }) => void }) => {
 	const options = useAuthOptions();
 	const [busy, setBusy] = useState<string | null>(null);
 	const [error, setError] = useState("");
@@ -386,6 +404,8 @@ const Manage = ({ me, notice, onChange }: { me: Me; notice?: string; onChange: (
 
 				<ProfileEditor me={me} onChange={onChange} />
 
+				{me.discordActivity && <DiscordActivityCard me={me} options={options} busy={busy} run={run} />}
+
 				<ConnectedServices me={me} options={options} busy={busy} run={run} canDisconnect={signInMethods > 1 || !providers.has("lastfm")} />
 
 				<SignInMethods me={me} options={options} busy={busy} run={run} signInMethods={signInMethods} />
@@ -399,8 +419,136 @@ const Manage = ({ me, notice, onChange }: { me: Me; notice?: string; onChange: (
 				>
 					<ArrowLeftStartOnRectangleIcon className="size-5" /> <HolyText text="Sign out" />
 				</button>
+
+				<DeleteAccount onDeleted={onDeleted} />
 			</div>
 		</div>
+	);
+};
+
+/** After deleting the account: the link to download its data while it's kept (also emailed). */
+const AccountDeleted = ({ download, expires, emailed, onContinue }: { download?: string; expires?: string; emailed?: boolean; onContinue: () => void }) => {
+	const until = expires ? new Date(expires).toLocaleDateString(undefined, { month: "long", day: "numeric", year: "numeric" }) : "";
+	return (
+		<div className="flex flex-col items-center justify-center size-full p-6">
+			<div className="flex flex-col gap-4 w-full max-w-md p-6 rounded-2xl bg-(--tertiary)">
+				<h1 className="text-2xl font-bold">
+					<HolyText text="Your account was deleted" />
+				</h1>
+				<span className="text-sm text-(--text-secondary)">
+					<HolyText
+						text={download ? `You can download a copy of your data until ${until}. After that it's erased for good and can't be recovered.${emailed ? " We also emailed you this link." : " Save this link now: we couldn't email it to you."}` : "Your account and everything connected to it were deleted."}
+					/>
+				</span>
+				<div className="flex flex-wrap gap-2">
+					{download && (
+						<a href={download} target="_blank" rel="noopener noreferrer" className="px-4 py-2 rounded-full text-sm font-semibold text-white bg-(--accent) hover:brightness-110 duration-150">
+							<HolyText text="Download your data" />
+						</a>
+					)}
+					<button className={pill} onClick={onContinue}>
+						<HolyText text="Done" />
+					</button>
+				</div>
+			</div>
+		</div>
+	);
+};
+
+/** Deleting the account, confirmed with a 6-digit code emailed to the account's address. */
+const DeleteAccount = ({ onDeleted }: { onDeleted: (res: { download?: string; expires?: string; emailed?: boolean }) => void }) => {
+	const [step, setStep] = useState<"idle" | "confirm" | "code">("idle");
+	const [sentTo, setSentTo] = useState("");
+	const [code, setCode] = useState("");
+	const [busy, setBusy] = useState(false);
+	const [error, setError] = useState("");
+	const { ref: codeRef, placeholder: codeAttrs } = useHolyAttr({ placeholder: "6-digit code", "aria-label": "Code from the email" });
+	const danger = "text-sm font-semibold px-3 py-1.5 rounded-full text-white bg-[#c4302b] hover:brightness-110 disabled:opacity-50 cursor-pointer duration-150 shrink-0";
+
+	const act = async (fn: () => Promise<unknown>) => {
+		setError("");
+		setBusy(true);
+		try {
+			await fn();
+		} catch (err) {
+			setError(errorText(err));
+		} finally {
+			setBusy(false);
+		}
+	};
+	const sendCode = () =>
+		act(async () => {
+			const res = await requestAccountDeletion();
+			setSentTo(res.email);
+			setCode("");
+			setStep("code");
+		});
+	const confirm = () =>
+		act(async () => {
+			onDeleted(await confirmAccountDeletion(code));
+		});
+
+	return (
+		<section className="flex flex-col gap-3 p-4 rounded-2xl border border-red-500/30 bg-red-500/5">
+			<h2 className="font-bold">
+				<HolyText text="Delete account" />
+			</h2>
+			{error && <Banner kind="error">{error}</Banner>}
+			{step === "idle" && (
+				<div className="flex items-center gap-3">
+					<span className="flex-1 text-sm text-(--text-tertiary)">
+						<HolyText text="Permanently delete your account, your saved music, playlists, settings and game backups, and disconnect every service you've connected. We'll email you a link to download a copy of your data, kept for 30 days and then erased for good." />
+					</span>
+					<button className={danger} onClick={() => setStep("confirm")}>
+						<HolyText text="Delete account" />
+					</button>
+				</div>
+			)}
+			{step === "confirm" && (
+				<div className="flex flex-col gap-2">
+					<span className="text-sm">
+						<HolyText text="We'll email you a code to confirm it's you. Your account is only deleted once you enter it." />
+					</span>
+					<div className="flex gap-2">
+						<button className={danger} disabled={busy} onClick={sendCode}>
+							<HolyText text={busy ? "Sending…" : "Email me a code"} />
+						</button>
+						<button className={pill} disabled={busy} onClick={() => (setStep("idle"), setError(""))}>
+							<HolyText text="Cancel" />
+						</button>
+					</div>
+				</div>
+			)}
+			{step === "code" && (
+				<div className="flex flex-col gap-2">
+					<span className="text-sm">
+						<HolyText text={`Enter the code we sent to ${sentTo}. It expires in 15 minutes.`} />
+					</span>
+					<div className="flex flex-wrap gap-2">
+						<input
+							ref={codeRef}
+							{...codeAttrs}
+							className="w-36 px-3 py-2 rounded-xl text-base tracking-[0.3em] outline-none bg-[#ffffff10] focus:bg-[#ffffff18] tabular-nums"
+							inputMode="numeric"
+							autoComplete="one-time-code"
+							maxLength={6}
+							value={code}
+							onChange={e => setCode(e.target.value.replace(/\D/g, ""))}
+							onKeyDown={e => e.key === "Enter" && code.length === 6 && !busy && confirm()}
+						/>
+						<button className={danger} disabled={busy || code.length !== 6} onClick={confirm}>
+							<HolyText text={busy ? "Deleting…" : "Delete my account"} />
+						</button>
+						<button className={pill} disabled={busy} onClick={sendCode}>
+							<HolyText text="Send a new code" />
+						</button>
+						<button className={pill} disabled={busy} onClick={() => (setStep("idle"), setError(""), setCode(""))}>
+							<HolyText text="Cancel" />
+						</button>
+					</div>
+				</div>
+			)}
+		</section>
 	);
 };
 
@@ -625,6 +773,166 @@ const ListenbrainzRow = ({ me, busy, run, pending }: { me: Me; busy: string | nu
 				</span>
 			)}
 		</>
+	);
+};
+
+const DISCORD_STATUS = {
+	online: { label: "Online", color: "#23a55a" },
+	idle: { label: "Idle", color: "#f0b232" },
+	dnd: { label: "Do Not Disturb", color: "#f23f43" },
+	offline: { label: "Offline", color: "#80848e" },
+} as const;
+const ACTIVITY_VERBS: Record<number, string> = { 0: "Playing", 1: "Streaming", 2: "Listening to", 3: "Watching", 5: "Competing in" };
+
+const elapsed = (start?: number) => {
+	if (!start) return "";
+	const m = Math.floor((Date.now() - start) / 60_000);
+	if (m < 1) return "just now";
+	return m < 60 ? `for ${m}m` : `for ${Math.floor(m / 60)}h ${m % 60}m`;
+};
+
+/** "On Discord": the user's activity and voice channel, as the bot sees it (discord-bot.ts). */
+const DiscordActivityCard = ({ me, options, busy, run }: { me: Me; options: AuthOptions | null; busy: string | null; run: Run }) => {
+	const newTab = useTabsStore(state => state.newTab);
+	const [data, setData] = useState<DiscordActivityState | null>(null);
+	const [reload, setReload] = useState(0);
+	const linked = (me.providers ?? []).includes("discord");
+	const { ref: switchRef, placeholder: switchAttrs } = useHolyAttr({ "aria-label": "Show my Discord activity" });
+
+	useEffect(() => {
+		let alive = true;
+		const load = () => {
+			if (document.visibilityState === "visible")
+				void getDiscordActivity().then(
+					d => alive && setData(d),
+					() => undefined,
+				);
+		};
+		load();
+		const timer = window.setInterval(load, 15_000);
+		return () => {
+			alive = false;
+			window.clearInterval(timer);
+		};
+	}, [linked, reload]);
+
+	const toggle = () => run("dc-show", async () => (await setDiscordActivityShown(!!data?.disabled), setReload(n => n + 1)));
+
+	if (!data?.available) return null;
+	const presence = data.presence;
+	const status = presence ? DISCORD_STATUS[presence.status] : null;
+	const note = (t: string) => (
+		<span className="text-sm text-(--text-tertiary)">
+			<HolyText text={t} />
+		</span>
+	);
+
+	let body: React.ReactNode;
+	if (!data.connected) {
+		body = (
+			<div className="flex items-center gap-3">
+				<span className="flex-1 text-sm text-(--text-tertiary)">
+					<HolyText text="Connect Discord to see what you're playing and which voice channel you're in." />
+				</span>
+				{oauthUsable(options) && (
+					<button className={pill} disabled={!!busy} onClick={() => run("dc-activity", () => connectSocial("discord", "link"), "Discord connected.")}>
+						<HolyText text={busy === "dc-activity" ? "Waiting…" : "Connect"} />
+					</button>
+				)}
+			</div>
+		);
+	} else if (data.disabled) body = note("Turned off. Your Discord activity isn't shown here.");
+	else if (data.bot !== "ready") body = note("Discord activity isn't available right now.");
+	else if (presence === null || presence === undefined) {
+		body = (
+			<div className="flex items-center gap-3">
+				<span className="flex-1 text-sm text-(--text-tertiary)">
+					<HolyText text="Join our Discord server to show your activity here." />
+				</span>
+				<button className={pill} onClick={() => newTab({ id: createId(), title: "Discord", url: "https://discord.gg/fracital", displayUrl: "https://discord.gg/fracital", icon: null, current: true })}>
+					<HolyText text="Join" />
+				</button>
+			</div>
+		);
+	} else {
+		const v = presence.voice;
+		body = (
+			<div className="flex flex-col gap-2.5">
+				{presence.activities.map((a, i) => (
+					<div key={`${a.type}-${a.name}-${i}`} className="flex items-center gap-3 min-w-0">
+						{a.image ? <img src={a.image} alt="" className="size-12 shrink-0 rounded-lg object-cover bg-[#ffffff10]" /> : a.type !== 4 && <div className="size-12 shrink-0 rounded-lg bg-[#ffffff10]" />}
+						<div className="flex flex-col min-w-0 text-sm leading-snug">
+							{a.type === 4 ? (
+								// A custom status. Activity text is the user's own data, shown as-is.
+								<span className="flex items-center gap-1.5 min-w-0">
+									{a.emoji && (a.emoji.startsWith("https://") ? <img src={a.emoji} alt="" className="size-4" /> : <span>{a.emoji}</span>)}
+									<span className="truncate">{a.state}</span>
+								</span>
+							) : (
+								<>
+									<span className="truncate">
+										<span className="text-(--text-tertiary)">
+											<HolyText text={ACTIVITY_VERBS[a.type] ?? "Playing"} />
+										</span>{" "}
+										<span className="font-semibold">{a.name}</span>
+									</span>
+									{a.details && <span className="truncate text-(--text-secondary)">{a.details}</span>}
+									{a.state && <span className="truncate text-(--text-tertiary)">{a.state}</span>}
+									{a.start && !a.end && (
+										<span className="text-xs text-(--text-tertiary)">
+											<HolyText text={elapsed(a.start)} />
+										</span>
+									)}
+								</>
+							)}
+						</div>
+					</div>
+				))}
+				{v && (
+					<div className="flex items-center gap-2 text-sm min-w-0">
+						<SpeakerWaveIcon className="size-4 shrink-0 text-green-500" />
+						<span className="truncate">
+							<span className="font-semibold">{v.channel || <HolyText text="Voice channel" />}</span>
+							{v.guild && <span className="text-(--text-tertiary)"> · {v.guild}</span>}
+						</span>
+						{v.video && <VideoCameraIcon className="size-4 shrink-0 text-(--text-secondary)" />}
+						{v.stream && <ComputerDesktopIcon className="size-4 shrink-0 text-(--text-secondary)" />}
+					</div>
+				)}
+				{!presence.activities.length && !v && note(presence.status === "offline" ? "You're offline on Discord." : "Nothing going on right now.")}
+			</div>
+		);
+	}
+
+	return (
+		<section className="flex flex-col gap-3 p-4 rounded-2xl bg-(--tertiary)">
+			<div className="flex items-center gap-2">
+				<FontAwesomeIcon icon={faDiscord} className="size-5" style={{ color: DISCORD_BLURPLE }} />
+				<h2 className="font-bold flex-1">
+					<HolyText text="On Discord" />
+				</h2>
+				{status && !data.disabled && (
+					<span className="flex items-center gap-1.5 text-xs text-(--text-secondary)">
+						<span className="size-2.5 rounded-full" style={{ backgroundColor: status.color }} />
+						<HolyText text={status.label} />
+					</span>
+				)}
+				{data.connected && (
+					<button
+						ref={switchRef}
+						{...switchAttrs}
+						role="switch"
+						aria-checked={!data.disabled}
+						disabled={!!busy}
+						onClick={toggle}
+						className={`relative inline-block w-12 h-7 shrink-0 rounded-full transition-colors duration-200 disabled:opacity-50 cursor-pointer ${!data.disabled ? "bg-(--accent)" : "bg-[#ffffff15] hover:bg-[#ffffff25]"}`}
+					>
+						<span className={`absolute left-1 top-1 size-5 rounded-full bg-white shadow transition-transform duration-200 ${!data.disabled ? "translate-x-5" : ""}`} />
+					</button>
+				)}
+			</div>
+			{body}
+		</section>
 	);
 };
 

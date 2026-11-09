@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useShallow } from "zustand/react/shallow";
-import { AdjustmentsHorizontalIcon, ArrowPathRoundedSquareIcon, ArrowsPointingInIcon, BackspaceIcon, BackwardIcon, ChatBubbleBottomCenterTextIcon, FilmIcon, ForwardIcon, MusicalNoteIcon, PauseIcon, PhotoIcon, PlayIcon, QueueListIcon, SpeakerWaveIcon, SpeakerXMarkIcon } from "@heroicons/react/24/solid";
+import { AdjustmentsHorizontalIcon, ArrowPathRoundedSquareIcon, ArrowsPointingInIcon, BackwardIcon, ChatBubbleBottomCenterTextIcon, ChevronUpIcon, FilmIcon, ForwardIcon, InformationCircleIcon, MusicalNoteIcon, PauseIcon, PhotoIcon, PlayIcon, QueueListIcon, SpeakerWaveIcon, SpeakerXMarkIcon } from "@heroicons/react/24/solid";
 import { useMusicStore, usePlaybackStore, useSettingsStore, useTabsStore } from "../../store";
 import type { Track } from "../../types";
 import { AudvisVisualizer } from "../../components/AudvisVisualizer";
@@ -8,11 +8,15 @@ import { formatTime, getAudio, isPlayerUrl, next, nowPlayingTitle, parsePlayerMo
 import { LYRICS_CHANGED_EVENT, LYRICS_SOURCE_LABELS, loadLyrics, type Lyrics } from "../../libs/lyrics";
 import { activeLineIndex } from "../../libs/lrc";
 import { PlayCount } from "../../components/PlayCount";
-import { RadioStatus } from "../../components/RadioStatus";
-import { clearQueue } from "../../libs/radio";
+import { SongFeedback } from "../../components/SongFeedback";
+import { QueueList } from "../../components/QueueList";
 import { UserGroupIcon } from "@heroicons/react/24/solid";
-import { cleanAlbumTitle, getMusicVideo, getSongCredits, getSongInfo, type SongCredits } from "../../libs/music-service";
+import { cleanAlbumTitle, getAlbumInfo, getMusicVideo, getSongCredits, getSongInfo, type AlbumInfo, type SongCredits, type SongInfo } from "../../libs/music-service";
 import { isLinkable, openArtistByName, openTrackAlbum, openTrackArtist, trackArtists } from "../../libs/trackLinks";
+import { HolyLink } from "../../components/common/HolyLink";
+import { HolyText } from "../../components/common/HolyText";
+import { useHolyAttr } from "../../libs/holy-attr";
+import { reducedMotion } from "../../libs/motion";
 
 interface MusicPlayerProps {
 	query?: string;
@@ -267,7 +271,7 @@ const LyricsPanel = ({ track }: { track: Track }) => {
 		const container = containerRef.current;
 		const line = lineRefs.current[Math.max(active, 0)];
 		if (!container || !line || Date.now() < userScrollUntil.current) return;
-		container.scrollTo({ top: line.offsetTop - container.clientHeight / 2 + line.offsetHeight / 2, behavior: document.hidden ? "instant" : "smooth" });
+		container.scrollTo({ top: line.offsetTop - container.clientHeight / 2 + line.offsetHeight / 2, behavior: document.hidden || reducedMotion() ? "instant" : "smooth" });
 	}, [active, lyrics]);
 
 	useEffect(() => {
@@ -364,13 +368,182 @@ const useReleaseYear = (track: Track | null) => {
 		let alive = true;
 		getSongInfo(track.title, trackArtists(track)[0], track.albumId)
 			.then(r => alive && setFetched({ key, year: r.releaseDate ? r.releaseDate.slice(0, 4) : null }))
-			.catch(() => {});
+			.catch(error => console.warn("Song release date lookup failed:", error));
 		return () => {
 			alive = false;
 		};
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [key, local]);
 	return local ?? (fetched?.key === key ? fetched.year : null);
+};
+
+const compactCount = (count: number) => new Intl.NumberFormat(undefined, { notation: "compact", maximumFractionDigits: 1 }).format(count);
+
+// A data value (the song's length), formatted like "3 minutes 6 seconds".
+const spokenDuration = (seconds: number) => {
+	const total = Math.round(seconds);
+	const parts: [number, string][] = [
+		[Math.floor(total / 3600), "hour"],
+		[Math.floor((total % 3600) / 60), "minute"],
+		[total % 60, "second"],
+	];
+	return parts
+		.filter(([n]) => n > 0)
+		.map(([n, unit]) => `${n} ${unit}${n === 1 ? "" : "s"}`)
+		.join(" ");
+};
+
+const releaseDateLabel = (date: string | null, track: Track) => {
+	const value = date || (track.year instanceof Date ? String(track.year.getFullYear()) : String(track.year || ""));
+	if (!value || /^(unknown|false|null)$/i.test(value)) return null;
+	if (/^\d{4}-\d{2}-\d{2}/.test(value)) {
+		const parsed = new Date(value);
+		if (!Number.isNaN(parsed.getTime())) return parsed.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric", timeZone: "UTC" });
+	}
+	return value.slice(0, 4);
+};
+
+/** Song bio and release details; album-level Last.fm details fill any missing track data. */
+const InfoPanel = ({ track }: { track: Track }) => {
+	const duration = usePlaybackStore(state => state.duration);
+	const key = `${songKey(track)}|${track.album}`;
+	const artist = trackArtists(track)[0] ?? "";
+	const albumTitle = track.album && !/^unknown/i.test(track.album) ? cleanAlbumTitle(track.album) : track.title;
+	const [trackResult, setTrackResult] = useState<{ key: string; data: SongInfo | null } | null>(null);
+	const [albumResult, setAlbumResult] = useState<{ key: string; data: AlbumInfo | null } | null>(null);
+	const [detailsOpen, setDetailsOpen] = useState(true);
+	const { ref: detailsTitleRef, placeholder: detailsTitle } = useHolyAttr({ title: detailsOpen ? "Collapse release details" : "Expand release details" });
+	const trackData = trackResult?.key === key ? trackResult.data : null;
+	const albumData = albumResult?.key === key ? albumResult.data : null;
+	const bio = trackData?.bio ?? albumData?.bio ?? null;
+	const sourceUrl = bio ? (trackData?.bio ? trackData.sourceUrl ?? trackData.bio.url : albumData?.bio?.url) : trackData?.sourceUrl;
+
+	useEffect(() => {
+		let alive = true;
+		if (!artist) return;
+
+		getSongInfo(track.title, artist, track.albumId)
+			.then(data => alive && setTrackResult({ key, data }))
+			.catch(error => {
+				console.warn("Song info lookup failed:", error);
+				if (alive) setTrackResult({ key, data: null });
+			});
+		getAlbumInfo({ id: track.albumId ?? "", title: albumTitle, artist, artwork: track.cover })
+			.then(data => alive && setAlbumResult({ key, data }))
+			.catch(error => {
+				console.warn("Album info lookup failed:", error);
+				if (alive) setAlbumResult({ key, data: null });
+			});
+
+		return () => {
+			alive = false;
+		};
+	}, [key, artist, albumTitle, track.albumId, track.cover, track.title]);
+
+	const listeners = trackData?.listeners || albumData?.listeners || 0;
+	const plays = trackData?.playcount || albumData?.playcount || 0;
+	const statsUrl = trackData?.sourceUrl ?? albumData?.bio?.url ?? null;
+	const genre = (track.genre && !/^unknown/i.test(track.genre) ? track.genre : albumData?.genre || albumData?.tags.join(", ")) || null;
+	const released = releaseDateLabel(trackData?.releaseDate ?? albumData?.releaseDate ?? null, track);
+	const rows: { label: string; value: ReactNode }[] = [];
+	if (released) rows.push({ label: "Released:", value: released });
+	if (duration > 0) rows.push({ label: "Length:", value: spokenDuration(duration) });
+	if (genre) rows.push({ label: "Genre:", value: genre });
+	if (listeners || plays)
+		rows.push({
+			label: "Listeners:",
+			value: (
+				<>
+					{listeners > 0 && (
+						<>
+							{compactCount(listeners)}
+							{statsUrl && (
+								<>
+									{" "}
+									<HolyText text="on" /> <HolyLink href={statsUrl} target="_blank" text="Last.fm" className="underline underline-offset-2 hover:text-(--text-primary)" />
+								</>
+							)}
+						</>
+					)}
+					{listeners > 0 && plays > 0 && " · "}
+					{plays > 0 && (
+						<>
+							{compactCount(plays)} <HolyText text="plays" />
+						</>
+					)}
+				</>
+			),
+		});
+	const loading = !!artist && (trackResult?.key !== key || albumResult?.key !== key);
+
+	return (
+		<div className="flex h-full flex-col gap-4 overflow-y-auto p-4 @lg:p-5">
+			<section>
+				<h2 className="mb-1 text-lg @lg:text-xl font-bold text-(--text-primary)">
+					<HolyText text="Bio" />
+				</h2>
+				{bio ? (
+					<p className="whitespace-pre-line text-base @lg:text-lg font-semibold leading-snug text-(--text-secondary)">
+						{bio.summary || bio.full}
+						{sourceUrl && (
+							<>
+								{" "}
+								<HolyLink href={sourceUrl} target="_blank" text="Last.fm" className="underline underline-offset-2 hover:text-(--text-primary)" />
+							</>
+						)}
+					</p>
+				) : loading ? (
+					<div className="h-14 max-w-2xl rounded-xl bg-[color-mix(in_srgb,var(--text-primary)_12%,transparent)] animate-pulse" />
+				) : (
+					<p className="text-base @lg:text-lg font-semibold leading-snug text-(--text-secondary)">
+						<HolyText text="No biography is available for this song or album." />
+					</p>
+				)}
+				{!bio && sourceUrl && (
+					<p className="mt-2 text-sm text-(--text-tertiary)">
+						<HolyText text="Source:" />{" "}
+						<HolyLink href={sourceUrl} target="_blank" text="Last.fm" className="underline underline-offset-2 hover:text-(--text-primary)" />
+					</p>
+				)}
+			</section>
+
+			<section className="w-full max-w-xl overflow-hidden rounded-3xl border-2 border-[color-mix(in_srgb,var(--text-primary)_30%,transparent)] bg-[color-mix(in_srgb,var(--text-primary)_5%,transparent)]">
+				<h3>
+					<button
+						ref={detailsTitleRef}
+						{...detailsTitle}
+						aria-expanded={detailsOpen}
+						className={`group/details flex w-full items-center justify-between gap-3 bg-[color-mix(in_srgb,var(--text-primary)_12%,transparent)] px-4 py-2.5 text-left text-lg @lg:text-xl font-bold text-(--text-primary) cursor-pointer duration-150 hover:bg-[color-mix(in_srgb,var(--text-primary)_16%,transparent)] ${detailsOpen ? "border-b border-[color-mix(in_srgb,var(--text-primary)_10%,transparent)]" : ""}`}
+						onClick={() => setDetailsOpen(open => !open)}
+					>
+						<HolyText text="Release details" />
+						<span className="flex shrink-0 items-center justify-center rounded-full bg-[color-mix(in_srgb,var(--text-primary)_18%,transparent)] px-4 py-1.5 duration-150 group-hover/details:bg-[color-mix(in_srgb,var(--text-primary)_26%,transparent)]">
+							<ChevronUpIcon strokeWidth={1.5} className={`size-4 overflow-visible stroke-current [stroke-linejoin:round] [&_path]:[vector-effect:non-scaling-stroke] duration-200 ${detailsOpen ? "" : "rotate-180"}`} />
+						</span>
+					</button>
+				</h3>
+				{detailsOpen && (
+					<div className="grid grid-cols-[auto_1fr] gap-x-6 @lg:gap-x-8 gap-y-0.5 px-4 py-3 text-sm @lg:text-base font-bold leading-snug text-(--text-secondary)">
+						{rows.map(row => (
+							<div key={row.label} className="contents">
+								<span className="text-(--text-primary) opacity-90">
+									<HolyText text={row.label} />
+								</span>
+								<span>{row.value}</span>
+							</div>
+						))}
+						{rows.length === 0 && (
+							<p className="col-span-2 text-sm text-(--text-secondary)">
+								{loading ? <HolyText text="Loading release details…" /> : <HolyText text="No release details are available." />}
+							</p>
+						)}
+					</div>
+				)}
+			</section>
+
+			{albumData?.copyright && <p className="text-xs font-medium text-(--text-tertiary)">{albumData.copyright}</p>}
+		</div>
+	);
 };
 
 /** Who wrote, produced, engineered and played on the song (MusicBrainz), shown beside the cover. */
@@ -443,65 +616,9 @@ const CreditsPanel = ({ track }: { track: Track }) => {
 
 const QueuePanel = () => {
 	const dark = useSettingsStore(state => state.settings.brightness !== "light");
-	const hoverTint = dark ? "hover:bg-[#ffffff18]" : "hover:bg-[#00000010]";
-	const queue = useMusicStore(state => state.queue);
-	const setCurrentTrack = useMusicStore(state => state.setCurrentTrack);
-	const removeTrack = useMusicStore(state => state.removeTrack);
-
-	if (queue.length === 0) {
-		return (
-			<div className="flex h-full flex-col items-center justify-center gap-2 text-(--text-secondary)">
-				<QueueListIcon className="size-10 opacity-60" />
-				<span className="text-lg font-semibold text-(--text-primary)">Queue is empty</span>
-				<RadioStatus className="mt-2" />
-			</div>
-		);
-	}
-
 	return (
-		<div className="flex h-full flex-col gap-1 overflow-y-auto p-4">
-			<RadioStatus className="mb-2" />
-			<div className="flex items-center justify-between gap-2 px-2 pb-2">
-				<h2 className="text-lg font-semibold">Up next</h2>
-				<button
-					className={`flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold text-(--text-secondary) hover:text-(--text-primary) cursor-pointer duration-150 ${dark ? "bg-[#ffffff18] hover:bg-[#ffffff28]" : "bg-[#00000010] hover:bg-[#0000001c]"}`}
-					title={`Remove all ${queue.length} songs from the queue`}
-					onClick={clearQueue}
-				>
-					Clear queue
-				</button>
-			</div>
-			{queue.map(song => (
-				<div
-					key={song.id}
-					className={`group flex items-center justify-between gap-3 rounded-lg p-2 cursor-pointer duration-150 ${hoverTint}`}
-					onClick={() => {
-						setCurrentTrack(song);
-						removeTrack(song.id);
-					}}
-				>
-					<div className="flex min-w-0 items-center gap-3">
-						<Cover track={song} className="size-12 shrink-0 rounded-md" />
-						<div className="flex min-w-0 flex-col gap-1">
-							<span className="truncate font-semibold leading-none">{song.title}</span>
-							<span className="truncate text-sm leading-none text-(--text-secondary)">
-								{artistText(song)}
-								<PlayCount title={song.title} artist={song.artists} skeleton={false} prefix=" · " className="text-(--text-tertiary)" />
-							</span>
-						</div>
-					</div>
-					<button
-						title="Remove from queue"
-						className={`p-1.5 rounded-md opacity-0 group-hover:opacity-100 text-(--text-secondary) hover:text-(--text-primary) duration-150 ${hoverTint}`}
-						onClick={e => {
-							e.stopPropagation();
-							removeTrack(song.id);
-						}}
-					>
-						<BackspaceIcon className="size-5" />
-					</button>
-				</div>
-			))}
+		<div className="flex h-full flex-col overflow-y-auto p-4">
+			<QueueList dark={dark} variant="panel" />
 		</div>
 	);
 };
@@ -777,6 +894,7 @@ export const MusicPlayer = ({ query, className, onClose }: MusicPlayerProps) => 
 	const settings = useSettingsStore(state => state.settings);
 	const currentTrack = useMusicStore(state => state.currentTrack);
 	const isPlaying = usePlaybackStore(state => state.isPlaying);
+	const buffering = usePlaybackStore(state => state.buffering);
 	const loop = usePlaybackStore(state => state.loop);
 	const analyser = usePlaybackStore(state => state.analyser);
 	const dark = settings.brightness !== "light";
@@ -816,7 +934,7 @@ export const MusicPlayer = ({ query, className, onClose }: MusicPlayerProps) => 
 	const showVisualizer = settings["big-player-visualizer"] === true && settings["disable-visualizers"] !== true;
 	// Video mode shows the cover for songs without a music video.
 	const shown: PlayerMode = mode === "video" && !video.videoId && !video.loading ? "cover" : mode;
-	// The panel next to the album (video, queue, lyrics, credits). It keeps its last content while it
+	// The panel next to the album (video, queue, lyrics, credits, info). It keeps its last content while it
 	// slides shut, so closing animates instead of emptying first.
 	const panelOpen = shown !== "cover";
 	const [panel, setPanel] = useState<Exclude<PlayerMode, "cover">>(shown === "cover" ? "queue" : shown);
@@ -831,6 +949,7 @@ export const MusicPlayer = ({ query, className, onClose }: MusicPlayerProps) => 
 	const roundButton = `flex items-center justify-center size-9 rounded-full text-(--text-secondary) hover:text-(--text-primary) cursor-pointer duration-150 ${glass}`;
 	const linkable = isLinkable(currentTrack);
 	const openLibrary = () => (onClose ? onClose() : void import("../../libs/aboutPages").then(m => m.openLibraryPage("")));
+	const { ref: infoButtonRef, placeholder: infoButtonTitle } = useHolyAttr({ title: "Song information" });
 
 	const trackInfo = (track: Track, align: "center" | "left") => {
 		const album = track.album && !/^unknown/i.test(track.album) ? cleanAlbumTitle(track.album) : null;
@@ -882,16 +1001,16 @@ export const MusicPlayer = ({ query, className, onClose }: MusicPlayerProps) => 
 
 			<div className="relative flex h-full w-full flex-col">
 				<div className="flex items-center gap-3 px-3 pt-3 pb-2 @lg:px-6 @lg:pt-4">
-					<button title="Browse music" className="shrink-0 text-(--accent) drop-shadow-[0_2px_8px_#00000050] cursor-pointer hover:scale-105 active:scale-95 duration-150" onClick={openLibrary}>
+					{/* <button title="Browse music" className="shrink-0 text-(--accent) drop-shadow-[0_2px_8px_#00000050] cursor-pointer hover:scale-105 active:scale-95 duration-150" onClick={openLibrary}>
 						<img src="/fm.svg" className="size-8 @lg:size-9" />
 					</button>
 					<nav className="hidden @3xl:flex min-w-0 items-center gap-0.5" aria-label="Artist">
-						{["Merch", "Playlists", "Videos", "Tours"].map(label => (
+						{["Videos"].map(label => (
 							<button key={label} aria-disabled title={`${label} — coming soon`} className="shrink-0 px-2 py-1 rounded-lg	text-sm font-semibold text-(--text-primary) opacity-85 hover:opacity-95 hover:scale-105 cursor-pointer duration-200">
 								{label}
 							</button>
 						))}
-					</nav>
+					</nav> */}
 					<div className="ml-auto flex shrink-0 items-center gap-2 @lg:gap-3">
 						<div className={`flex items-center gap-0.5 p-1 rounded-full ${glass}`} role="group" aria-label="Player view">
 							<button title={video.videoId ? "Music video" : video.loading ? "Looking for a music video…" : "No music video for this song"} aria-pressed={shown === "video"} disabled={!video.videoId && shown !== "video"} className={segment(shown === "video")} onClick={() => changeMode("video")}>
@@ -905,6 +1024,9 @@ export const MusicPlayer = ({ query, className, onClose }: MusicPlayerProps) => 
 							</button>
 							<button title="Lyrics" aria-pressed={shown === "lyrics"} className={segment(shown === "lyrics")} onClick={() => changeMode("lyrics")}>
 								<ChatBubbleBottomCenterTextIcon className="size-5" />
+							</button>
+							<button ref={infoButtonRef} {...infoButtonTitle} aria-pressed={shown === "info"} className={segment(shown === "info")} onClick={() => changeMode("info")}>
+								<InformationCircleIcon className="size-5" />
 							</button>
 						</div>
 						<EqControl dark={dark} buttonClassName={roundButton} />
@@ -958,7 +1080,7 @@ export const MusicPlayer = ({ query, className, onClose }: MusicPlayerProps) => 
 									</div>
 								) : (
 									<div className={`size-full rounded-3xl border ${dark ? "border-[#ffffff40] bg-[#ffffff12]" : "border-[#00000020] bg-[#ffffff40]"} backdrop-blur-sm overflow-hidden`}>
-										{panel === "lyrics" ? <LyricsPanel track={currentTrack} /> : panel === "credits" ? <CreditsPanel track={currentTrack} /> : <QueuePanel />}
+										{panel === "lyrics" ? <LyricsPanel track={currentTrack} /> : panel === "credits" ? <CreditsPanel track={currentTrack} /> : panel === "info" ? <InfoPanel track={currentTrack} /> : <QueuePanel />}
 									</div>
 								)}
 							</div>
@@ -968,17 +1090,22 @@ export const MusicPlayer = ({ query, className, onClose }: MusicPlayerProps) => 
 							<div className={`mx-auto flex w-full flex-col gap-2 @lg:gap-3 ${panelOpen ? "" : "max-w-4xl"}`}>
 								<SeekBar dark={dark} />
 								<div className="flex w-full items-center">
-									<div className="flex flex-1 basis-0 justify-start">
+									<div className="flex flex-1 basis-0 justify-start gap-1">
 										<button title={loop ? "Repeat: on" : "Repeat: off"} aria-pressed={loop} className={`${iconButton} ${loop ? `text-(--accent)! opacity-100 ${dark ? "bg-[#ffffff1a]" : "bg-[#00000012]"}` : ""}`} onClick={toggleLoop}>
 											<ArrowPathRoundedSquareIcon className="size-7" />
 										</button>
+										<SongFeedback track={currentTrack} buttonClassName={iconButton} iconClassName="size-7" showSave />
 									</div>
 									<div className="flex shrink-0 items-center gap-2 @lg:gap-3.5">
 										<button title="Previous" className={transportButton} onClick={previous}>
 											<BackwardIcon className="size-8 @lg:size-10" />
 										</button>
 										<button title={isPlaying ? "Pause" : "Play"} className={transportButton} onClick={() => void togglePlay()}>
-											{isPlaying ? <PauseIcon className="size-11 @lg:size-13 overflow-visible stroke-current stroke-3 [stroke-linejoin:round] [&_path]:[vector-effect:non-scaling-stroke] duration-150" /> : <PlayIcon className="size-11 @lg:size-13 translate-x-0.5" />}
+											{isPlaying && buffering ? (
+												<span aria-hidden className="block size-11 @lg:size-13 p-1.5">
+													<span className="block size-full rounded-full border-4 border-current border-t-transparent animate-spin" />
+												</span>
+											) : isPlaying ? <PauseIcon className="size-11 @lg:size-13 overflow-visible stroke-current stroke-3 [stroke-linejoin:round] [&_path]:[vector-effect:non-scaling-stroke] duration-150" /> : <PlayIcon className="size-11 @lg:size-13 translate-x-0.5" />}
 										</button>
 										<button title="Next" className={transportButton} onClick={next}>
 											<ForwardIcon className="size-8 @lg:size-10" />

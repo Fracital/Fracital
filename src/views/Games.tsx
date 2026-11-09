@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { RufflePlayer } from "../components/RufflePlayer";
 import { HTMLPlayer } from "../components/HTMLPlayer";
+import { GameBarButton, GameStage } from "../components/GameStage";
 import { GameInstaller } from "../components/GameInstaller";
 import { GameCloudSave } from "../components/GameCloudSave";
 import { prepareGame, syncGame, trackGameSession } from "../libs/gameSaves";
@@ -283,6 +284,21 @@ const Games = ({ query, className }: GamesProps) => {
 			updatePageTab(currentTab.id, "games");
 		}
 	}, [selectedGame, games.length]);
+
+	const dark = settings.brightness !== "light";
+
+	/** Fullscreens the bar and the game together, so the bar keeps working in fullscreen. */
+	const toggleGameFullscreen = async () => {
+		if (!playerContainerRef.current) return;
+		if (!document.fullscreenElement) await playerContainerRef.current.requestFullscreen();
+		else await document.exitFullscreen();
+	};
+
+	const toggleGameMute = () => {
+		const next = !isMuted;
+		setIsMuted(next);
+		if (rufflePlayerRef.current && rufflePlayerRef.current.volume !== undefined) rufflePlayerRef.current.volume = next ? 0 : 1;
+	};
 
 	useEffect(() => {
 		const handleFullscreenChange = () => {
@@ -703,84 +719,64 @@ const Games = ({ query, className }: GamesProps) => {
 				</>
 			) : (
 				<>
-					<div className="flex items-center justify-between">
-						<button className={`flex items-center gap-2 px-4 py-2 rounded-lg font-semibold duration-150 ${settings.brightness === "dark" ? "bg-[#ffffff10] hover:bg-[#ffffff18] text-(--text-primary)" : "bg-[#00000010] hover:bg-[#00000018] text-(--text-primary)"}`} onClick={() => setSelectedGame(null)}>
-							<XMarkIcon className="size-5" />
-							Back to Games
-						</button>
-
-						<button
-							className={`flex items-center gap-2 px-4 py-2 rounded-lg font-semibold duration-150 ${settings.brightness === "dark" ? "bg-[#ffffff10] hover:bg-[#ffffff18] text-(--text-primary)" : "bg-[#00000010] hover:bg-[#00000018] text-(--text-primary)"}`}
-							onClick={() => setDetailsCollapsed(v => !v)}
-							aria-expanded={!detailsCollapsed}
-							aria-controls="game-details-panel"
-							title={detailsCollapsed ? "Show details" : "Hide details"}
-						>
-							{detailsCollapsed ? <ChevronLeftIcon className="size-5" /> : <ChevronRightIcon className="size-5" />}
-							<span className="hidden sm:inline">{detailsCollapsed ? "Show Details" : "Hide Details"}</span>
-						</button>
-					</div>
-
 					<div className="flex flex-col lg:flex-row gap-4 flex-1 min-h-0">
 						<div className="flex-1 flex flex-col gap-4 min-h-0">
-							<div ref={playerContainerRef} className="relative flex-1 rounded-xl overflow-hidden bg-black">
-								{!savesReady ? (
-									<div className="absolute inset-0 flex items-center justify-center bg-(--primary)">
-										<div className="flex flex-col items-center gap-3">
-											<div className="size-12 border-4 border-(--accent) border-t-transparent rounded-full animate-spin"></div>
-											<HolyText className="text-lg font-semibold text-(--text-secondary)" text="Loading saves..." />
+							<GameStage
+								containerRef={playerContainerRef}
+								dark={dark}
+								fullscreen={isFullscreen}
+								barStart={
+									<>
+										<button className={`flex shrink-0 items-center gap-2 px-3 py-1.5 rounded-lg font-semibold text-(--text-primary) cursor-pointer duration-150 ${dark ? "hover:bg-[#ffffff18]" : "hover:bg-[#00000012]"}`} onClick={() => setSelectedGame(null)}>
+											<XMarkIcon className="size-5" />
+											<span className="hidden sm:inline">Back to Games</span>
+										</button>
+										{/* The game's own title: a data value. */}
+										<span className="min-w-0 truncate text-sm font-semibold text-(--text-secondary)">{selectedGame.title}</span>
+									</>
+								}
+								barEnd={
+									<>
+										{selectedGame.type === "flash" && (
+											<GameBarButton label={isMuted ? "Unmute" : "Mute"} active={isMuted} onClick={toggleGameMute} dark={dark}>
+												{isMuted ? <SpeakerXMarkIcon className="size-5" /> : <SpeakerWaveIcon className="size-5" />}
+											</GameBarButton>
+										)}
+										<GameBarButton label={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"} onClick={() => void toggleGameFullscreen()} dark={dark}>
+											{isFullscreen ? <ArrowsPointingInIcon className="size-5" /> : <ArrowsPointingOutIcon className="size-5" />}
+										</GameBarButton>
+										{!isFullscreen && (
+											<GameBarButton label={detailsCollapsed ? "Show details" : "Hide details"} active={!detailsCollapsed} onClick={() => setDetailsCollapsed(v => !v)} dark={dark}>
+												{detailsCollapsed ? <ChevronLeftIcon className="size-5" /> : <ChevronRightIcon className="size-5" />}
+											</GameBarButton>
+										)}
+									</>
+								}
+							>
+									{!savesReady ? (
+										<div className="absolute inset-0 flex items-center justify-center bg-(--primary)">
+											<div className="flex flex-col items-center gap-3">
+												<div className="size-12 border-4 border-(--accent) border-t-transparent rounded-full animate-spin"></div>
+												<HolyText className="text-lg font-semibold text-(--text-secondary)" text="Loading saves..." />
+											</div>
 										</div>
-									</div>
-								) : selectedGame.type === "flash" ? (
-									<RufflePlayer
-										data={selectedGame.data}
-										className="w-full h-full"
-										autoplay={true}
-										quality="high"
-										scale="showAll"
-										backgroundColor="#000000"
-										volume={isMuted ? 0 : 1}
-										onPlayerReady={player => {
-											rufflePlayerRef.current = player;
-										}}
-									/>
-								) : (
-									<HTMLPlayer folderPath={selectedGame.folderPath} gameFile="index.html" className="w-full h-full" />
-								)}
-								<button
-									onClick={async () => {
-										if (!playerContainerRef.current) return;
-
-										if (!document.fullscreenElement) {
-											await playerContainerRef.current.requestFullscreen();
-											setIsFullscreen(true);
-										} else {
-											await document.exitFullscreen();
-											setIsFullscreen(false);
-										}
-									}}
-									className={`absolute bottom-4 right-4 p-3 rounded-lg font-semibold duration-150 ${settings.brightness === "dark" ? "bg-black/70 hover:bg-black/90 text-white" : "bg-white/70 hover:bg-white/90 text-black"}`}
-									title={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
-								>
-									{isFullscreen ? <ArrowsPointingInIcon className="size-5" /> : <ArrowsPointingOutIcon className="size-5" />}
-								</button>
-
-								{selectedGame.type === "flash" && (
-									<button
-										onClick={() => {
-											const newMutedState = !isMuted;
-											setIsMuted(newMutedState);
-											if (rufflePlayerRef.current && rufflePlayerRef.current.volume !== undefined) {
-												rufflePlayerRef.current.volume = newMutedState ? 0 : 1;
-											}
-										}}
-										className={`absolute bottom-4 right-20 p-3 rounded-lg font-semibold duration-150 ${settings.brightness === "dark" ? "bg-black/70 hover:bg-black/90 text-white" : "bg-white/70 hover:bg-white/90 text-black"}`}
-										title={isMuted ? "Unmute" : "Mute"}
-									>
-										{isMuted ? <SpeakerXMarkIcon className="size-5" /> : <SpeakerWaveIcon className="size-5" />}
-									</button>
-								)}
-							</div>
+									) : selectedGame.type === "flash" ? (
+										<RufflePlayer
+											data={selectedGame.data}
+											className="w-full h-full"
+											autoplay={true}
+											quality="high"
+											scale="showAll"
+											backgroundColor="#000000"
+											volume={isMuted ? 0 : 1}
+											onPlayerReady={player => {
+												rufflePlayerRef.current = player;
+											}}
+										/>
+									) : (
+										<HTMLPlayer folderPath={selectedGame.folderPath} gameFile="index.html" className="w-full h-full" />
+									)}
+							</GameStage>
 							<div className={`flex items-center justify-between gap-4 p-4 rounded-xl ${settings.brightness === "dark" ? "bg-[#ffffff10]" : "bg-[#00000010]"}`}>
 								<div className="flex items-center gap-3">
 									<button

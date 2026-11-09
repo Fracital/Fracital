@@ -9,6 +9,7 @@ import { BIG_PLAYER_DEFAULT_SETTING, useSettingsStore } from "../store";
 import { loadTheme } from "../libs/theme";
 import { ThemePath, SettingsPath, EXPERIMENTAL_PROXIES_SETTING, getProxy } from "../types";
 import { HolyText } from "../components/common/HolyText";
+import { isMotionSetting, MOTION_SETTING } from "../libs/motion";
 import { useModal } from "../components/Modal/ModalContext";
 import { Modal } from "../components/Modal/Modal";
 import FavoriteModal from "../components/Modal/Favorite";
@@ -27,7 +28,7 @@ const ThemeCard = (config: any) => {
 	return (
 		<div
 			className={
-				`flex flex-col p-3.5 gap-2.5 max-w-68 rounded-2xl overflow-hidden duration-200` +
+				`flex flex-col gap-2.5 max-w-68 rounded-2xl overflow-hidden duration-200` +
 				" " +
 				`
             ${settings.brightness === "dark" ? "bg-[#ffffff10]" : "bg-[#00000030]"}
@@ -45,7 +46,7 @@ const ThemeCard = (config: any) => {
 				useSettingsStore.getState().setSettings("theme", config.name.toLowerCase());
 			}}
 		>
-			<div className="flex items-center justify-between">
+			<div className={`flex items-center justify-between p-3.5 border-b ${settings.brightness === "dark" ? "bg-[#ffffff10] border-[#ffffff52]" : "bg-[#00000030] border-[#00000052]"}`}>
 				<div className="flex gap-2 items-center">
 					<CheckCircleIcon
 						className={
@@ -80,8 +81,7 @@ const ThemeCard = (config: any) => {
 					/>
 				</div>
 			</div>
-			<span className="flex w-full h-1 rounded-full bg-[#ffffff38]"></span>
-			<div className="flex flex-col w-full justify-center">
+			<div className="flex flex-col w-full justify-center p-3.5 pt-0">
 				<div>
 					<span className="text-lg font-bold">Description: </span>
 					<span className="text-base font-medium">{config.description}</span>
@@ -103,8 +103,8 @@ const Settings = ({ className }: SettingsProps) => {
 	const setSettings = useSettingsStore(state => state.setSettings);
 	const settings = useSettingsStore(state => state.settings);
 	const [page, setpage] = useState<string>("general");
-	const [floatingTabs, setFloatingTabs] = useState<boolean>(true);
 	const [themes, setThemes] = useState<any[]>([]);
+	const compactTabs = settings["compact-tabs"] === true;
 	const { openModal } = useModal();
 
 	const [links, setLinks] = useState<linkProps[]>(
@@ -144,7 +144,6 @@ const Settings = ({ className }: SettingsProps) => {
 				if (!window.fr?.fs) throw new Error("Filer API is not initialized");
 				const settingsData = await window.fr.fs.promises.readFile(SettingsPath, "utf-8");
 				const parsedSettings = JSON.parse(settingsData);
-				setFloatingTabs(parsedSettings["floating-tabs"] ?? true);
 				Object.entries(parsedSettings).forEach(([key, value]) => {
 					setSettings(key, value);
 				});
@@ -153,8 +152,7 @@ const Settings = ({ className }: SettingsProps) => {
 				setSettings("theme", "default");
 				setSettings("proxy", "sj");
 				setSettings("quicklinks", quickLinks);
-				setSettings("floating-tabs", true);
-				setFloatingTabs(true);
+				setSettings("compact-tabs", false);
 			}
 		};
 		getSettings();
@@ -262,53 +260,110 @@ const Settings = ({ className }: SettingsProps) => {
 		),
 		app: (
 			<div className="flex flex-col gap-2">
-				<h1 className="text-3xl font-bold">Appearance</h1>
-				<div className="flex gap-2">
-					<h2 className="text-xl font-medium">Floating Tabs</h2>
-					<label className="flex items-center gap-3 cursor-pointer select-none">
-						<input
-							type="checkbox"
-							checked={settings["floating-tabs"] ?? true}
-							onChange={async () => {
-								const next = !floatingTabs;
-								setFloatingTabs(next);
-								await window.fr.fs.promises.writeFile(
-									SettingsPath,
-									JSON.stringify(
-										{
-											...settings,
-											"floating-tabs": next,
-										},
-										null,
-										4,
-									),
-									"utf-8",
-								);
-								setSettings("floating-tabs", next);
-							}}
-							className="sr-only peer"
-						/>
-						<span
-							className={
-								"relative inline-block w-12 h-7 transition-colors duration-200 rounded-full" +
-								" " +
-								`
-                            ${floatingTabs ? "bg-(--accent)" : `${settings.brightness === "dark" ? "bg-[#ffffff10] hover:bg-[#ffffff20]" : "bg-[#00000025] hover:bg-[#00000035]"}`}
-                        `
-							}
-						>
-							<span
-								className={
-									"absolute left-1 top-1 w-5 h-5 bg-white rounded-full shadow transform transition-transform duration-200" +
-									" " +
-									`
-                                ${floatingTabs ? "translate-x-5" : ""}
-                            `
-								}
+				<h1 className="text-2xl font-bold">Tabs Appearance</h1>
+				<div className="flex flex-col gap-0.5">
+					<div className="flex gap-2">
+						<h2 className="text-xl font-medium">
+							<HolyText text="Compact Mode" />
+						</h2>
+						<label className="flex items-center gap-3 cursor-pointer select-none">
+							<input
+								type="checkbox"
+								checked={compactTabs}
+								onChange={async () => {
+									const next = !compactTabs;
+									await window.fr.fs.promises.writeFile(SettingsPath, JSON.stringify({ ...settings, "compact-tabs": next }, null, 4), "utf-8");
+									setSettings("compact-tabs", next);
+								}}
+								className="sr-only peer"
 							/>
-						</span>
-					</label>
+							<span className={`relative inline-block w-12 h-7 transition-colors duration-200 rounded-full ${compactTabs ? "bg-(--accent)" : settings.brightness === "dark" ? "bg-[#ffffff10] hover:bg-[#ffffff20]" : "bg-[#00000025] hover:bg-[#00000035]"}`}>
+								<span className={`absolute left-1 top-1 w-5 h-5 bg-white rounded-full shadow transform transition-transform duration-200 ${compactTabs ? "translate-x-5" : ""}`} />
+							</span>
+						</label>
+					</div>
+					<HolyText as="p" className="text-sm text-(--text-secondary)" text="Collapsed side panels shrink to a slim strip of round icons. Off, they peek out from the screen edge." />
 				</div>
+				<div className="flex flex-col gap-0.5">
+					<div className="flex flex-wrap items-center gap-2">
+						<h2 className="text-xl font-medium">
+							<HolyText text="Open Panels on Click" />
+						</h2>
+						<div role="radiogroup" className={`flex gap-1 p-1 rounded-full ${settings.brightness === "dark" ? "bg-[#ffffff10]" : "bg-[#00000025]"}`}>
+							{(["anywhere", "except-tabs", "off"] as const).map(choice => {
+								const current = ["anywhere", "except-tabs", "off"].includes(settings["panel-click-open"]) ? settings["panel-click-open"] : "except-tabs";
+								const on = current === choice;
+								return (
+									<button
+										key={choice}
+										role="radio"
+										aria-checked={on}
+										className={`px-3 py-1 rounded-full text-sm font-semibold cursor-pointer duration-150 ${on ? "bg-(--accent) text-white" : "text-(--text-secondary) hover:text-(--text-primary)"}`}
+										onClick={async () => {
+											if (on) return;
+											await window.fr.fs.promises.writeFile(SettingsPath, JSON.stringify({ ...settings, "panel-click-open": choice }, null, 4), "utf-8");
+											setSettings("panel-click-open", choice);
+										}}
+									>
+										<HolyText text={choice === "anywhere" ? "Anywhere" : choice === "except-tabs" ? "Except tabs" : "Off"} />
+									</button>
+								);
+							})}
+						</div>
+					</div>
+					<HolyText as="p" className="text-sm text-(--text-secondary)" text="What clicking inside the collapsed side panel does. Except tabs: switching tabs keeps it collapsed. Off: only the open/close button opens it." />
+				</div>
+				<div className="flex items-center gap-2">
+					<h2 className="text-xl font-medium">
+						<HolyText text="Tabs Position" />
+					</h2>
+					<div role="radiogroup" className={`flex gap-1 p-1 rounded-full ${settings.brightness === "dark" ? "bg-[#ffffff10]" : "bg-[#00000025]"}`}>
+						{(["left", "right"] as const).map(side => {
+							const on = (settings["tabs-position"] === "left" ? "left" : "right") === side;
+							return (
+								<button
+									key={side}
+									role="radio"
+									aria-checked={on}
+									className={`px-3 py-1 rounded-full text-sm font-semibold cursor-pointer duration-150 ${on ? "bg-(--accent) text-white" : "text-(--text-secondary) hover:text-(--text-primary)"}`}
+									onClick={async () => {
+										if (on) return;
+										await window.fr.fs.promises.writeFile(SettingsPath, JSON.stringify({ ...settings, "tabs-position": side }, null, 4), "utf-8");
+										setSettings("tabs-position", side);
+									}}
+								>
+									<HolyText text={side === "left" ? "Left" : "Right"} />
+								</button>
+							);
+						})}
+					</div>
+				</div>
+				<div className="flex items-center gap-2">
+					<h2 className="text-xl font-medium">
+						<HolyText text="Reduce Motion" />
+					</h2>
+					<div role="radiogroup" className={`flex gap-1 p-1 rounded-full ${settings.brightness === "dark" ? "bg-[#ffffff10]" : "bg-[#00000025]"}`}>
+						{(["system", "on", "off"] as const).map(choice => {
+							const on = (isMotionSetting(settings[MOTION_SETTING]) ? settings[MOTION_SETTING] : "system") === choice;
+							return (
+								<button
+									key={choice}
+									role="radio"
+									aria-checked={on}
+									className={`px-3 py-1 rounded-full text-sm font-semibold cursor-pointer duration-150 ${on ? "bg-(--accent) text-white" : "text-(--text-secondary) hover:text-(--text-primary)"}`}
+									onClick={async () => {
+										if (on) return;
+										await window.fr.fs.promises.writeFile(SettingsPath, JSON.stringify({ ...settings, [MOTION_SETTING]: choice }, null, 4), "utf-8");
+										setSettings(MOTION_SETTING, choice);
+									}}
+								>
+									<HolyText text={choice === "system" ? "System" : choice === "on" ? "On" : "Off"} />
+								</button>
+							);
+						})}
+					</div>
+				</div>
+				<HolyText as="p" className="-mt-1 text-sm text-(--text-secondary)" text="Turns off sliding, fading and other animations. System follows your device's setting." />
 				<div className="flex gap-2">
 					<h2 title="Keep your open tabs, pages and music queue across page refreshes" className="text-xl font-medium">
 						Persistent Tabs

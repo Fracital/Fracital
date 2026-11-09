@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef } from "react";
 import type { Frame } from "@mercuryworkshop/scramjet-controller";
 import { unrewriteUrl } from "@mercuryworkshop/scramjet";
-import { useTabLoadingStore, useTabsStore } from "../store";
+import { useTabAudioStore, useTabLoadingStore, useTabsStore } from "../store";
 
 const LOAD_STUCK_MS = 45_000;
 
@@ -25,6 +25,61 @@ const getIconUrl = (doc: Document | null | undefined, pageUrl: string, frame: Fr
 	}
 };
 
+/** Every <audio>/<video> in the page and its same-origin subframes. */
+const collectMedia = (doc: Document | null | undefined, out: HTMLMediaElement[] = [], depth = 0): HTMLMediaElement[] => {
+	if (!doc || depth > 4) return out;
+	out.push(...doc.querySelectorAll<HTMLMediaElement>("audio, video"));
+	for (const frame of doc.querySelectorAll("iframe, frame")) {
+		try {
+			collectMedia((frame as HTMLIFrameElement).contentDocument, out, depth + 1);
+		} catch {
+			// cross-origin subframe
+		}
+	}
+	return out;
+};
+
+const AUDIO_POLL_MS = 1000;
+
+/**
+ * Marks the tab audible while its page plays sound and enforces the tab's mute. Only media elements in the
+ * DOM are seen; Web Audio and detached `new Audio()` playback can't be detected from outside the page.
+ */
+const useTabAudio = (frameRef: React.RefObject<HTMLIFrameElement | null>, id: string) => {
+	const muted = useTabAudioStore(state => Boolean(state.muted[id]));
+	const setAudible = useTabAudioStore(state => state.setAudible);
+	// Elements this tab muted, so unmuting doesn't unmute what the page muted itself.
+	const mutedByTab = useRef(new WeakSet<HTMLMediaElement>());
+
+	useEffect(() => {
+		const check = () => {
+			let media: HTMLMediaElement[];
+			try {
+				media = collectMedia(frameRef.current?.contentDocument);
+			} catch {
+				// The frame is showing a cross-origin page.
+				media = [];
+			}
+			let audible = false;
+			for (const el of media) {
+				if (muted && !el.muted) {
+					el.muted = true;
+					mutedByTab.current.add(el);
+				} else if (!muted && mutedByTab.current.has(el)) {
+					el.muted = false;
+					mutedByTab.current.delete(el);
+				}
+				const silenced = el.muted && !mutedByTab.current.has(el);
+				if (!el.paused && !el.ended && el.readyState >= 2 && el.volume > 0 && !silenced) audible = true;
+			}
+			setAudible(id, audible);
+		};
+		check();
+		const timer = window.setInterval(check, AUDIO_POLL_MS);
+		return () => window.clearInterval(timer);
+	}, [frameRef, id, muted, setAudible]);
+};
+
 const ExternalSite = ({ url, className, current, id }: ExternalSiteProps) => {
 	const frameRef = useRef<HTMLIFrameElement>(null);
 	const sjFrameRef = useRef<Frame | null>(null);
@@ -32,6 +87,7 @@ const ExternalSite = ({ url, className, current, id }: ExternalSiteProps) => {
 	const updateTab = useTabsStore(state => state.updateTab);
 	const loading = useTabLoadingStore(state => Boolean(state.loading[id]));
 	const setLoading = useTabLoadingStore(state => state.setLoading);
+	useTabAudio(frameRef, id);
 
 	// Never leave the bar running forever if a load event never arrives.
 	useEffect(() => {

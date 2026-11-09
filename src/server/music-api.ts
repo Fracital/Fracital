@@ -5,6 +5,9 @@ import { artistBanner, artistBio, artistTopTracks, buildRadio, findDeezerArtist,
 import { artistStats, lastfmKey, trackPlays } from "./music-stats";
 import { getRequestListener } from "@hono/node-server";
 import { getAccountsApp, initAccounts } from "./accounts";
+import { startDiscordBot } from "./discord-bot";
+import { isDecoyHost } from "./cloak-routing";
+import { renderLegalPage } from "./legal";
 import { artistExtras } from "./artist-extras";
 import { albumInfo, songCredits, songInfo } from "./song-info";
 import { findMusicVideo, findYoutubeMatch, isExplicitEdition, playbackHints } from "./youtube-match";
@@ -81,10 +84,23 @@ function registerMusicApi(server: { middlewares: ViteDevServer["middlewares"] },
 
 	// Fracital Accounts — the same Hono app the production server mounts.
 	void initAccounts();
+	startDiscordBot();
 	const accounts = getRequestListener(getAccountsApp().fetch);
 	server.middlewares.use((req, res, next) => {
-		if (/^\/api\/(auth|me|admin|artist-profile|artist-media|play-event)(\/|\?|$)/.test(req.url || "")) void accounts(req, res);
+		if (/^\/api\/(auth|me|admin|artist-profile|artist-media|play-event|export)(\/|\?|$)/.test(req.url || "")) void accounts(req, res);
 		else next();
+	});
+
+	// Terms and privacy policy (never on a decoy host).
+	server.middlewares.use((req, res, next) => {
+		const path = (req.url || "").split("?")[0];
+		if (!["/tos", "/privacy", "/terms"].includes(path) || req.method !== "GET" || isDecoyHost(String(req.headers["x-forwarded-host"] || req.headers.host || ""))) return next();
+		if (path === "/terms") {
+			res.writeHead(301, { Location: "/tos" });
+			return res.end();
+		}
+		res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-cache" });
+		res.end(renderLegalPage(path === "/tos" ? "tos" : "privacy"));
 	});
 
 	server.middlewares.use(`${apiBase}/search`, async (req, res) => {
@@ -305,22 +321,11 @@ function registerMusicApi(server: { middlewares: ViteDevServer["middlewares"] },
 		if (req.method !== "GET") return sendJson(res, 405, { error: "Method not allowed" });
 		const reqUrl = parseUrl(req.url);
 		const id = decodeURIComponent(reqUrl.pathname.replace(/^\//, ""));
-		let fallback = reqUrl.searchParams.get("fallback") || "";
 		const titleHint = reqUrl.searchParams.get("title") || "";
 		const artistHint = reqUrl.searchParams.get("artist") || "";
 		const explicitHint = reqUrl.searchParams.get("explicit") === "1";
 		const durationHint = Number(reqUrl.searchParams.get("dur")) || undefined;
 		const warmOnly = reqUrl.searchParams.get("warm") === "1";
-
-		const redirectToFallback = () => {
-			if (fallback.startsWith("https://")) {
-				res.statusCode = 302;
-				res.setHeader("Location", fallback);
-				res.end();
-				return true;
-			}
-			return false;
-		};
 
 		let videoId: string | null = null;
 		if (videoIdPattern.test(id)) {
@@ -337,7 +342,6 @@ function registerMusicApi(server: { middlewares: ViteDevServer["middlewares"] },
 					if (info) {
 						title = title || info.title;
 						artist = artist || info.artist;
-						if (!fallback && info.preview) fallback = info.preview;
 					}
 				}
 				if (title && artist) {
@@ -347,10 +351,8 @@ function registerMusicApi(server: { middlewares: ViteDevServer["middlewares"] },
 			}
 		}
 
-		if (!videoId) {
-			if (redirectToFallback()) return;
-			return sendJson(res, 400, { error: "Could not resolve track" });
-		}
+		// Never substitute the 30-second store preview: the player reports the song as unplayable instead.
+		if (!videoId) return sendJson(res, 404, { error: "Could not resolve track" });
 
 		if (warmOnly) {
 			try {
@@ -378,7 +380,11 @@ function registerMusicApi(server: { middlewares: ViteDevServer["middlewares"] },
 			const range = await upstreamRange(req.headers.range, streamUrl, headers);
 			if (range) headers.Range = range;
 			const upstream = await fetch(streamUrl, { headers });
-			if (!upstream.ok || !upstream.body) throw new Error(`Upstream ${upstream.status}`);
+			if (!upstream.ok || !upstream.body) {
+				// The URL may have expired; the player's retry should resolve a fresh one.
+				streamUrlCache.delete(videoId);
+				throw new Error(`Upstream ${upstream.status}`);
+			}
 			res.statusCode = upstream.status;
 			for (const name of ["content-type", "content-length", "content-range", "accept-ranges"]) {
 				const v = upstream.headers.get(name);
@@ -397,7 +403,6 @@ function registerMusicApi(server: { middlewares: ViteDevServer["middlewares"] },
 			pump().catch(() => res.end());
 			req.on("close", () => reader.cancel().catch(() => {}));
 		} catch (err) {
-			if (!res.headersSent && redirectToFallback()) return;
 			if (!res.headersSent) sendJson(res, 502, { error: err instanceof Error ? err.message : "Stream failed" });
 		}
 	});
@@ -433,7 +438,7 @@ function registerMusicApi(server: { middlewares: ViteDevServer["middlewares"] },
 		sendJson(res, 200, await artistExtras(name));
 	});
 
-	// Now Playing: release date, and credits (loaded when the Credits panel opens).
+	// Now Playing: song bio/release info and credits (loaded when their panels open).
 	server.middlewares.use(`${apiBase}/song-info`, async (req, res) => {
 		const q = parseUrl(req.url).searchParams;
 		const title = q.get("title")?.trim();

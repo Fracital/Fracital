@@ -88,7 +88,7 @@ export const formatTime = (time: number): string => {
 	return hours > 0 ? `${hours}:${minutes.toString().padStart(2, "0")}:${seconds}` : `${minutes}:${seconds}`;
 };
 
-export type PlayerMode = "video" | "cover" | "lyrics" | "queue" | "credits";
+export type PlayerMode = "video" | "cover" | "lyrics" | "queue" | "credits" | "info";
 
 export const PLAYER_PAGE = "player";
 
@@ -97,7 +97,7 @@ export const isPlayerUrl = (url: string | undefined) => !!url && /^about:(player
 
 export const playerUrl = (mode: PlayerMode) => (mode === "cover" ? "about:music?player" : `about:music?player&${mode}`);
 
-export const parsePlayerMode = (query: string | undefined): PlayerMode => (query === "video" || query === "lyrics" || query === "queue" || query === "credits" ? query : "cover");
+export const parsePlayerMode = (query: string | undefined): PlayerMode => (query === "video" || query === "lyrics" || query === "queue" || query === "credits" || query === "info" ? query : "cover");
 
 /** The Now Playing tab is titled after the song. */
 export const nowPlayingTitle = () => useMusicStore.getState().currentTrack?.title || "Now Playing";

@@ -184,3 +184,26 @@ html, body {
 @media (prefers-reduced-motion: reduce) {
   .view-load-bar, .view-load-bar::after, .view-load-spin { animation: none; }
 }
+
+/* Reduced motion (Settings → Appearance, or the OS preference): src/libs/motion.ts sets data-motion on
+   the app's root. Transitions and animations finish instantly, so things still change state, just
+   without moving. Loading spinners keep turning so busy states stay readable. */
+[data-motion="reduce"],
+[data-motion="reduce"] *,
+[data-motion="reduce"] *::before,
+[data-motion="reduce"] *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+  transition-delay: 0s !important;
+  scroll-behavior: auto !important;
+}
+[data-motion="reduce"] .animate-spin {
+  animation-duration: 1.2s !important;
+  animation-iteration-count: infinite !important;
+}
+[data-motion="reduce"] .view-load-bar,
+[data-motion="reduce"] .view-load-bar::after,
+[data-motion="reduce"] .view-load-spin {
+  animation: none !important;
+}

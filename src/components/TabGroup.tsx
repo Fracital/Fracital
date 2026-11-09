@@ -1,5 +1,5 @@
 import { RectangleStackIcon, XMarkIcon, EllipsisVerticalIcon } from "@heroicons/react/24/solid";
-import { useSettingsStore, useTabsStore } from "../store";
+import { usePanelsStore, useSettingsStore, useTabsStore } from "../store";
 import { Tab } from "./Tab";
 import { useState } from "react";
 import { ContextMenu, type MenuItem } from "./ContextMenu";
@@ -14,6 +14,10 @@ interface TabGroupProps {
 const TabGroup = ({ id, name, icon }: TabGroupProps) => {
 	const tabs = useTabsStore(state => state.tabs);
 	const settings = useSettingsStore(state => state.settings);
+	const panelsOpen = usePanelsStore(state => state.panelsOpen);
+	const collapsed = !panelsOpen && settings["compact-tabs"] === true;
+	const tabsLeft = settings["tabs-position"] === "left";
+	const mirrored = tabsLeft && settings["compact-tabs"] !== true && !panelsOpen;
 
 	const setCurrentTab = useTabsStore(state => state.setCurrentTab);
 	const closeGroup = useTabsStore(state => state.closeGroup);
@@ -109,10 +113,10 @@ const TabGroup = ({ id, name, icon }: TabGroupProps) => {
 		return lum > 0.5 ? "#000000" : "#ffffff";
 	};
 
-	const headerStyle: React.CSSProperties = accent ? { borderLeft: `4px solid ${accent}`, backgroundColor: hexToRgba(accent, 0.1) } : {};
+	const headerStyle: React.CSSProperties = accent ? { [tabsLeft ? "borderRight" : "borderLeft"]: `4px solid ${accent}`, backgroundColor: hexToRgba(accent, 0.1) } : {};
 
 	return (
-		<div key={id} data-group-wrapper={id} className="flex flex-col w-full h-max rounded-lg overflow-hidden inset-shadow-(--inset-shadow-secondary) flex-shrink-0 duration-150">
+		<div key={id} data-group-wrapper={id} className={`flex flex-col w-full h-max ${collapsed ? "rounded-3xl" : "rounded-2xl"} overflow-hidden inset-shadow-(--inset-shadow-secondary) flex-shrink-0 duration-150`}>
 			<div
 				data-group-id={id}
 				onDragOver={onHeaderDragOver}
@@ -123,7 +127,8 @@ const TabGroup = ({ id, name, icon }: TabGroupProps) => {
 				}}
 				style={headerStyle}
 				className={
-					"flex items-center justify-between gap-1.5 p-2.5 duration-150" +
+					(collapsed ? "flex items-center justify-center p-1.5 duration-150" : "flex items-center justify-between gap-1.5 p-2.5 duration-150") +
+					(mirrored ? " flex-row-reverse [&>div:first-child]:flex-row-reverse" : "") +
 					" " +
 					`
                 ${dragOver ? "bg-[#ffffff12] rounded-md" : ""}
@@ -131,11 +136,11 @@ const TabGroup = ({ id, name, icon }: TabGroupProps) => {
             `
 				}
 			>
-				<div className="flex items-center gap-1.5">
+				<div className="flex items-center gap-1.5" title={collapsed ? name : undefined}>
 					<RectangleStackIcon className="size-5 stroke-current stroke-1.5" />
-					<span className="font-semibold pointer-events-none">{name}</span>
+					{!collapsed && <span className="font-semibold pointer-events-none">{name}</span>}
 				</div>
-				<div className="flex items-center gap-0.5">
+				<div className={`flex items-center gap-0.5 ${collapsed ? "hidden" : ""}`}>
 					<button
 						className="p-0.5 hover:bg-[#ffffff25] rounded-md duration-150 cursor-pointer"
 						onClick={e => {
@@ -264,7 +269,7 @@ const TabGroup = ({ id, name, icon }: TabGroupProps) => {
 					"flex flex-col gap-1.5 duration-150" +
 					" " +
 					`
-                ${!groupOpen ? "p-0" : tabs.filter(t => t.groupId === id).length === 0 ? "p-0" : "p-1.5 pt-1"}
+                ${!groupOpen ? "p-0" : tabs.filter(t => t.groupId === id).length === 0 ? "p-0" : collapsed ? "p-0.5" : "p-1.5 pt-1"}
                 ${groupOpen ? "" : "h-0 opacity-0"}
             `
 				}

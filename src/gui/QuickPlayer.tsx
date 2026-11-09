@@ -1,18 +1,38 @@
 import { useEffect, useRef, useState } from "react";
-import { QueueListIcon, MusicalNoteIcon, PlusIcon, MinusIcon, ArrowUturnLeftIcon, BackwardIcon, ForwardIcon, RectangleGroupIcon, ArrowPathRoundedSquareIcon, SpeakerWaveIcon, SpeakerXMarkIcon, BarsArrowUpIcon, BackspaceIcon, AdjustmentsHorizontalIcon, XMarkIcon } from "@heroicons/react/24/solid";
+import { QueueListIcon, MusicalNoteIcon, PlusIcon, MinusIcon, ArrowUturnLeftIcon, BackwardIcon, ForwardIcon, RectangleGroupIcon, ArrowPathRoundedSquareIcon, SpeakerWaveIcon, SpeakerXMarkIcon, AdjustmentsHorizontalIcon } from "@heroicons/react/24/solid";
 import { PlayIcon, PauseIcon, EllipsisHorizontalIcon } from "@heroicons/react/24/solid";
 import { ArrowsPointingOutIcon, ChatBubbleBottomCenterTextIcon } from "@heroicons/react/24/solid";
 import { useMusicStore, usePlaybackStore, useSettingsStore } from "../store";
 import { ContextMenu, type MenuItem } from "../components/ContextMenu";
 import { AudvisVisualizer } from "../components/AudvisVisualizer";
 import { openMusicPlayer, previous, registerAudio, seek, togglePlay } from "../libs/playback";
-import { openLibraryPage } from "../libs/aboutPages";
-import { isLinkable, openTrackAlbum, openTrackArtist } from "../libs/trackLinks";
+import { isLinkable, openTrackAlbum, openTrackArtist, trackArtists } from "../libs/trackLinks";
 import { PlayCount } from "../components/PlayCount";
-import { RadioStatus } from "../components/RadioStatus";
-import { clearQueue } from "../libs/radio";
+import { SongFeedback } from "../components/SongFeedback";
+import { QueueList } from "../components/QueueList";
+import { usePlaylistMenu } from "../components/PlaylistMenu";
+import { trackFromPlayer } from "../libs/playlists";
 import { ensureSavedLoaded, libraryTrackFromPlayer, useSavedStore } from "../libs/savedLibrary";
 import { CheckCircleIcon, PlusCircleIcon } from "@heroicons/react/24/outline";
+import { BarsArrowUpIcon, RadioIcon, UserIcon } from "@heroicons/react/24/solid";
+import { HolyText } from "../components/common/HolyText";
+import { useHolyAttr } from "../libs/holy-attr";
+import { startRadio } from "../libs/radio";
+import type { Track } from "../types";
+
+/** A round control on the collapsed player's rail; it acts in place instead of opening the panels. */
+const RailButton = ({ onClick, dark, strong, children }: { onClick: () => void; dark: boolean; strong?: boolean; children: React.ReactNode }) => (
+	<button
+		data-rail-control
+		className={`flex size-8 shrink-0 items-center justify-center rounded-full cursor-pointer duration-150 ${strong ? `${dark ? "bg-[#ffffff1f] hover:bg-[#ffffff30]" : "bg-[#00000014] hover:bg-[#00000024]"} text-(--text-primary)` : `text-(--text-secondary) hover:text-(--text-primary) ${dark ? "hover:bg-[#ffffff14]" : "hover:bg-[#00000010]"}`}`}
+		onClick={e => {
+			e.stopPropagation();
+			onClick();
+		}}
+	>
+		{children}
+	</button>
+);
 
 interface QuickPlayerProps {
 	panelsOpen: boolean;
@@ -30,23 +50,44 @@ export const QuickPlayer = ({ panelsOpen, className, onOpenPanels }: QuickPlayer
 		ensureSavedLoaded();
 	}, []);
 	const queue = useMusicStore(state => state.queue);
-	const setCurrentTrack = useMusicStore(state => state.setCurrentTrack);
-	const addTrack = useMusicStore(state => state.addTrack);
+	const playlistMenu = usePlaylistMenu();
+	const { ref: moreRef, placeholder: moreAttrs } = useHolyAttr({ title: "More options", "aria-label": "More options" });
+	/** The big player's "⋯" menu: everything its button row doesn't already show (save, like, volume, repeat, lyrics, full player). */
+	const moreOptions = (track: Track): MenuItem[] => {
+		const music = useMusicStore.getState();
+		const items: MenuItem[] = [
+			{ title: <HolyText text="Show queue" />, icon: <QueueListIcon className="size-5" />, onClick: () => changeView("tracks") },
+			{ title: <HolyText text="Play next" />, icon: <BarsArrowUpIcon className="size-5" />, onClick: () => music.queueNext([track]) },
+			{ title: <HolyText text="Add to queue" />, icon: <PlusIcon className="size-5" />, onClick: () => music.addTrack(track) },
+			{ title: <HolyText text="Restart song" />, icon: <ArrowUturnLeftIcon className="size-5" />, onClick: () => seek(0) },
+		];
+		if (music.queue.some(t => t.id === track.id)) items.push({ title: <HolyText text="Remove copies from queue" />, icon: <MinusIcon className="size-5" />, onClick: () => removeTrack(track.id) });
+		items.push(playlistMenu(trackFromPlayer(track)));
+		if (isLinkable(track)) {
+			items.push(
+				{ title: <HolyText text="Start radio" />, icon: <RadioIcon className="size-5" />, onClick: () => void startRadio(trackArtists(track)[0], track.title) },
+				{ title: <HolyText text="Go to album" />, icon: <MusicalNoteIcon className="size-5" />, onClick: () => openTrackAlbum(track) },
+				{ title: <HolyText text="Go to artist" />, icon: <UserIcon className="size-5" />, onClick: () => openTrackArtist(track, trackArtists(track)[0]) },
+			);
+		}
+		return items;
+	};
 	const removeTrack = useMusicStore(state => state.removeTrack);
 	const playNext = useMusicStore(state => state.playNext);
-	const reorderQueue = useMusicStore(state => state.reorderQueue);
 	const playerView = useMusicStore(state => state.playerView);
 	const changeView = useMusicStore(state => state.changeView);
 
 	const [platform, setPlatform] = useState<string>("");
 	const [brightness, setBrightness] = useState<"dark" | "light">("dark");
 
-	const [draggedTrack, setDraggedTrack] = useState<string | null>(null);
-	const [dragOverTrack, setDragOverTrack] = useState<string | null>(null);
-	const [dropPosition, setDropPosition] = useState<"before" | "after" | null>(null);
-
 	const isPlaying = usePlaybackStore(state => state.isPlaying);
 	const setIsPlaying = usePlaybackStore(state => state.setIsPlaying);
+	const buffering = usePlaybackStore(state => state.buffering);
+	const setBuffering = usePlaybackStore(state => state.setBuffering);
+	/** Playback was asked for but no sound yet (the full song is still being fetched). */
+	const loadingSong = isPlaying && buffering;
+	const rail = !panelsOpen && settings["compact-tabs"] === true;
+	const peek = !panelsOpen && settings["compact-tabs"] !== true;
 	const currentTime = usePlaybackStore(state => state.currentTime);
 	const setCurrentTime = usePlaybackStore(state => state.setCurrentTime);
 	const duration = usePlaybackStore(state => state.duration);
@@ -294,9 +335,8 @@ export const QuickPlayer = ({ panelsOpen, className, onOpenPanels }: QuickPlayer
 		if (duration > 0 && currentTime === duration) {
 			if (currentTime === duration) {
 				if (queue && queue.length > 0) {
-					const next = queue[0];
-					setCurrentTrack(next);
-					removeTrack(next.id);
+					// The next song keeps its place in the mix (radio doesn't re-tune on it).
+					useMusicStore.getState().playFromQueue(queue[0].id);
 				} else {
 					setIsPlaying(false);
 				}
@@ -416,50 +456,6 @@ export const QuickPlayer = ({ panelsOpen, className, onOpenPanels }: QuickPlayer
 		};
 	}, [isVolumeDragging]);
 
-	const handleDragStart = (e: React.DragEvent, trackId: string) => {
-		setDraggedTrack(trackId);
-		e.dataTransfer.effectAllowed = "move";
-		e.dataTransfer.setData("text/plain", trackId);
-	};
-
-	const handleDragOver = (e: React.DragEvent, trackId: string) => {
-		e.preventDefault();
-		if (!draggedTrack || draggedTrack === trackId) return;
-
-		const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-		const midPoint = rect.top + rect.height / 2;
-		const position = e.clientY < midPoint ? "before" : "after";
-
-		setDragOverTrack(trackId);
-		setDropPosition(position);
-	};
-
-	const handleDragLeave = () => {
-		setDragOverTrack(null);
-		setDropPosition(null);
-	};
-
-	const handleDrop = (e: React.DragEvent, targetId: string) => {
-		e.preventDefault();
-		if (!draggedTrack || draggedTrack === targetId) return;
-
-		const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-		const midPoint = rect.top + rect.height / 2;
-		const placeBefore = e.clientY < midPoint;
-
-		reorderQueue(draggedTrack, targetId, placeBefore);
-
-		setDraggedTrack(null);
-		setDragOverTrack(null);
-		setDropPosition(null);
-	};
-
-	const handleDragEnd = () => {
-		setDraggedTrack(null);
-		setDragOverTrack(null);
-		setDropPosition(null);
-	};
-
 	return (
 		<div
 			className={
@@ -469,256 +465,56 @@ export const QuickPlayer = ({ panelsOpen, className, onOpenPanels }: QuickPlayer
 					"relative flex flex-col duration-150 min-h-0" +
 					" " +
 					`
-            ${settings["floating-tabs"] === true ? "w-full" : panelsOpen ? "w-78" : "w-10"}
+            ${panelsOpen ? "w-78" : "w-10"}
         `
 			}
 		>
-			<div className={`flex flex-col justify-center h-full duration-150 min-h-0 ${panelsOpen ? "w-full left-0" : "w-88 -left-77"}`}>
+			<div className={`flex flex-col justify-center duration-150 min-h-0 ${rail ? "" : "h-full"} ${peek ? `w-88 ${settings["tabs-position"] === "left" ? "self-end" : ""}` : "w-full"}`}>
 				<div
 					ref={musicRef}
-					className={`flex flex-col w-full h-full min-h-0 bg-(--secondary) inset-shadow-(--inset-shadow-primary) overflow-hidden duration-150 ${panelsOpen ? "w-full" : "w-88"}
-                    ${settings["floating-tabs"] && panelsOpen ? "rounded-xl" : "rounded-2xl"}
-                    ${settings["floating-tabs"] && "shadow-[0_0_16px_3px_#00000035]"}`}
-					onClickCapture={onOpenPanels}
+					// Default panels collapse to a rail tile that hugs its controls. The full layout stays mounted (it owns the
+					// <audio>, which keeps playing under display:none) but takes no space.
+					className={`relative flex flex-col w-full min-h-0 bg-(--secondary) inset-shadow-(--inset-shadow-primary) overflow-hidden duration-150 ${rail ? "[&>*:not([data-rail])]:hidden rounded-3xl" : "h-full rounded-2xl"}`}
+					// Rail controls act in place; anything else on the collapsed player opens the panels.
+					onClickCapture={e => {
+						if ((e.target as Element).closest?.("[data-rail-control]")) return;
+						onOpenPanels?.();
+					}}
 				>
+					{rail && (
+						<div data-rail className="flex flex-col items-center gap-1 py-1">
+							{currentTrack?.cover ? (
+								<img src={currentTrack.cover} alt="" className="size-8 rounded-full object-cover shadow-[0_2px_8px_#00000060]" />
+							) : (
+								<span className="flex size-8 items-center justify-center rounded-full bg-(--primary)">
+									<MusicalNoteIcon className="size-4 text-(--text-secondary)" />
+								</span>
+							)}
+							<RailButton onClick={previous} dark={brightness === "dark"}>
+								<BackwardIcon className="size-4" />
+							</RailButton>
+							<RailButton onClick={() => void togglePlay()} dark={brightness === "dark"} strong>
+								{loadingSong ? <span className="block size-4 rounded-full border-2 border-current border-t-transparent animate-spin" /> : isPlaying ? <PauseIcon className="size-4" /> : <PlayIcon className="size-4 translate-x-px" />}
+							</RailButton>
+							<RailButton onClick={() => playNext()} dark={brightness === "dark"}>
+								<ForwardIcon className="size-4" />
+							</RailButton>
+							<RailButton onClick={toggleMute} dark={brightness === "dark"}>
+								{muted || volume === 0 ? <SpeakerXMarkIcon className="size-4" /> : <SpeakerWaveIcon className="size-4" />}
+							</RailButton>
+						</div>
+					)}
 					{playerView === "tracks" || !currentTrack ? (
 						<>
 							<div className={"relative flex w-full flex-1 min-h-0 overflow-auto gap-2 p-2 px-3 flex-col duration-200"}>
-								<div className="flex flex-col items-start">
-									{currentTrack ? (
-										<h1 className={`ml-1.5 mt-1.5 text-2xl font-bold`}>Currently playing</h1>
-									) : (
-										<>
-											<h1 className={`ml-1.5 mt-1.5 text-2xl font-bold`}>Nothing playing</h1>
-											<button className="flex items-center justify-center gap-2 px-4 py-2 bg-(--tertiary) text-(--text-primary) rounded-md hover:bg-(--accent) duration-150" onClick={() => openLibraryPage("")}>
-												<span className="text-xs w-max">Browse Music</span>
-												<MusicalNoteIcon className="size-3" />
-											</button>
-										</>
-									)}
-									{currentTrack && (
-										<div className="flex items-center justify-between gap-2.5 p-1.5 w-full rounded-lg hover:bg-[#ffffff28] duration-150">
-											{/* min-w-0 down the chain so the title and artists truncate before the buttons. */}
-											<div className="flex flex-1 min-w-0 items-center gap-2.5">
-												{currentTrack.cover && <img className="size-10 shrink-0 rounded-md object-cover" src={currentTrack.cover} alt={currentTrack.title} />}
-												{!currentTrack.cover && (
-													<div className={`size-10 shrink-0 rounded-md flex justify-center items-center bg-(--primary) text-(--text-secondary) inset-shadow-(--inset-shadow-primary) font-bold`}>
-														<MusicalNoteIcon className="size-6" />
-													</div>
-												)}
-												<div className="flex flex-col gap-0.5 min-w-0">
-													<h1 title={currentTrack.title} className={`truncate text-md font-semibold leading-tight ${isLinkable(currentTrack) ? "cursor-pointer hover:underline" : ""}`} onClick={isLinkable(currentTrack) ? () => openTrackAlbum(currentTrack) : undefined}>
-														{currentTrack.title}
-													</h1>
-													{Array.isArray(currentTrack.artists) && currentTrack.artists.length > 1 ? (
-														<div className="flex items-center gap-1.5 min-w-0">
-															{currentTrack.explicit && <span className="flex shrink-0 justify-center items-center size-4 text-[10px] font-bold rounded-sm bg-[#ffffff46]">E</span>}
-															<span className="truncate text-xs leading-tight" title={currentTrack.artists.join(", ")}>
-																{currentTrack.artists.map((artist, index) => (
-																	<span key={index}>
-																		<span className={`duration-150 ${isLinkable(currentTrack) ? "cursor-pointer hover:underline" : ""}`} onClick={isLinkable(currentTrack) ? () => openTrackArtist(currentTrack, artist) : undefined}>
-																			{artist}
-																		</span>
-																		{index < currentTrack.artists.length - 1 && ", "}
-																	</span>
-																))}
-															</span>
-															{isVolumeDragging && showVolumeSlider && volumeSliderPos && (
-																<div className="fixed z-50 select-none pointer-events-none" style={{ left: volumeSliderPos.x - 80, top: volumeSliderPos.y - 48 }}>
-																	<div className="px-3 py-2 rounded-lg shadow-[0_6px_24px_#00000050] bg-(--secondary) inset-shadow-(--inset-shadow-primary)">
-																		<div className="w-40 h-2 rounded-full bg-(--text-tertiary) overflow-hidden">
-																			<div style={{ width: `${Math.round(volume * 100)}%` }} className="h-full bg-white"></div>
-																		</div>
-																		<div className="mt-1 text-xs text-(--text-secondary) text-center font-medium">{Math.round(volume * 100)}%</div>
-																	</div>
-																</div>
-															)}
-														</div>
-													) : (
-														<h2
-															className={`truncate text-sm leading-tight cursor-pointer duration-150 ${isLinkable(currentTrack) ? "hover:underline" : ""}`}
-															onClick={isLinkable(currentTrack) ? () => openTrackArtist(currentTrack, Array.isArray(currentTrack.artists) ? currentTrack.artists[0] : currentTrack.artists) : undefined}
-														>
-															{Array.isArray(currentTrack.artists) ? currentTrack.artists[0] : currentTrack.artists}
-														</h2>
-													)}
-													{failed ? (
-														<span className="text-[11px] leading-none font-semibold text-[#ff6b6b]">Couldn't play this song{queue.length ? " — skipping" : ""}</span>
-													) : (
-														<PlayCount title={currentTrack.title} artist={currentTrack.artists} skeleton={false} className="text-[11px] leading-none opacity-60" />
-													)}
-												</div>
-											</div>
-											{currentLibraryTrack && (
-												<button
-													className="flex items-center justify-center shrink-0 p-1 rounded-full hover:bg-[#ffffff14] duration-150"
-													title={currentSaved ? "Remove from Library" : "Add to Library"}
-													onClick={e => {
-														e.stopPropagation();
-														useSavedStore.getState().toggleTrack(currentLibraryTrack);
-													}}
-												>
-													{currentSaved ? <CheckCircleIcon className="size-6 text-[#3d91ff]" /> : <PlusCircleIcon className="size-6" />}
-												</button>
-											)}
-											<EllipsisHorizontalIcon
-												className={`size-6 mr-2 shrink-0 stroke-current stroke-1.5 cursor-pointer duration-150`}
-												onClick={e => {
-													e.preventDefault();
-													e.stopPropagation();
-
-													const items: MenuItem[] = [
-														{
-															title: "Add to queue",
-															onClick: () => {
-																addTrack(currentTrack);
-															},
-															icon: <PlusIcon className="size-5" />,
-														},
-														{
-															title: "Play next",
-															onClick: () => {
-																useMusicStore.getState().queueNext([currentTrack]);
-																setContextMenu(null);
-															},
-															icon: <BarsArrowUpIcon className="size-5" />,
-														},
-														{
-															title: "Restart track",
-															onClick: () => {
-																setCurrentTime(0);
-																if (audioRef.current) {
-																	audioRef.current.pause();
-																	audioRef.current.currentTime = 0;
-																}
-															},
-															icon: <ArrowUturnLeftIcon className="size-5" />,
-														},
-														{
-															title: "Open full player",
-															onClick: () => openMusicPlayer("cover"),
-															icon: <ArrowsPointingOutIcon className="size-5" />,
-														},
-													];
-
-													setContextMenu({
-														x: e.clientX,
-														y: e.clientY,
-														visible: true,
-														items: items,
-													});
-												}}
-											/>
-										</div>
-									)}
-								</div>
-								{queue && (
-									<div className="flex flex-col items-start">
-										<RadioStatus className="w-full mt-1.5" />
-										{queue.length > 0 && (
-											<div className="flex items-center justify-between w-full mt-1.5 pr-1">
-												<h1 className={`ml-1.5 text-2xl font-bold`}>Queue</h1>
-												<button
-													className="flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold text-(--text-secondary) hover:text-(--text-primary) bg-[#ffffff14] hover:bg-[#ffffff24] cursor-pointer duration-150"
-													title={`Remove all ${queue.length} songs from the queue`}
-													onClick={clearQueue}
-												>
-													<XMarkIcon className="size-3.5" />
-													Clear
-												</button>
-											</div>
-										)}
-										{queue.map(song => (
-											<div
-												key={song.id}
-												draggable
-												onDragStart={e => handleDragStart(e, song.id)}
-												onDragOver={e => handleDragOver(e, song.id)}
-												onDragLeave={handleDragLeave}
-												onDrop={e => handleDrop(e, song.id)}
-												onDragEnd={handleDragEnd}
-												className={`flex items-center justify-between gap-2.5 p-1.5 w-full rounded-lg cursor-move duration-150 ${draggedTrack === song.id ? "opacity-50" : "hover:bg-[#ffffff28]"} ${
-													dragOverTrack === song.id && dropPosition === "before" ? "border-t-2 border-(--accent)" : dragOverTrack === song.id && dropPosition === "after" ? "border-b-2 border-(--accent)" : ""
-												}`}
-												onClick={() => {
-													setCurrentTrack(song);
-													removeTrack(song.id);
-												}}
-											>
-												<div className="flex items-center gap-2.5">
-													{song.cover && <img className="size-10 rounded-md" src={song.cover} alt={song.title} />}
-													{!song.cover && (
-														<div className={`size-10 rounded-md flex justify-center items-center bg-(--primary) text-(--text-secondary) inset-shadow-(--inset-shadow-primary) font-bold`}>
-															<MusicalNoteIcon className="size-6" />
-														</div>
-													)}
-													<div className="flex flex-col gap-1">
-														<h1 title={song.title} className={`text-md font-semibold leading-none`}>
-															{song.title.length > 22 ? song.title.slice(0, 22) + "..." : song.title}
-														</h1>
-														{Array.isArray(song.artists) && song.artists.length > 1 ? (
-															<div className="flex gap-1.5">
-																{song.explicit && <span className="flex justify-center items-center size-5 text-xs font-bold rounded-sm bg-[#ffffff46]">E</span>}
-																<div className="flex lg:flex-row flex-col gap-0.5">
-																	{song.artists.map((artist, index) => (
-																		<div key={index} className={`flex justify-center items-center w-max`}>
-																			<span className="text-xs leading-none duration-150" key={index}>
-																				{artist}
-																			</span>
-																			{index < song.artists.length - 1 && <span>,</span>}
-																		</div>
-																	))}
-																</div>
-															</div>
-														) : (
-															<h2 className={`text-sm leading-none duration-150`}>{Array.isArray(song.artists) ? song.artists[0] : song.artists}</h2>
-														)}
-														<PlayCount title={song.title} artist={song.artists} skeleton={false} className="text-[11px] leading-none opacity-60" />
-													</div>
-												</div>
-												<EllipsisHorizontalIcon
-													className={`size-6 mr-2 stroke-current stroke-1.5 cursor-pointer duration-150`}
-													onClick={e => {
-														e.preventDefault();
-														e.stopPropagation();
-
-														const items: MenuItem[] = [
-															{
-																title: "Add to queue",
-																onClick: () => {
-																	addTrack(song);
-																},
-																icon: <PlusIcon className="size-5" />,
-															},
-															{
-																title: "Play next",
-																onClick: () => {
-																	useMusicStore.getState().queueNext([song]);
-																	setContextMenu(null);
-																},
-																icon: <BarsArrowUpIcon className="size-5" />,
-															},
-															{
-																title: "Remove from queue",
-																onClick: () => {
-																	removeTrack(song.id);
-																},
-																icon: <BackspaceIcon className="size-5" />,
-															},
-														];
-
-														setContextMenu({
-															x: e.clientX,
-															y: e.clientY,
-															visible: true,
-															items: items,
-														});
-													}}
-												/>
-											</div>
-										))}
-									</div>
+								{failed && currentTrack && (
+									<span className="ml-1.5 mt-1 text-xs font-semibold text-[#ff6b6b]">
+										Couldn't play this song{queue.length ? " — skipping" : ""}
+									</span>
 								)}
+								<div className="flex flex-col items-start w-full mt-1.5">
+									<QueueList dark={brightness === "dark"} variant="compact" />
+								</div>
 							</div>
 							<div>
 								{currentTrack && showVisualizer && settings["tracks-visualizer"] === true && settings["disable-visualizers"] !== true && (
@@ -865,7 +661,15 @@ export const QuickPlayer = ({ panelsOpen, className, onOpenPanels }: QuickPlayer
 												className="flex items-center justify-center p-2 hover:bg-[#ffffff10] text-(--text-secondary) hover:text-(--text-primary) rounded-lg cursor-pointer duration-150"
 												onClick={() => void togglePlay()}
 											>
-												{isPlaying === false ? <PlayIcon className="size-5 text-current stroke-current stroke-0.5 pointer-events-none" /> : <PauseIcon className="size-5 text-current stroke-current stroke-0.5 pointer-events-none" />}
+												{isPlaying === false ? (
+													<PlayIcon className="size-5 text-current stroke-current stroke-0.5 pointer-events-none" />
+												) : loadingSong ? (
+													<span aria-hidden className="block size-5 p-0.5 pointer-events-none">
+														<span className="block size-full rounded-full border-2 border-current border-t-transparent animate-spin" />
+													</span>
+												) : (
+													<PauseIcon className="size-5 text-current stroke-current stroke-0.5 pointer-events-none" />
+												)}
 											</button>
 											<button title={platform.includes("Mac") ? "Previous Track ⌃ + ," : "Previous Track: Alt + ,"} className="flex items-center justify-center p-2 hover:bg-[#ffffff10] text-(--text-secondary) hover:text-(--text-primary) rounded-lg cursor-pointer duration-150" onClick={previous}>
 												<BackwardIcon className="size-5 text-current pointer-events-none" />
@@ -892,6 +696,7 @@ export const QuickPlayer = ({ panelsOpen, className, onOpenPanels }: QuickPlayer
 										>
 											<ArrowPathRoundedSquareIcon className="size-5 stroke-0.5 stroke-current text-current pointer-events-none" />
 										</button>
+										<SongFeedback track={currentTrack} buttonClassName="flex items-center justify-center p-2 hover:bg-[#ffffff10] text-(--text-secondary) hover:text-(--text-primary) rounded-lg cursor-pointer duration-150" iconClassName="size-5 pointer-events-none" />
 										<button title="Drag left/right to change volume" className="flex items-center justify-center p-2 hover:bg-[#ffffff10] text-(--text-secondary) hover:text-(--text-primary) rounded-lg cursor-ew-resize duration-150" onMouseDown={handleVolumeMouseDown} onClick={toggleMute}>
 											{muted || volume === 0 ? <SpeakerXMarkIcon className="size-5 text-current pointer-events-none" /> : <SpeakerWaveIcon className="size-5 text-current pointer-events-none" />}
 										</button>
@@ -938,6 +743,9 @@ export const QuickPlayer = ({ panelsOpen, className, onOpenPanels }: QuickPlayer
 										<div className={`absolute rounded-xl overflow-hidden duration-300 drop-shadow-xl ${isHoveringCover === false ? "opacity-100 scale-100" : "opacity-0 scale-95"}`}>
 											<AudvisVisualizer analyser={analyser} isPlaying={isPlaying} width={140} height={30} color={brightness === "dark" ? "#FFFFFF" : "#000000"} opacity={visualizerOpacity} scale={visualizerScale} />
 										</div>
+									)}
+									{loadingSong && (
+										<div aria-hidden className="absolute size-12 rounded-full border-4 border-white border-t-transparent animate-spin drop-shadow-[0_0_10px_#000] pointer-events-none group-hover:opacity-0 duration-150" />
 									)}
 									<div className="absolute group flex gap-3 opacity-0 group-hover:opacity-100 duration-150 z-10">
 										<button
@@ -1002,7 +810,7 @@ export const QuickPlayer = ({ panelsOpen, className, onOpenPanels }: QuickPlayer
 											</div>
 										</div>
 									</div>
-									<div className="relative flex gap-2 items-center justify-center">
+									<div className="relative flex flex-wrap gap-x-1.5 gap-y-1 items-center justify-center">
 										{currentLibraryTrack && (
 											<button
 												title={currentSaved ? "Remove from Library" : "Add to Library"}
@@ -1015,64 +823,7 @@ export const QuickPlayer = ({ panelsOpen, className, onOpenPanels }: QuickPlayer
 												{currentSaved ? <CheckCircleIcon className="size-5 text-[#3d91ff]" /> : <PlusCircleIcon className="size-5" />}
 											</button>
 										)}
-										<button
-											title="Options"
-											className={`opacity-50 hover:opacity-100 cursor-pointer duration-150`}
-											onClick={(e: React.MouseEvent) => {
-												e.preventDefault();
-												e.stopPropagation();
-
-												if (!currentTrack) return;
-
-												const items: MenuItem[] = [
-													{
-														title: "Add to queue",
-														icon: <PlusIcon className="size-5 stroke-current stroke-1" />,
-														onClick: () => {
-															addTrack(currentTrack);
-														},
-													},
-													{
-														title: "Play next",
-														onClick: () => {
-															useMusicStore.getState().queueNext([currentTrack]);
-															setContextMenu(null);
-														},
-														icon: null,
-													},
-													{
-														title: "Restart track",
-														icon: <ArrowUturnLeftIcon className="size-5 stroke-current stroke-1" />,
-														onClick: () => {
-															setCurrentTime(0);
-															if (audioRef.current) {
-																audioRef.current.pause();
-																audioRef.current.currentTime = 0;
-															}
-														},
-													},
-												];
-
-												if (queue.filter(track => track.id === currentTrack.id).length > 1) {
-													items.push({
-														title: "Remove instances from queue",
-														icon: <MinusIcon className="size-5 stroke-current stroke-1" />,
-														onClick: () => {
-															removeTrack(currentTrack.id);
-														},
-													});
-												}
-
-												setContextMenu({
-													x: e.clientX,
-													y: e.clientY,
-													visible: true,
-													items,
-												});
-											}}
-										>
-											<EllipsisHorizontalIcon className="size-8 stroke-0.5 stroke-current" />
-										</button>
+										<SongFeedback track={currentTrack} buttonClassName="cursor-pointer opacity-50 hover:opacity-100 duration-150" iconClassName="size-6" />
 										<button title="Volume" className={`cursor-pointer opacity-50 hover:opacity-100 duration-150`} onMouseDown={handleVolumeMouseDown} onClick={toggleMute}>
 											{muted || volume === 0 ? <SpeakerXMarkIcon className="size-8 stroke-0.5 stroke-current" /> : <SpeakerWaveIcon className="size-8 stroke-0.5 stroke-current" />}
 										</button>
@@ -1086,15 +837,19 @@ export const QuickPlayer = ({ panelsOpen, className, onOpenPanels }: QuickPlayer
 											<ArrowPathRoundedSquareIcon className="size-8 stroke-0.5 stroke-current" />
 										</button>
 										<button
-											title="Queue"
-											className={`cursor-pointer opacity-50 hover:opacity-100 duration-150`}
-											onClick={() => {
-												if (playerView === "bigplayer") {
-													changeView("tracks");
-												}
+											ref={moreRef}
+											{...moreAttrs}
+											aria-haspopup="menu"
+											className="cursor-pointer opacity-50 hover:opacity-100 duration-150"
+											onClick={e => {
+												e.preventDefault();
+												e.stopPropagation();
+												if (!currentTrack) return;
+												const rect = e.currentTarget.getBoundingClientRect();
+												setContextMenu({ x: rect.left, y: rect.bottom + 6, visible: true, items: moreOptions(currentTrack) });
 											}}
 										>
-											<QueueListIcon className="size-7 stroke-0.5 stroke-current" />
+											<EllipsisHorizontalIcon className="size-8 stroke-0.5 stroke-current" />
 										</button>
 										<button title="Lyrics" className="cursor-pointer opacity-50 hover:opacity-100 duration-150" onClick={() => openMusicPlayer("lyrics")}>
 											<ChatBubbleBottomCenterTextIcon className="size-7 stroke-0.5 stroke-current" />
@@ -1115,10 +870,22 @@ export const QuickPlayer = ({ panelsOpen, className, onOpenPanels }: QuickPlayer
 						className="hidden pointer-events-none"
 						onTimeUpdate={() => setCurrentTime(audioRef.current?.currentTime || 0)}
 						onLoadedMetadata={() => setDuration(audioRef.current?.duration || 0)}
+						onLoadStart={() => setBuffering(!!audioRef.current?.getAttribute("src"))}
+						onWaiting={() => setBuffering(true)}
+						onPlaying={() => setBuffering(false)}
+						onCanPlay={() => audioRef.current?.paused && setBuffering(false)}
+						onEmptied={() => setBuffering(false)}
 						onPlay={() => setIsPlaying(true)}
-						onError={handleAudioError}
-						onPause={() => setIsPlaying(false)}
+						onError={() => {
+							setBuffering(false);
+							handleAudioError();
+						}}
+						onPause={() => {
+							setIsPlaying(false);
+							setBuffering(false);
+						}}
 						onEnded={() => {
+							setBuffering(false);
 							setIsPlaying(false);
 							if (!loop) {
 								playNext();
@@ -1127,6 +894,16 @@ export const QuickPlayer = ({ panelsOpen, className, onOpenPanels }: QuickPlayer
 					/>
 				</div>
 			</div>
+			{isVolumeDragging && showVolumeSlider && volumeSliderPos && (
+				<div className="fixed z-50 select-none pointer-events-none" style={{ left: volumeSliderPos.x - 80, top: volumeSliderPos.y - 48 }}>
+					<div className="px-3 py-2 rounded-lg shadow-[0_6px_24px_#00000050] bg-(--secondary) inset-shadow-(--inset-shadow-primary)">
+						<div className="w-40 h-2 rounded-full bg-(--text-tertiary) overflow-hidden">
+							<div style={{ width: `${Math.round(volume * 100)}%` }} className="h-full bg-white"></div>
+						</div>
+						<div className="mt-1 text-xs text-(--text-secondary) text-center font-medium">{Math.round(volume * 100)}%</div>
+					</div>
+				</div>
+			)}
 			{contextMenu?.visible && <ContextMenu items={contextMenu.items} position={{ x: contextMenu.x, y: contextMenu.y }} onClose={() => setContextMenu(null)} />}
 		</div>
 	);

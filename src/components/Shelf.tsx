@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 import { ChevronLeftIcon, ChevronRightIcon } from "@heroicons/react/24/solid";
+import { scrollBehavior } from "../libs/motion";
 
 /**
  * A titled, horizontally scrollable shelf with chevron paging and a "Show All" grid toggle.
@@ -12,7 +13,7 @@ export const Shelf = ({ title, count, dark, gridMin = 128, action, children }: {
 	const chip = dark ? "bg-[#ffffff1f] hover:bg-[#ffffff33]" : "bg-[#00000012] hover:bg-[#00000022]";
 	const scrollBy = (dir: number) => {
 		const el = scrollRef.current;
-		if (el) el.scrollBy({ left: dir * el.clientWidth * 0.8, behavior: "smooth" });
+		if (el) el.scrollBy({ left: dir * el.clientWidth * 0.8, behavior: scrollBehavior() });
 	};
 	return (
 		<section className="flex flex-col gap-2">

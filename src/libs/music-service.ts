@@ -331,7 +331,25 @@ export const library = {
 	trackStats: (tracks: { key: string; title: string; artist: string }[]) => meJson<Record<string, { userPlays: number; loved: boolean }>>("/api/me/stats/tracks", { method: "POST", body: JSON.stringify({ tracks }) }),
 	artistStats: (name: string) => meJson<{ userPlays: number | null }>(`/api/me/stats/artist?name=${encodeURIComponent(name)}`),
 	love: (title: string, artist: string, loved: boolean) => meJson<{ loved: boolean }>("/api/me/love", { method: "POST", body: JSON.stringify({ title, artist, loved }) }),
+	playlists: () => meJson<{ playlists: PlaylistSummary[] }>("/api/me/playlists"),
+	playlist: (id: string) => meJson<{ id: string; name: string; tracks: MusicTrack[] }>(`/api/me/playlists/${encodeURIComponent(id)}`).then(r => ({ ...r, tracks: r.tracks.map(resolveTrackUrls) })),
+	createPlaylist: (name: string) => meJson<{ playlist: PlaylistSummary }>("/api/me/playlists", { method: "POST", body: JSON.stringify({ name }) }),
+	renamePlaylist: (id: string, name: string) => meJson(`/api/me/playlists/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify({ name }) }),
+	deletePlaylist: (id: string) => meJson(`/api/me/playlists/${encodeURIComponent(id)}`, { method: "DELETE" }),
+	addToPlaylist: (id: string, track: MusicTrack) => meJson<{ added: boolean }>(`/api/me/playlists/${encodeURIComponent(id)}/tracks`, { method: "PUT", body: JSON.stringify({ data: track }) }),
+	removeFromPlaylist: (id: string, trackId: string) => meJson(`/api/me/playlists/${encodeURIComponent(id)}/tracks/${encodeURIComponent(trackId)}`, { method: "DELETE" }),
+	feedback: () => meJson<{ liked: MusicTrack[]; disliked: string[] }>("/api/me/feedback").then(r => ({ ...r, liked: r.liked.map(resolveTrackUrls) })),
+	/** 1 likes, -1 dislikes, 0 clears. */
+	setFeedback: (key: string, score: 1 | -1 | 0, track: MusicTrack) => meJson("/api/me/feedback", { method: "PUT", body: JSON.stringify({ key, score, data: track }) }),
 };
+
+export interface PlaylistSummary {
+	id: string;
+	name: string;
+	count: number;
+	/** Up to four covers for the playlist's mosaic. */
+	artwork: string[];
+}
 
 /** Compact count like Spotify's: 271M, 2.75M, 84.8K. */
 export function formatCount(n: number): string {
@@ -348,7 +366,15 @@ export interface SongCredits {
 const songParams = (title: string, artist: string) => `title=${encodeURIComponent(title)}&artist=${encodeURIComponent(artist)}`;
 
 /** Release date of the song's album or single. */
-export function getSongInfo(title: string, artist: string, albumId?: string): Promise<{ releaseDate: string | null }> {
+export interface SongInfo {
+	releaseDate: string | null;
+	bio: { summary: string; full: string; url: string | null } | null;
+	sourceUrl: string | null;
+	listeners: number | null;
+	playcount: number | null;
+}
+
+export function getSongInfo(title: string, artist: string, albumId?: string): Promise<SongInfo> {
 	return apiFetch(`/song-info?${songParams(title, artist)}${albumId ? `&albumId=${encodeURIComponent(albumId)}` : ""}`);
 }
 
@@ -431,11 +457,11 @@ export async function getRadio({ artist, title, variety = 40, limit = 25 }: Radi
 
 /**
  * Get a playable stream URL for a track.
- * The server resolves the YouTube audio URL and proxies it.
- * Falls back to the iTunes 30s preview if the server can't resolve.
+ * The server resolves the YouTube audio URL and proxies it. The 30s store
+ * preview is never used: a song that can't resolve is reported as unplayable.
  */
 export function getStreamUrl(track: MusicTrack): string {
-	return track.streamUrl || track.previewUrl || "";
+	return track.streamUrl || "";
 }
 
 /**
@@ -479,7 +505,7 @@ export function trackToFracital(track: MusicTrack): Track {
 		year: "",
 		cover: track.artwork,
 		explicit: track.explicit || false,
-		src: track.streamUrl || track.previewUrl || "",
+		src: getStreamUrl(track),
 	};
 }
 

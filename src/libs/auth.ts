@@ -92,6 +92,8 @@ export interface Me {
 	lastfmAvailable: boolean;
 	listenbrainz?: ListenbrainzProfile | null;
 	discordPresence?: DiscordPresenceState | null;
+	/** The server runs the bot behind "On Discord" (getDiscordActivity). */
+	discordActivity?: boolean;
 	isAdmin?: boolean;
 	username?: string | null;
 	premium?: boolean;
@@ -343,6 +345,55 @@ export async function connectDiscordPresence(): Promise<void> {
 export async function setDiscordPresence(enabled: boolean): Promise<void> {
 	await meFetch("/api/me/presence/settings", { method: "PUT", body: JSON.stringify({ enabled }) });
 	await refreshMe();
+}
+
+export interface DiscordActivity {
+	/** 0 Playing, 1 Streaming, 2 Listening, 3 Watching, 4 Custom status, 5 Competing. */
+	type: number;
+	name: string;
+	details?: string;
+	state?: string;
+	start?: number;
+	end?: number;
+	image?: string;
+	imageText?: string;
+	emoji?: string;
+	url?: string;
+}
+
+export interface DiscordActivityState {
+	available: boolean;
+	/** Discord is connected to this account. */
+	connected?: boolean;
+	/** The user turned "On Discord" off. */
+	disabled?: boolean;
+	bot?: "off" | "connecting" | "ready" | "failed";
+	/** null: the bot doesn't share a server with this Discord account. */
+	presence?: {
+		status: "online" | "idle" | "dnd" | "offline";
+		activities: DiscordActivity[];
+		voice: { guild: string; channel: string; video: boolean; stream: boolean; muted: boolean; deafened: boolean } | null;
+	} | null;
+}
+
+/** What the signed-in user is doing on Discord, as Fracital's bot sees it (server: discord-bot.ts). */
+export const getDiscordActivity = () => meFetch<DiscordActivityState>("/api/me/discord/activity");
+
+export const setDiscordActivityShown = (enabled: boolean) => meFetch("/api/me/discord/activity/settings", { method: "PUT", body: JSON.stringify({ enabled }) });
+
+/** Emails a 6-digit code that confirms deleting the account. */
+export function requestAccountDeletion(): Promise<{ ok: true; email: string }> {
+	return meFetch("/api/me/delete/request", { method: "POST" });
+}
+
+/**
+ * Deletes the account and everything connected to it, then signs this browser out. Returns the
+ * link to download a copy of the data, which is kept for 30 days (also emailed).
+ */
+export async function confirmAccountDeletion(code: string): Promise<{ download?: string; expires?: string; emailed?: boolean }> {
+	const res = await meFetch<{ download?: string; expires?: string; emailed?: boolean }>("/api/me/delete/confirm", { method: "POST", body: JSON.stringify({ code }) });
+	await signOut();
+	return res;
 }
 
 /** Updates display name, username and/or profile picture URL. */

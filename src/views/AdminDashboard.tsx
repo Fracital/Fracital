@@ -360,6 +360,16 @@ const Users = ({ dark }: { dark: boolean }) => {
 			.updateUser(u.id, change)
 			.then(() => load())
 			.catch(e => setError(e.message));
+	/** The last account deleted here: its data's download link, to pass on when it couldn't be emailed. */
+	const [deleted, setDeleted] = useState<{ name: string; download: string; expires: string; emailed: boolean } | null>(null);
+	const remove = (u: AdminUser) => {
+		if (!confirm(`Delete ${u.name}'s account and all of its data?\n\nThey can download a copy for 30 days (we email them the link when the account has an email); then it's erased for good. This can't be undone.`)) return;
+		setError("");
+		admin
+			.deleteUser(u.id)
+			.then(res => (setDeleted({ name: u.name, ...res }), load()))
+			.catch(e => setError(e.message));
+	};
 
 	return (
 		<div className="flex flex-col gap-3">
@@ -368,6 +378,21 @@ const Users = ({ dark }: { dark: boolean }) => {
 				<input className="flex-1 bg-transparent outline-none text-sm" placeholder="Search by name or email" value={q} onChange={e => setQ(e.target.value)} />
 			</div>
 			<Err e={error} />
+			{deleted && (
+				<div className="flex flex-col gap-1.5 p-3 rounded-xl bg-green-500/10 border border-green-500/30 text-sm">
+					<span>
+						Deleted {deleted.name}'s account. {deleted.emailed ? "We emailed them a link to download their data." : "We couldn't email them (no email address on the account, or email isn't set up), so send them this link to download their data."} It works until{" "}
+						{new Date(deleted.expires).toLocaleDateString()}.
+					</span>
+					<div className="flex gap-2">
+						<input readOnly value={deleted.download} onFocus={e => e.currentTarget.select()} className="flex-1 min-w-0 px-2 py-1 rounded-lg text-xs bg-[#ffffff10] outline-none" />
+						<Btn onClick={() => void navigator.clipboard?.writeText(deleted.download)}>Copy link</Btn>
+						<Btn onClick={() => setDeleted(null)}>
+							<XMarkIcon className="size-4" />
+						</Btn>
+					</div>
+				</div>
+			)}
 			{!users ? (
 				<span className="text-sm text-(--text-tertiary)">Loading…</span>
 			) : (
@@ -417,6 +442,9 @@ const Users = ({ dark }: { dark: boolean }) => {
 									<NoSymbolIcon className="size-4" /> Ban
 								</Btn>
 							)}
+							<Btn kind="danger" disabled={u.role === "admin"} title={u.role === "admin" ? "Remove their admin role first" : "Delete the account and all of its data"} onClick={() => remove(u)}>
+								<TrashIcon className="size-4" /> Delete
+							</Btn>
 						</div>
 					))}
 				</Panel>

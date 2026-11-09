@@ -1,6 +1,9 @@
 import { useEffect, useState, useRef } from "react";
+import { createPortal } from "react-dom";
+import { ChevronRightIcon } from "@heroicons/react/24/solid";
 import { useSettingsStore } from "../store";
 import { handleImg } from "../libs/imgHandler";
+import { portalTarget } from "../libs/cloak";
 
 export interface MenuItem {
 	// allow rich titles (React nodes) so menu entries can include headers or formatted text
@@ -21,15 +24,20 @@ interface MenuProps {
 	items: MenuItem[];
 	position: { x: number; y: number };
 	onClose: () => void;
+	/** "end": `position.x` is the menu's right edge (for dropdowns lined up under a button's right side). */
+	align?: "start" | "end";
 }
 
-export const ContextMenu = ({ items, position, onClose }: MenuProps) => {
+export const ContextMenu = ({ items, position, onClose, align = "start" }: MenuProps) => {
 	const menuRef = useRef<HTMLDivElement>(null);
 	const itemsRef = useRef<HTMLDivElement>(null);
 	const [adjustedPos, setAdjustedPos] = useState(position);
 	const parentRefs = useRef<Record<number, HTMLDivElement | null>>({});
 	const submenuRefs = useRef<Record<number, HTMLDivElement | null>>({});
 	const [submenuPositions, setSubmenuPositions] = useState<Record<number, "left" | "right">>({});
+	const [submenuShift, setSubmenuShift] = useState<Record<number, number>>({});
+	/** Submenu opened by click/tap (hover opens them too). */
+	const [openSub, setOpenSub] = useState<number | null>(null);
 
 	const settings = useSettingsStore(state => state.settings);
 
@@ -40,8 +48,9 @@ export const ContextMenu = ({ items, position, onClose }: MenuProps) => {
 		const { innerWidth, innerHeight } = window;
 		const { offsetWidth, offsetHeight } = menu;
 
-		let x = position.x;
+		let x = align === "end" ? position.x - offsetWidth : position.x;
 		let y = position.y;
+		if (x < 8) x = 8;
 
 		if (x + offsetWidth > innerWidth) {
 			x = innerWidth - offsetWidth - 8;
@@ -51,7 +60,7 @@ export const ContextMenu = ({ items, position, onClose }: MenuProps) => {
 		}
 
 		setAdjustedPos({ x, y });
-	}, [position]);
+	}, [position, align]);
 
 	useEffect(() => {
 		const handleClickOutside = (e: MouseEvent) => {
@@ -74,9 +83,9 @@ export const ContextMenu = ({ items, position, onClose }: MenuProps) => {
 	useEffect(() => {
 		const update = () => {
 			try {
-				const { innerWidth } = window;
-				const next: Record<number, "left" | "right"> = { ...submenuPositions };
-				let changed = false;
+				const { innerWidth, innerHeight } = window;
+				const next: Record<number, "left" | "right"> = {};
+				const nextShift: Record<number, number> = {};
 				(items || []).forEach((item, i) => {
 					if (!item.children) return;
 					const parentEl = parentRefs.current[i];
@@ -85,14 +94,14 @@ export const ContextMenu = ({ items, position, onClose }: MenuProps) => {
 					const parentRect = parentEl.getBoundingClientRect();
 					const submenuRect = submenuEl.getBoundingClientRect();
 					const preferred = item.childrenPosition || "right";
-					const desired = parentRect.right + submenuRect.width + 8 > innerWidth ? "left" : preferred;
-					if (next[i] !== desired) {
-						next[i] = desired;
-						changed = true;
-					}
+					next[i] = parentRect.right + submenuRect.width + 8 > innerWidth ? "left" : preferred;
+					// Lift the submenu so its bottom stays on screen (it opens level with its row).
+					nextShift[i] = Math.max(0, Math.min(parentRect.top + submenuRect.height + 8 - innerHeight, parentRect.top - 8));
 				});
-				if (changed) setSubmenuPositions(next);
-			} catch (err) {
+				const same = (a: object, b: object) => JSON.stringify(a) === JSON.stringify(b);
+				setSubmenuPositions(prev => (same(prev, next) ? prev : next));
+				setSubmenuShift(prev => (same(prev, nextShift) ? prev : nextShift));
+			} catch {
 				// ignore measurement errors
 			}
 		};
@@ -118,8 +127,30 @@ export const ContextMenu = ({ items, position, onClose }: MenuProps) => {
 		}, 100);
 	}, []);
 
-	return (
-		<div ref={menuRef} className="fixed z-50 min-w-[180px] p-1.5 bg-(--secondary) inset-shadow-(--inset-shadow-primary) rounded-xl shadow-lg translate-y-2 opacity-0" style={{ top: adjustedPos.y, left: adjustedPos.x }}>
+	const dark = settings.brightness === "dark";
+	const rowHover = dark ? "hover:bg-[#ffffff10]" : "hover:bg-[#00000010]";
+	const rowActive = dark ? "bg-[#ffffff10]" : "bg-[#00000010]";
+
+	const renderIcon = (item: MenuItem) =>
+		item.icon === null || item.icon === undefined ? null : typeof item.icon === "string" ? <img src={item.icon} alt={typeof item.title === "string" ? item.title + " icon" : "icon"} className="size-5 shrink-0 object-contain" /> : <span className="flex shrink-0 items-center">{item.icon}</span>;
+
+	const runChild = (e: React.MouseEvent, child: MenuItem) => {
+		e.stopPropagation();
+		child.onClick();
+		onClose();
+	};
+	const runChildKey = (e: React.KeyboardEvent, child: MenuItem) => {
+		if (e.key !== "Enter" && e.key !== " ") return;
+		e.preventDefault();
+		e.stopPropagation();
+		child.onClick();
+		onClose();
+	};
+
+	// Portaled to the app root: a transformed, filtered or contained ancestor would otherwise make this
+	// fixed menu position against (and be clipped by) that ancestor instead of the window.
+	return createPortal(
+		<div ref={menuRef} className="fixed z-50 min-w-[180px] p-1.5 text-(--text-primary) bg-(--secondary) inset-shadow-(--inset-shadow-primary) rounded-xl shadow-lg translate-y-2 opacity-0" style={{ top: adjustedPos.y, left: adjustedPos.x }}>
 			<div ref={itemsRef} className="flex flex-col translate-y-4 opacity-0 duration-500">
 				{items.map((item, i) =>
 					item.isHeader ? (
@@ -132,53 +163,71 @@ export const ContextMenu = ({ items, position, onClose }: MenuProps) => {
 							ref={el => {
 								parentRefs.current[i] = el;
 							}}
-							className={`group relative flex items-center justify-between gap-5 leading-none pl-3 p-2.5 text-sm rounded-md cursor-pointer duration-150 ${settings.brightness === "dark" ? "hover:bg-[#ffffff10]" : "hover:bg-[#00000010]"}`}
+							className={`group relative flex items-center justify-between gap-5 leading-none pl-3 p-2.5 text-sm rounded-md cursor-pointer duration-150 ${rowHover} ${openSub === i ? rowActive : ""}`}
+							onMouseEnter={() => setOpenSub(prev => (prev === i ? prev : null))}
 							onClick={() => {
+								// A row with a submenu opens it (for touch) instead of acting and closing.
+								if (item.children?.length) {
+									setOpenSub(prev => (prev === i ? null : i));
+									return;
+								}
 								item.onClick();
 								onClose();
 							}}
 						>
 							<div className="font-medium w-max">{item.title}</div>
-							{item.icon === null ? null : typeof item.icon === "string" ? <img src={item.icon as string} alt={typeof item.title === "string" ? item.title + " icon" : "icon"} className="size-5 object-contain" /> : item.icon}
+							<div className="flex shrink-0 items-center gap-1.5">
+								{renderIcon(item)}
+								{item.children && item.children.length > 0 && <ChevronRightIcon className={`size-3.5 opacity-60 ${submenuPositions[i] === "left" ? "rotate-180 -order-1" : ""}`} />}
+							</div>
 
-							{/* render children submenu on hover */}
 							{item.children && item.children.length > 0 && (
 								<div
 									ref={el => {
 										submenuRefs.current[i] = el;
 									}}
-									className={`absolute top-0 ${submenuPositions[i] === "left" ? "right-full -mr-2" : "left-full ml-2"} z-50 pointer-events-none opacity-0 group-hover:opacity-100 group-hover:pointer-events-auto transform transition-all duration-150`}
+									// Padding (not margin) bridges the gap so the pointer can cross from the row to the submenu.
+									style={{ top: -6 - (submenuShift[i] ?? 0) }}
+									className={`absolute ${submenuPositions[i] === "left" ? "right-full pr-1.5" : "left-full pl-1.5"} z-50 transition-opacity duration-150 ${openSub === i ? "opacity-100 pointer-events-auto" : "pointer-events-none opacity-0 group-hover:opacity-100 group-hover:pointer-events-auto"}`}
 								>
-									<div className={`bg-(--secondary) inset-shadow-(--inset-shadow-primary) rounded-md p-2 flex ${item.childrenLayout === "horizontal" ? "flex-row" : "flex-col"} gap-2`} style={{ minWidth: item.childrenLayout === "horizontal" ? undefined : 160 }}>
-										{item.children.map((child, ci) => (
-											<div
-												key={ci}
-												className={`rounded-md ${item.childrenLayout === "horizontal" ? "" : "flex items-center justify-between pl-3 pr-3"} cursor-pointer ${settings.brightness === "dark" ? "hover:bg-[#ffffff10]" : "hover:bg-[#00000010]"}`}
-												onClick={e => {
-													e.stopPropagation();
-													child.onClick();
-													onClose();
-												}}
-												onKeyDown={e => {
-													if (e.key === "Enter" || e.key === " ") {
-														e.preventDefault();
-														child.onClick();
-														onClose();
-													}
-												}}
-												role="button"
-												tabIndex={0}
-											>
-												{child.title}
-											</div>
-										))}
-									</div>
+									{item.childrenLayout === "horizontal" ? (
+										<div className="flex flex-row gap-1 p-1.5 bg-(--secondary) inset-shadow-(--inset-shadow-primary) rounded-xl shadow-lg">
+											{item.children.map((child, ci) => (
+												<div key={ci} role="button" tabIndex={0} className={`p-1 rounded-md cursor-pointer duration-150 ${rowHover}`} onClick={e => runChild(e, child)} onKeyDown={e => runChildKey(e, child)}>
+													{child.title}
+												</div>
+											))}
+										</div>
+									) : (
+										<div className="flex flex-col min-w-[200px] max-w-72 max-h-[min(24rem,calc(100vh-1rem))] overflow-y-auto p-1.5 bg-(--secondary) inset-shadow-(--inset-shadow-primary) rounded-xl shadow-lg">
+											{item.children.map((child, ci) =>
+												child.isHeader ? (
+													<div key={ci} className="px-3 py-2 text-xs font-semibold text-(--text-secondary)">
+														{child.title}
+													</div>
+												) : (
+													<div
+														key={ci}
+														role="button"
+														tabIndex={0}
+														className={`flex items-center justify-between gap-5 leading-none pl-3 p-2.5 text-sm rounded-md cursor-pointer duration-150 ${rowHover}`}
+														onClick={e => runChild(e, child)}
+														onKeyDown={e => runChildKey(e, child)}
+													>
+														<div className="min-w-0 truncate font-medium">{child.title}</div>
+														{renderIcon(child)}
+													</div>
+												),
+											)}
+										</div>
+									)}
 								</div>
 							)}
 						</div>
 					),
 				)}
 			</div>
-		</div>
+		</div>,
+		portalTarget(),
 	);
 };

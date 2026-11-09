@@ -33,6 +33,29 @@ export const useTabLoadingStore = create<{
 		}),
 }));
 
+const setFlag = (flags: Record<string, true>, id: string, on: boolean) => {
+	if (Boolean(flags[id]) === on) return flags;
+	const next = { ...flags };
+	if (on) next[id] = true;
+	else delete next[id];
+	return next;
+};
+
+/** Web tabs whose page is playing sound, and the ones the user muted from the tab strip. */
+export const useTabAudioStore = create<{
+	audible: Record<string, true>;
+	muted: Record<string, true>;
+	setAudible: (id: string, audible: boolean) => void;
+	toggleMuted: (id: string) => void;
+	clear: (id: string) => void;
+}>()(set => ({
+	audible: {},
+	muted: {},
+	setAudible: (id, audible) => set(state => (Boolean(state.audible[id]) === audible ? state : { audible: setFlag(state.audible, id, audible) })),
+	toggleMuted: id => set(state => ({ muted: setFlag(state.muted, id, !state.muted[id]) })),
+	clear: id => set(state => ({ audible: setFlag(state.audible, id, false), muted: setFlag(state.muted, id, false) })),
+}));
+
 const normalizeTabChanges = (rawChanges: Partial<TabProps>): Partial<TabProps> => {
 	const changes = { ...rawChanges };
 	if ("url" in changes) changes.url = normalizeAboutUrl(changes.url);
@@ -103,6 +126,7 @@ export const useTabsStore = create<{
 	},
 	closeTab: (id: string) => {
 		useTabLoadingStore.getState().setLoading(id, false);
+		useTabAudioStore.getState().clear(id);
 		set(state => {
 			const filteredTabs = state.tabs.filter(tab => tab.id !== id);
 			const currentTab = state.tabs.find(tab => tab.current);
@@ -254,6 +278,8 @@ export const useMusicStore = create<{
 	queue: Track[];
 	playerView: "tracks" | "bigplayer";
 	playedHistory: Track[];
+	/** Where the current list starts in playedHistory: songs played since then stay in the queue list. */
+	historyStart: number;
 
 	addTrack: (track: Track) => void;
 	/** Queues songs after the ones the user queued (ahead of autoplay radio). Starts them if nothing is playing. */
@@ -269,16 +295,29 @@ export const useMusicStore = create<{
 	/** Plays `tracks[index]` and replaces the queue with the songs after it in that list. */
 	playList: (tracks: Track[], index?: number) => void;
 	playNext: () => void;
+	/**
+	 * Plays a song from the queue list: picking an upcoming song moves the
+	 * skipped ones to played; picking a played one goes back to it, the ones after it coming up
+	 * again. The list itself stays as it is (and radio doesn't re-tune).
+	 */
+	playFromQueue: (id: string) => void;
 	playPrev: () => boolean;
 
 	changeView: (view: "tracks" | "bigplayer") => void;
 	reorderQueue: (draggedId: string, targetId: string, placeBefore: boolean) => void;
+	/**
+	 * Moves a song to `index` in the queue list as shown (played since the list started, the playing
+	 * song, then what's next). The playing song keeps playing: whatever ends up above it counts as
+	 * played and whatever ends up below it comes next, so moving it or moving songs across it works.
+	 */
+	moveInList: (id: string, index: number) => void;
 }>((set, get) => ({
 	src: "",
 	currentTrack: null,
 	queue: [],
 	playerView: "bigplayer",
 	playedHistory: [],
+	historyStart: 0,
 
 	addTrack: track => get().addTracks([track]),
 	addTracks: tracks => {
@@ -299,11 +338,14 @@ export const useMusicStore = create<{
 		set(state => ({ queue: [...fresh, ...state.queue] }));
 	},
 	removeTrack: id => {
-		set(state => ({
-			queue: state.queue.filter(track => track.id !== id),
-		}));
+		set(state => {
+			const at = state.playedHistory.findIndex((t, i) => i >= state.historyStart && t.id === id);
+			// A played song in the current list: drop it from the history the list shows.
+			if (at !== -1) return { playedHistory: state.playedHistory.filter((_, i) => i !== at) };
+			return { queue: state.queue.filter(track => track.id !== id) };
+		});
 	},
-	clearQueue: () => set({ queue: [] }),
+	clearQueue: () => set(state => ({ queue: [], historyStart: state.playedHistory.length })),
 	setCurrentTrack: track => {
 		const { currentTrack, playedHistory } = get();
 		const nextHistory = currentTrack ? [...playedHistory, currentTrack] : playedHistory;
@@ -317,7 +359,8 @@ export const useMusicStore = create<{
 		const nextHistory = currentTrack ? [...playedHistory, currentTrack] : playedHistory;
 		// Fresh ids: the same song can sit in the queue more than once.
 		const queue = tracks.slice(index + 1).map(t => ({ ...t, id: createId(), radio: undefined }));
-		set({ currentTrack: track, src: track.src, queue, playedHistory: nextHistory });
+		// A new list: what played before it isn't part of this one.
+		set({ currentTrack: track, src: track.src, queue, playedHistory: nextHistory, historyStart: nextHistory.length });
 	},
 	playNext: () => {
 		const { queue, currentTrack, playedHistory } = get();
@@ -344,11 +387,26 @@ export const useMusicStore = create<{
 			set({ currentTrack: next, queue: queue.slice(1) });
 		}
 	},
+	playFromQueue: id => {
+		const { queue, currentTrack, playedHistory, historyStart } = get();
+		const ahead = queue.findIndex(t => t.id === id);
+		if (ahead !== -1) {
+			// Forward: the current song and any skipped ones count as played.
+			const played = [...playedHistory, ...(currentTrack ? [currentTrack] : []), ...queue.slice(0, ahead)];
+			return set({ currentTrack: queue[ahead], src: queue[ahead].src, queue: queue.slice(ahead + 1), playedHistory: played });
+		}
+		const back = playedHistory.findIndex((t, i) => i >= historyStart && t.id === id);
+		if (back === -1) return;
+		// Back: everything after it, the current song included, comes up again in order.
+		const again = [...playedHistory.slice(back + 1), ...(currentTrack ? [currentTrack] : [])];
+		set({ currentTrack: playedHistory[back], src: playedHistory[back].src, queue: [...again, ...queue], playedHistory: playedHistory.slice(0, back) });
+	},
 	playPrev: () => {
-		const { playedHistory } = get();
+		const { playedHistory, currentTrack, queue, historyStart } = get();
 		if (playedHistory.length > 0) {
 			const prev = playedHistory[playedHistory.length - 1];
-			set({ currentTrack: prev, playedHistory: playedHistory.slice(0, -1) });
+			// The song that was playing comes up next again, so the list keeps every song.
+			set({ currentTrack: prev, playedHistory: playedHistory.slice(0, -1), queue: currentTrack ? [currentTrack, ...queue] : queue, historyStart: Math.min(historyStart, playedHistory.length - 1) });
 			return true;
 		}
 		return false;
@@ -369,6 +427,18 @@ export const useMusicStore = create<{
 
 		newQueue.splice(insertIndex, 0, draggedTrack);
 		set({ queue: newQueue });
+	},
+	moveInList: (id: string, index: number) => {
+		const { playedHistory, historyStart, currentTrack, queue } = get();
+		const played = playedHistory.slice(historyStart);
+		const list = [...played, ...(currentTrack ? [currentTrack] : []), ...queue];
+		const from = list.findIndex(t => t.id === id);
+		if (from === -1) return;
+		const [moved] = list.splice(from, 1);
+		list.splice(Math.max(0, Math.min(index, list.length)), 0, moved);
+		// Without a playing song, the split between played and next stays where it was.
+		const split = currentTrack ? list.findIndex(t => t.id === currentTrack.id) : played.length;
+		set({ playedHistory: [...playedHistory.slice(0, historyStart), ...list.slice(0, split)], queue: list.slice(currentTrack ? split + 1 : split) });
 	},
 }));
 
@@ -401,8 +471,11 @@ export const usePlaybackStore = create<{
 	eqTreble: number;
 	/** Id of the current track when its audio couldn't load (shown as "Couldn't play this song"). */
 	failedTrackId: string | null;
+	/** The song is loading or waiting for data, so nothing is audible yet. */
+	buffering: boolean;
 
 	setIsPlaying: (value: Updater<boolean>) => void;
+	setBuffering: (buffering: boolean) => void;
 	setCurrentTime: (value: Updater<number>) => void;
 	setDuration: (value: Updater<number>) => void;
 	setLoop: (value: Updater<boolean>) => void;
@@ -424,8 +497,10 @@ export const usePlaybackStore = create<{
 	eqMid: 0,
 	eqTreble: 0,
 	failedTrackId: null,
+	buffering: false,
 
 	setIsPlaying: value => set(state => ({ isPlaying: applyUpdater(value, state.isPlaying) })),
+	setBuffering: buffering => set(state => (state.buffering === buffering ? state : { buffering })),
 	setCurrentTime: value => set(state => ({ currentTime: applyUpdater(value, state.currentTime) })),
 	setDuration: value => set(state => ({ duration: applyUpdater(value, state.duration) })),
 	setLoop: value => set(state => ({ loop: applyUpdater(value, state.loop) })),

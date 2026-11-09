@@ -1,16 +1,14 @@
 /**
- * Autoplay radio (on by default). Every track change — skip, back, picking a song
- * anywhere, or the next track starting — refreshes what's coming up from the new
- * song and its artist: the upcoming radio songs are replaced with a fresh mix seeded
- * by it. Songs the user queued themselves stay first, recently played songs aren't
- * repeated, and the station keeps going when the queue runs out. Turning it off
- * (the "Off" button) stops re-tuning until it's turned back on or radio is started.
+ * Autoplay radio. Starting something from outside the queue re-tunes the station around it;
+ * moving through the queue keeps the mix and only tops up the end when it runs low. User-queued
+ * songs stay first; recently played and disliked songs are skipped.
  */
 import { createId } from "@paralleldrive/cuid2";
 import { create } from "zustand";
 import { useMusicStore } from "../store";
 import type { Track } from "../types";
 import { getRadio, trackToFracital } from "./music-service";
+import { feedbackKey, usePlaylistStore } from "./playlists";
 
 const PREFS_KEY = "fracital:radio";
 
@@ -74,7 +72,8 @@ async function fetchStation(artist: string, title: string | undefined, exclude: 
 	const { variety, length } = useRadioStore.getState();
 	// Ask for a few extra to make up for songs filtered out as recently played.
 	const mix = await getRadio({ artist, title, variety, limit: length + 8 });
-	return (mix.tracks || []).filter(t => (t.streamUrl || t.previewUrl) && !exclude.has(songKey(t.title, t.artist)));
+	const { disliked } = usePlaylistStore.getState();
+	return (mix.tracks || []).filter(t => t.streamUrl && !exclude.has(songKey(t.title, t.artist)) && !disliked[feedbackKey(t.title, t.artist)]);
 }
 
 /** Songs to avoid repeating: what's playing plus the last 40 played. */
@@ -130,6 +129,30 @@ async function retune(track: Track): Promise<void> {
 	}
 }
 
+/** Fewer radio songs than this left in the queue and the station adds more. */
+const TOP_UP_BELOW = 5;
+
+/** Adds more songs from the current station to the end of the queue, leaving what's queued alone. */
+async function topUp(): Promise<void> {
+	const { seed, length } = useRadioStore.getState();
+	const queued = useMusicStore.getState().queue;
+	if (!seed || queued.filter(t => t.radio).length >= TOP_UP_BELOW) return;
+	const gen = ++generation;
+	useRadioStore.setState({ loading: true, error: null });
+	try {
+		const avoid = recentKeys();
+		for (const t of queued) avoid.add(songKey(t.title, primaryArtist(t)));
+		const tracks = await fetchStation(seed.artist, seed.title, avoid);
+		if (gen !== generation) return;
+		const more = tracks.slice(0, Math.max(TOP_UP_BELOW, length - queued.length)).map(t => ({ ...trackToFracital(t), id: createId(), radio: true }));
+		useMusicStore.setState(s => ({ queue: [...s.queue, ...more] }));
+	} catch (err) {
+		if (gen === generation) useRadioStore.setState({ error: err instanceof Error ? err.message : "Radio failed" });
+	} finally {
+		if (gen === generation) useRadioStore.setState({ loading: false });
+	}
+}
+
 /** Turns autoplay radio back on and re-tunes around what's playing right now. */
 export function enableRadio(): void {
 	useRadioStore.setState({ active: true, error: null });
@@ -137,12 +160,11 @@ export function enableRadio(): void {
 	if (now) void retune(now);
 }
 
-/** Turns autoplay radio off: its queued songs are removed; the current song and user-queued songs stay. */
+/** Turns autoplay radio off. The queue is left as it is; a refresh still loading is cancelled. */
 export function stopRadio(): void {
 	generation++;
 	window.clearTimeout(retuneTimer);
 	useRadioStore.setState({ active: false, seed: null, loading: false, error: null });
-	useMusicStore.setState(s => ({ queue: s.queue.filter(t => !t.radio) }));
 }
 
 let retuneTimer = 0;
@@ -169,7 +191,11 @@ export function initRadio(): void {
 			return;
 		}
 		window.clearTimeout(retuneTimer);
-		if (now) {
+		// Moving through the queue (next, skip, a queued song) or back through history keeps the mix.
+		const fromQueue = !!now && (prev.queue.some(t => t.id === now.id) || prev.playedHistory.some(t => t.id === now.id));
+		if (now && fromQueue) {
+			retuneTimer = window.setTimeout(() => void topUp(), 350);
+		} else if (now) {
 			// Short debounce so mashing "next" only re-tunes once, on the song you land on.
 			retuneTimer = window.setTimeout(() => void retune(now), 350);
 		} else {

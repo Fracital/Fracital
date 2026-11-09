@@ -22,7 +22,15 @@ import {
 	MusicalNoteIcon,
 	PlayIcon,
 	Bars3Icon,
+	AdjustmentsVerticalIcon,
+	EyeSlashIcon,
+	LockClosedIcon,
+	LockOpenIcon,
+	CheckIcon,
 } from "@heroicons/react/24/solid";
+import { BarOpenHandle, BarSettingsMenu, useCollapsibleBar, useHoverReveal } from "../components/CollapsibleBar";
+import { useHolyAttr } from "../libs/holy-attr";
+import { appRoot } from "../libs/cloak";
 import { StarIcon as StarIconOutline } from "@heroicons/react/24/outline";
 import { Suspense, useEffect, useState, useRef } from "react";
 import { ShellButton } from "../components/ShellButton";
@@ -159,8 +167,9 @@ export const UserCard = ({ id, display, handle, avatar }: UserProps) => {
 							onClick={() => {
 								newTab({
 									id: createId(),
-									url: "https://corporate.terbiumon.top/privacy",
-									displayUrl: "https://corporate.terbiumon.top/privacy",
+									// Absolute: on a decoy host a relative path would stay on the decoy, which doesn't serve it.
+									url: "https://fracit.al/privacy",
+									displayUrl: "https://fracit.al/privacy",
 									title: "Privacy Policy",
 									icon: null,
 									current: true,
@@ -274,6 +283,14 @@ export const UserCard = ({ id, display, handle, avatar }: UserProps) => {
 	);
 };
 
+/**
+ * Below this bar width the right-hand buttons fold into one menu so the URL bar can fill the row (it only
+ * caps its width on screens wide enough to show everything); below TINY_WIDTH the favorite star folds too.
+ */
+const COMPACT_WIDTH = 1180;
+const TINY_WIDTH = 600;
+const HOVER_PRESETS = [8, 24, 48, 96];
+
 const Shell = () => {
 	const newTab = useTabsStore(state => state.newTab);
 	const tabs = useTabsStore(state => state.tabs);
@@ -289,6 +306,28 @@ const Shell = () => {
 	const navButtonsRef = useRef<HTMLDivElement>(null);
 
 	const [isFullscreen, setIsFullscreen] = useState<boolean>(Boolean(document.fullscreenElement));
+
+	const dark = settings.brightness !== "light";
+	const bar = useCollapsibleBar("shellBar");
+	const overlayRef = useRef<HTMLDivElement>(null);
+	useHoverReveal({
+		enabled: bar.autoHide,
+		threshold: bar.threshold,
+		target: () => document,
+		frames: () => appRoot(),
+		edge: () => 0,
+		barBottom: () => {
+			const overlay = overlayRef.current;
+			if (!overlay) return 0;
+			// While typing in the address bar its suggestions hang below the bar; don't hide it under them.
+			const active = appRoot().activeElement;
+			return active && overlay.contains(active) ? Number.POSITIVE_INFINITY : overlay.getBoundingClientRect().bottom;
+		},
+		setRevealed: bar.setRevealed,
+	});
+	const { ref: barSettingsRef, placeholder: barSettingsAttrs } = useHolyAttr({ title: "Top bar settings", "aria-label": "Top bar settings" });
+	const { ref: pinRef, placeholder: pinAttrs } = useHolyAttr({ title: bar.pinned ? "Auto-hide the top bar" : "Keep the top bar open", "aria-label": bar.pinned ? "Auto-hide the top bar" : "Keep the top bar open" });
+	const { ref: closeBarRef, placeholder: closeBarAttrs } = useHolyAttr({ title: "Hide the top bar", "aria-label": "Hide the top bar" });
 
 	const [uvVersion] = useState("v3.2.10");
 	const runtime = runtimeGlobal();
@@ -306,7 +345,7 @@ const Shell = () => {
 
 	const { openModal } = useModal();
 	const [isFavorited, setIsFavorited] = useState<boolean>(false);
-	const [contextMenu, setContextMenu] = useState<null | { x: number; y: number; visible: boolean; items: MenuItem[] }>(null);
+	const [contextMenu, setContextMenu] = useState<null | { x: number; y: number; visible: boolean; items: MenuItem[]; align?: "start" | "end" }>(null);
 	const [accountinfo, setAccountinfo] = useState<{ id: string; display: string; handle: string; avatar: string | React.ReactNode } | null>(null);
 
 	useEffect(() => {
@@ -375,9 +414,167 @@ const Shell = () => {
 		};
 	}, []);
 
-	return (
-		<div id="shell" className={"flex justify-between gap-2.5 p-1 duration-200"}>
-			<div className="flex items-center justify-start gap-2.5">
+	const toggleFavorite = () => {
+		const currLinks = JSON.parse(window.localStorage.getItem("quicklinks") || "[]");
+		if (isFavorited && currentTab?.url) {
+			const idx = currLinks.findIndex((l: linkProps) => l.href === currentTab?.url);
+			if (idx !== -1) currLinks.splice(idx, 1);
+			window.localStorage.setItem("quicklinks", JSON.stringify(currLinks));
+			window.dispatchEvent(new Event("links-upd"));
+			setIsFavorited(false);
+		} else {
+			openModal(
+				<Modal>
+					<FavoriteModal />
+				</Modal>,
+				{ url: currentTab?.url, name: currentTab?.title, icon: currentTab?.icon },
+			);
+		}
+	};
+
+	const toggleFullscreen = () => {
+		if (document.fullscreenElement) void document.exitFullscreen();
+		else document.body?.requestFullscreen().catch(err => console.error("Error attempting to enable full-screen mode:", err));
+	};
+
+	const setEngine = (engine: ProxyEngine) => window.dispatchEvent(new CustomEvent("proxy-change", { detail: { proxy: engine } }));
+
+	const openPage = (url: string, title: string, icon: React.ReactNode = null) => newTab({ id: createId(), url, displayUrl: url, title, icon, current: true });
+
+	const rowRef = useRef<HTMLDivElement>(null);
+	const [width, setWidth] = useState(Number.POSITIVE_INFINITY);
+	const compact = width < COMPACT_WIDTH;
+	const tiny = width < TINY_WIDTH;
+	useEffect(() => {
+		const el = rowRef.current;
+		if (!el) return;
+		const measure = () => setWidth(el.clientWidth);
+		measure();
+		const observer = new ResizeObserver(measure);
+		observer.observe(el);
+		// Window resizes too, for browsers that throttle ResizeObserver (background or embedded views).
+		window.addEventListener("resize", measure);
+		return () => {
+			observer.disconnect();
+			window.removeEventListener("resize", measure);
+		};
+	}, [bar.inFlow, bar.autoHide, bar.open]);
+
+	const [isAdmin, setIsAdmin] = useState(false);
+	useEffect(() => {
+		const load = () => void getMe().then(m => setIsAdmin(!!m?.isAdmin));
+		load();
+		window.addEventListener("account-upd", load);
+		return () => window.removeEventListener("account-upd", load);
+	}, []);
+
+	const engineName = (engine: ProxyEngine) => (engine === "st" ? <HolyText text="Stomp" /> : engine === "uv" ? "UV" : "Scramjet");
+	const check = (on: boolean) => (on ? <CheckIcon className="size-4" /> : null);
+
+	const compactMenu = (): MenuItem[] => {
+		const items: MenuItem[] = [];
+		if (accountinfo) {
+			items.push({
+				isHeader: true,
+				icon: null,
+				onClick: () => undefined,
+				title: (
+					// The account's own name and handle: data values.
+					<div className="flex flex-col gap-1 leading-none">
+						<span>{accountinfo.display}</span>
+						<span className="text-xs font-medium text-(--text-tertiary)">@{accountinfo.handle}</span>
+					</div>
+				),
+			});
+		}
+		if (tiny) {
+			items.push({
+				title: <HolyText text={isFavorited ? "Remove from favorites" : "Add to favorites"} />,
+				icon: isFavorited ? <StarIconSolid className="size-5" /> : <StarIconOutline className="size-5" />,
+				onClick: toggleFavorite,
+			});
+		}
+		items.push(
+			{
+				title: (
+					<span>
+						<HolyText text="Proxy" />: {engineName(shownProxy)}
+					</span>
+				),
+				icon: <ChevronUpDownIcon className="size-5" />,
+				onClick: () => undefined,
+				children: engines.map(engine => ({ title: engineName(engine), icon: check(engine === shownProxy), onClick: () => setEngine(engine) })),
+			},
+			{
+				title: <HolyText text={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"} />,
+				icon: isFullscreen ? <ArrowsPointingInIcon className="size-5" /> : <ArrowsPointingOutIcon className="size-5" />,
+				onClick: toggleFullscreen,
+			},
+			{
+				title: <HolyText text="Top bar" />,
+				icon: <AdjustmentsVerticalIcon className="size-5" />,
+				onClick: () => undefined,
+				children: [
+					{ title: <HolyText text="Show on hover" />, icon: check(bar.mode === "hover"), onClick: () => bar.setMode("hover") },
+					{ title: <HolyText text="Open/close button" />, icon: check(bar.mode === "button"), onClick: () => bar.setMode("button") },
+					bar.mode === "hover"
+						? { title: <HolyText text={bar.pinned ? "Auto-hide the top bar" : "Keep the top bar open"} />, icon: bar.pinned ? <LockOpenIcon className="size-4" /> : <LockClosedIcon className="size-4" />, onClick: () => bar.setPinned(!bar.pinned) }
+						: { title: <HolyText text="Hide the top bar" />, icon: <EyeSlashIcon className="size-4" />, onClick: () => bar.setOpen(false) },
+					...(bar.mode === "hover"
+						? [
+								{ isHeader: true, title: <HolyText text="Hover zone" />, icon: null, onClick: () => undefined },
+								...HOVER_PRESETS.map(px => ({ title: `${px}px`, icon: check(bar.threshold === px), onClick: () => bar.setThreshold(px) })),
+							]
+						: []),
+				],
+			},
+			{ title: <HolyText text="Settings" />, icon: <Cog6ToothIcon className="size-5" />, onClick: () => openPage("about:settings", "Settings", <Cog6ToothIcon className="size-5" />) },
+			{ title: <HolyText text="File Manager" />, icon: <FolderIcon className="size-5" />, onClick: () => openPage("about:files", "File Manager", <FolderIcon className="size-4.5" />) },
+			{ title: <HolyText text="Games" />, icon: <PlayIcon className="size-5" />, onClick: () => openPage("about:games", "Games", <PlayIcon className="size-4.5" />) },
+			{ title: <HolyText text="Music" />, icon: <MusicalNoteIcon className="size-5" />, onClick: () => openLibraryPage("") },
+		);
+		if (accountinfo) {
+			items.push(
+				{ title: <HolyText text="Manage Account" />, icon: <UserIcon className="size-5" />, onClick: () => openPage("about:account", "Fracital Account") },
+				{ title: <HolyText text="For Artists" />, icon: <CheckBadgeIcon className="size-5" />, onClick: () => openPage("about:artists", "Fracital for Artists") },
+			);
+			if (isAdmin) items.push({ title: <HolyText text="Admin Dashboard" />, icon: <ShieldCheckIcon className="size-5" />, onClick: () => openPage("about:admin", "Admin Dashboard") });
+			items.push(
+				// Absolute: on a decoy host a relative path would stay on the decoy, which doesn't serve it.
+				{ title: <HolyText text="Privacy Policy" />, icon: <InformationCircleIcon className="size-5" />, onClick: () => openPage("https://fracit.al/privacy", "Privacy Policy") },
+				{ title: <HolyText text="Help" />, icon: <LifebuoyIcon className="size-5" />, onClick: () => openPage("https://corporate.terbiumon.top/cloud/help", "Account Help") },
+				{ title: <HolyText text="Logout" />, icon: <ArrowLeftStartOnRectangleIcon className="size-5" />, onClick: () => void signOut() },
+			);
+		} else {
+			items.push({ title: <HolyText text="Sign in" />, icon: <UserCircleIcon className="size-5" />, onClick: () => openPage("about:account", "Fracital Account") });
+		}
+		return items;
+	};
+
+	const { ref: menuTriggerRef, placeholder: menuTriggerAttrs } = useHolyAttr({ title: "Menu", "aria-label": "Menu" });
+	const openCompactMenu = (e: React.MouseEvent<HTMLElement>) => {
+		const rect = e.currentTarget.getBoundingClientRect();
+		// The menu keeps itself on screen, so anchoring at the right edge lines it up under the button.
+		setContextMenu({ x: rect.right, y: rect.bottom + 8, visible: true, items: compactMenu(), align: "end" });
+	};
+	const compactTrigger = (
+		<button ref={menuTriggerRef} {...menuTriggerAttrs} aria-haspopup="menu" className="group flex shrink-0 items-center gap-1.5 p-1 pl-2 rounded-full bg-(--secondary) inset-shadow-(--inset-shadow-secondary) hover:inset-shadow-(--inset-shadow-accent) cursor-pointer duration-200" onClick={openCompactMenu}>
+			<Bars3Icon className="size-5 text-(--text-secondary) group-hover:text-(--text-primary) duration-150" />
+			{accountinfo?.avatar ? (
+				typeof accountinfo.avatar === "string" ? (
+					<img src={accountinfo.avatar} alt="" className="size-7 rounded-full pointer-events-none select-none" />
+				) : (
+					<span className="flex size-7 items-center justify-center">{accountinfo.avatar}</span>
+				)
+			) : (
+				<UserCircleIcon className="size-7 text-(--text-secondary) group-hover:text-(--text-primary) duration-150" />
+			)}
+		</button>
+	);
+
+	const row = (
+		<div id="shell" ref={rowRef} className={"flex justify-between gap-2.5 p-1 duration-200"}>
+			<div className="flex flex-1 min-w-0 items-center justify-start gap-2.5">
 				<div className="relative flex items-center justify-center gap-1">
 					<button
 						className="group relative flex items-center justify-center mr-1 cursor-pointer"
@@ -503,36 +700,14 @@ const Shell = () => {
 						<button
 							className={
 								"group p-2 rounded-full cursor-pointer inset-shadow-[0_0_0_2px_transparent] hover:inset-shadow-[0_0_0_2px_var(--accent)] duration-150" +
+								(tiny ? " hidden" : "") +
 								" " +
 								`
                             ${settings.brightness === "light" ? "text-(--text-tertiary) hover:text-(--text-primary) hover:bg-[#00000018]" : "text-(--text-primary) hover:text-(--text-secondary) hover:bg-[#ffffff10]"}
                         `
 							}
 							title={isFavorited ? "Remove from favorites" : "Add to favorites"}
-							onClick={async () => {
-								const currLinks = JSON.parse(window.localStorage.getItem("quicklinks") || "[]");
-
-								if (isFavorited && currentTab?.url) {
-									const idx = currLinks.findIndex((l: linkProps) => l.href === currentTab?.url);
-									if (idx !== -1) {
-										currLinks.splice(idx, 1);
-									}
-									window.localStorage.setItem("quicklinks", JSON.stringify(currLinks));
-									window.dispatchEvent(new Event("links-upd"));
-									setIsFavorited(false);
-								} else {
-									openModal(
-										<Modal>
-											<FavoriteModal />
-										</Modal>,
-										{
-											url: currentTab?.url,
-											name: currentTab?.title,
-											icon: currentTab?.icon,
-										},
-									);
-								}
-							}}
+							onClick={toggleFavorite}
 						>
 							{isFavorited ? (
 								<StarIconSolid className={"size-4.5 text-(--text-tertiary) cursor-pointer group-hover:text-(--text-primary) duration-300"} />
@@ -542,9 +717,13 @@ const Shell = () => {
 						</button>
 					</div>
 				</div>
-				<div className="relative flex items-center justify-center">{tabs && tabs.length > 0 ? tabs.map((tab, index) => <Search tab={tab} key={index} />) : <Search />}</div>
+				<div className="relative flex flex-1 min-w-0 items-center">{tabs && tabs.length > 0 ? tabs.map((tab, index) => <Search tab={tab} key={index} />) : <Search />}</div>
 			</div>
-			<div className="flex items-center justify-end gap-2.5">
+			<div className="flex shrink-0 items-center justify-end gap-2.5">
+				{compact ? (
+					compactTrigger
+				) : (
+				<>
 				<div
 					className={
 						"group relative flex justify-center items-center min-h-5 p-2 px-3 gap-1 rounded-full bg-(--secondary) cursor-pointer duration-200" +
@@ -625,6 +804,46 @@ const Shell = () => {
 				>
 					{isFullscreen ? <ArrowsPointingInIcon className="p-0.5 size-5 text-current stroke-current stroke-1" /> : <ArrowsPointingOutIcon className="p-0.5 size-5 text-current stroke-current stroke-1" />}
 				</ShellButton>
+				<BarSettingsMenu
+					bar={bar}
+					dark={dark}
+					title="Top bar"
+					trigger={(toggle, open) => (
+						<div className={`flex items-center rounded-full bg-(--secondary) text-(--text-secondary) duration-200 inset-shadow-(--inset-shadow-secondary) hover:inset-shadow-(--inset-shadow-accent) ${open ? "inset-shadow-(--inset-shadow-accent)" : ""}`}>
+							{bar.mode === "hover" ? (
+								<button
+									ref={pinRef}
+									{...pinAttrs}
+									aria-pressed={bar.pinned}
+									className="flex items-center justify-center p-2 pr-1 rounded-l-full hover:text-(--text-primary) cursor-pointer duration-200"
+									onClick={() => bar.setPinned(!bar.pinned)}
+									onContextMenu={e => {
+										e.preventDefault();
+										toggle();
+									}}
+								>
+									{bar.pinned ? <LockClosedIcon className="size-5" /> : <LockOpenIcon className="size-5" />}
+								</button>
+							) : (
+								<button
+									ref={closeBarRef}
+									{...closeBarAttrs}
+									className="flex items-center justify-center p-2 pr-1 rounded-l-full hover:text-(--text-primary) cursor-pointer duration-200"
+									onClick={() => bar.setOpen(false)}
+									onContextMenu={e => {
+										e.preventDefault();
+										toggle();
+									}}
+								>
+									<EyeSlashIcon className="size-5" />
+								</button>
+							)}
+							<button ref={barSettingsRef} {...barSettingsAttrs} aria-haspopup="dialog" aria-expanded={open} className="flex items-center justify-center p-2 pl-0.5 rounded-r-full hover:text-(--text-primary) cursor-pointer duration-200" onClick={toggle}>
+								<ChevronDownIcon className={`size-4 stroke-current stroke-1 duration-200 ${open ? "rotate-180" : ""}`} />
+							</button>
+						</div>
+					)}
+				/>
 				<ShellButton
 					title="Settings"
 					onClick={() =>
@@ -676,12 +895,8 @@ const Shell = () => {
 							},
 						];
 
-						setContextMenu({
-							x: e.clientX,
-							y: e.clientY,
-							visible: true,
-							items: items,
-						});
+						const rect = e.currentTarget.getBoundingClientRect();
+						setContextMenu({ x: rect.right, y: rect.bottom + 8, visible: true, items, align: "end" });
 					}}
 				>
 					<Bars3Icon className="size-4.5 stroke-1 stroke-current" />
@@ -733,9 +948,24 @@ const Shell = () => {
 						}}
 					/>
 				)}
+				</>
+				)}
 			</div>
-			{contextMenu?.visible && <ContextMenu items={contextMenu.items} position={{ x: contextMenu.x, y: contextMenu.y }} onClose={() => setContextMenu(null)} />}
+			{contextMenu?.visible && <ContextMenu items={contextMenu.items} position={{ x: contextMenu.x, y: contextMenu.y }} align={contextMenu.align} onClose={() => setContextMenu(null)} />}
 		</div>
+	);
+
+	return (
+		<>
+			{bar.inFlow && row}
+			{/* Auto-hidden, the bar slides over the page so the page never resizes. */}
+			{bar.autoHide && (
+				<div ref={overlayRef} className={`absolute inset-x-3 top-3 z-40 duration-200 ease-out ${bar.shown ? "translate-y-0 opacity-100" : "-translate-y-[calc(100%+1rem)] opacity-0 pointer-events-none"}`}>
+					<div className="rounded-2xl bg-(--primary) p-1.5 shadow-[0_10px_40px_#00000070] inset-shadow-(--inset-shadow-primary)">{row}</div>
+				</div>
+			)}
+			{bar.mode === "button" && !bar.open && <BarOpenHandle dark={dark} onOpen={() => bar.setOpen(true)} />}
+		</>
 	);
 };
 

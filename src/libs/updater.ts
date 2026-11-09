@@ -26,7 +26,13 @@ export const DEFAULT_SETTINGS: Record<string, unknown> = {
 	theme: "default",
 	proxy: "sj",
 	quicklinks: JSON.stringify(DEFAULT_QUICK_LINKS),
-	"floating-tabs": false,
+	// Compact mode: the collapsed side panel becomes an icon rail. Off: the floating panel that peeks past the edge.
+	"compact-tabs": false,
+	// Clicking inside the collapsed side panel opens it: "anywhere", "except-tabs" or "off".
+	"panel-click-open": "except-tabs",
+	"tabs-position": "right",
+	// "system" follows the OS reduce-motion preference.
+	"reduced-motion": "system",
 	"disable-visualizers": false,
 	"tracks-visualizer": true,
 	"big-player-visualizer": true,

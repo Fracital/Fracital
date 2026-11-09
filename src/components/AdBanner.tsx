@@ -47,11 +47,31 @@ function loadAd(container: HTMLElement, unit: Unit): Promise<void> {
 	return queue;
 }
 
+// Last known premium state in this browser, so ads start loading with the app instead of after the
+// account request (which waits for the app to boot); premium accounts are hidden from the first frame.
+const PREMIUM_KEY = "fr:premium";
+const knownPremium = () => {
+	try {
+		return localStorage.getItem(PREMIUM_KEY) === "1";
+	} catch {
+		return false;
+	}
+};
+
 /** Whether ads should show: false for premium accounts (re-checked on account changes). */
 export function useShowAds(): boolean | undefined {
-	const [show, setShow] = useState<boolean | undefined>(undefined);
+	const [show, setShow] = useState<boolean | undefined>(() => !knownPremium());
 	useEffect(() => {
-		const check = () => void getMe().then(me => setShow(!me?.premium));
+		const check = () =>
+			void getMe().then(me => {
+				try {
+					if (me?.premium) localStorage.setItem(PREMIUM_KEY, "1");
+					else localStorage.removeItem(PREMIUM_KEY);
+				} catch {
+					// Storage blocked: the account check still decides.
+				}
+				setShow(!me?.premium);
+			});
 		check();
 		window.addEventListener("account-upd", check);
 		return () => window.removeEventListener("account-upd", check);

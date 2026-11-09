@@ -1,6 +1,6 @@
 import { createServer, type IncomingMessage } from "node:http";
 import dns from "node:dns";
-import { Hono } from "hono";
+import { type Context, Hono, type Next } from "hono";
 import { getRequestListener } from "@hono/node-server";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { cors } from "hono/cors";
@@ -13,13 +13,15 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { version } from "./package.json";
 import { server as wisp } from "@mercuryworkshop/wisp-js/server";
 import { create as createYoutubeDl } from "youtube-dl-exec";
-import { cloakMiddleware } from "./src/server/cloak-routing";
+import { cloakMiddleware, isDecoyHost } from "./src/server/cloak-routing";
+import { type LegalPage, renderLegalPage } from "./src/server/legal";
 import { acceptedRelayPath, injectClientConfig, relayPath } from "./src/server/relay-gate";
 import { ensureSeedCookie, sealApiResponses } from "./src/server/api-crypto";
 import { rankAlbums, rankArtists, rankTracks } from "./src/server/music-rank";
 import { artistBanner, artistBio, artistTopTracks, buildRadio, findDeezerArtist, relatedArtists } from "./src/server/music-radio";
 import { artistStats, lastfmKey, trackPlays } from "./src/server/music-stats";
 import { getAccountsApp, initAccounts } from "./src/server/accounts";
+import { startDiscordBot } from "./src/server/discord-bot";
 import { artistExtras } from "./src/server/artist-extras";
 import { albumInfo, songCredits, songInfo } from "./src/server/song-info";
 import { findMusicVideo, findYoutubeMatch, isExplicitEdition, playbackHints } from "./src/server/youtube-match";
@@ -55,6 +57,7 @@ export function fsrv() {
 	// per-session seed cookie. Mounts ahead of every API route.
 	app.use("/api/*", sealApiResponses());
 	void initAccounts();
+	startDiscordBot();
 	app.route("/", getAccountsApp());
 
 	// ============================================================
@@ -351,7 +354,6 @@ export function fsrv() {
 
 	app.get("/api/music/playback/:id", async c => {
 		const id = c.req.param("id");
-		let fallback = c.req.query("fallback") || "";
 		const titleHint = c.req.query("title") || "";
 		const artistHint = c.req.query("artist") || "";
 		const explicitHint = c.req.query("explicit") === "1";
@@ -377,7 +379,6 @@ export function fsrv() {
 						if (tr) {
 							t = t || tr.trackName;
 							a = a || tr.artistName;
-							if (!fallback && tr.previewUrl) fallback = tr.previewUrl;
 						}
 					} catch {}
 				}
@@ -388,10 +389,8 @@ export function fsrv() {
 			}
 		}
 
-		if (!videoId) {
-			if (fallback.startsWith("https://")) return c.redirect(fallback, 302);
-			return c.json({ error: "Could not resolve track" }, 400);
-		}
+		// Never substitute the 30-second store preview: the player reports the song as unplayable instead.
+		if (!videoId) return c.json({ error: "Could not resolve track" }, 404);
 
 		if (warm) {
 			try {
@@ -444,7 +443,6 @@ export function fsrv() {
 
 			return new Response(upstream.body, { status: upstream.status, headers: respHeaders });
 		} catch (err: any) {
-			if (fallback.startsWith("https://")) return c.redirect(fallback, 302);
 			return c.json({ error: err.message }, 502);
 		}
 	});
@@ -461,6 +459,16 @@ export function fsrv() {
 			distDir: path.join(__dirname, "dist"),
 		}),
 	);
+
+	// Terms of Service and Privacy Policy (src/server/legal.ts). Never on a decoy host.
+	const legal = (page: LegalPage) => (c: Context, next: Next) => {
+		if (isDecoyHost(c.req.header("x-forwarded-host") || c.req.header("host") || "")) return next();
+		c.header("Cache-Control", "public, max-age=300");
+		return c.html(renderLegalPage(page));
+	};
+	app.get("/tos", legal("tos"));
+	app.get("/privacy", legal("privacy"));
+	app.get("/terms", (c, next) => (isDecoyHost(c.req.header("x-forwarded-host") || c.req.header("host") || "") ? next() : c.redirect("/tos", 301)));
 
 	// Direct hosts: serve the app shell with the client config (relay gate
 	// path) injected. Read once at startup; dist/index.html is build output.
