@@ -14,7 +14,11 @@ import { useTabsStore } from "../store";
 
 const LANDING = "/api/me/handoff/land";
 
-const base64url = (bytes: Uint8Array) => btoa(String.fromCharCode(...bytes)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+const base64url = (bytes: Uint8Array) =>
+	btoa(String.fromCharCode(...bytes))
+		.replace(/\+/g, "-")
+		.replace(/\//g, "_")
+		.replace(/=+$/, "");
 
 async function pkcePair(): Promise<{ verifier: string; challenge: string }> {
 	const verifier = base64url(crypto.getRandomValues(new Uint8Array(32)));

@@ -228,9 +228,7 @@ export const SignIn = ({ initialPage, resetToken, notice, onSignedIn, branding =
 
 				{credentialsPage && !terbium && (
 					<>
-						{options?.lastfm && (redirectOk || handoff) && (
-							<LastfmButton label={page === "login" ? "Continue with Last.fm" : "Sign up with Last.fm"} busy={busy === "lastfm"} onClick={() => run("lastfm", async () => (await redirectSignIn("lastfm", () => connectLastfm("signin")), await finish()))} />
-						)}
+						{options?.lastfm && (redirectOk || handoff) && <LastfmButton label={page === "login" ? "Continue with Last.fm" : "Sign up with Last.fm"} busy={busy === "lastfm"} onClick={() => run("lastfm", async () => (await redirectSignIn("lastfm", () => connectLastfm("signin")), await finish()))} />}
 						{!!options?.social.length && (redirectOk || handoff) && (
 							<div className="grid gap-2 w-full" style={{ gridTemplateColumns: `repeat(${Math.min(options.social.length, 3)}, minmax(0, 1fr))` }}>
 								{options.social.map(p => (
