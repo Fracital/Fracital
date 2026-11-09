@@ -463,7 +463,11 @@ const QueuePanel = () => {
 			<RadioStatus className="mb-2" />
 			<div className="flex items-center justify-between gap-2 px-2 pb-2">
 				<h2 className="text-lg font-semibold">Up next</h2>
-				<button className={`flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold text-(--text-secondary) hover:text-(--text-primary) cursor-pointer duration-150 ${dark ? "bg-[#ffffff18] hover:bg-[#ffffff28]" : "bg-[#00000010] hover:bg-[#0000001c]"}`} title={`Remove all ${queue.length} songs from the queue`} onClick={clearQueue}>
+				<button
+					className={`flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold text-(--text-secondary) hover:text-(--text-primary) cursor-pointer duration-150 ${dark ? "bg-[#ffffff18] hover:bg-[#ffffff28]" : "bg-[#00000010] hover:bg-[#0000001c]"}`}
+					title={`Remove all ${queue.length} songs from the queue`}
+					onClick={clearQueue}
+				>
 					Clear queue
 				</button>
 			</div>

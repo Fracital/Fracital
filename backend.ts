@@ -468,10 +468,7 @@ export function fsrv() {
 	let appShell = "";
 	try {
 		const loaderMarkup = renderToStaticMarkup(createElement(SsrLoader));
-		const builtShell = fs.readFileSync(appShellPath, "utf8").replace(
-			/<div id="root"([^>]*)><\/div>/,
-			`<div id="root"$1>${loaderMarkup}</div>`,
-		);
+		const builtShell = fs.readFileSync(appShellPath, "utf8").replace(/<div id="root"([^>]*)><\/div>/, `<div id="root"$1>${loaderMarkup}</div>`);
 		appShell = injectClientConfig(builtShell);
 	} catch {
 		console.warn("dist/index.html not found at startup; run npm run build");
