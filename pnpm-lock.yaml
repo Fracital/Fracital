@@ -30,8 +30,8 @@ importers:
         specifier: ^2.1.6
         version: 2.1.6(hono@4.13.16)
       '@mercuryworkshop/epoxy-transport':
-        specifier: git+https://github.com/Fracital/EpoxyTransport.git#98d9189f038f8718f0b0b71565ee8ad4e4dd1010
-        version: https://codeload.github.com/Fracital/EpoxyTransport/tar.gz/98d9189f038f8718f0b0b71565ee8ad4e4dd1010
+        specifier: git+https://github.com/Fracital/EpoxyTransport.git#989d05dab7394317fda2b98a400a24958d14fc69
+        version: https://codeload.github.com/Fracital/EpoxyTransport/tar.gz/989d05dab7394317fda2b98a400a24958d14fc69
       '@mercuryworkshop/libcurl-transport':
         specifier: ^2.0.6
         version: 2.0.6
@@ -105,8 +105,8 @@ importers:
         specifier: ^7.18.5
         version: 7.18.5(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
       stomp-rewrite:
-        specifier: git+https://github.com/Fracital/powerMouse.git#96e65fab119b86bea85aef01e2ea20ce34229ad8
-        version: https://codeload.github.com/Fracital/powerMouse/tar.gz/96e65fab119b86bea85aef01e2ea20ce34229ad8
+        specifier: git+https://github.com/Fracital/powerMouse.git#7242cfb73cd49f1411b0c02ebfdaba200bc806f2
+        version: https://codeload.github.com/Fracital/powerMouse/tar.gz/7242cfb73cd49f1411b0c02ebfdaba200bc806f2
       svg-parser:
         specifier: ^2.1.0
         version: 2.1.0
@@ -726,8 +726,8 @@ packages:
   '@levischuck/tiny-cbor@0.2.11':
     resolution: {integrity: sha512-llBRm4dT4Z89aRsm6u2oEZ8tfwL/2l6BwpZ7JcyieouniDECM5AqNgr/y08zalEIvW3RSK4upYyybDcmjXqAow==}
 
-  '@mercuryworkshop/epoxy-transport@https://codeload.github.com/Fracital/EpoxyTransport/tar.gz/98d9189f038f8718f0b0b71565ee8ad4e4dd1010':
-    resolution: {gitHosted: true, integrity: sha512-wLHRogNpTvLo75LOpwRJeDLYMUOajxC5yAgyf9ALX5u/crbxxQPiI0GqAs2HPyln3A8E0dverdhnCj6IKyvp7g==, tarball: https://codeload.github.com/Fracital/EpoxyTransport/tar.gz/98d9189f038f8718f0b0b71565ee8ad4e4dd1010}
+  '@mercuryworkshop/epoxy-transport@https://codeload.github.com/Fracital/EpoxyTransport/tar.gz/989d05dab7394317fda2b98a400a24958d14fc69':
+    resolution: {gitHosted: true, integrity: sha512-kf3pOb/hkGjairyELd4MLbiJcw3Mgm6dMX33pPnAexrZfuo1DVb+fo9SUzTE08tu9dYiDjAc0kSH6nm653BaHQ==, tarball: https://codeload.github.com/Fracital/EpoxyTransport/tar.gz/989d05dab7394317fda2b98a400a24958d14fc69}
     version: 3.0.2-fracital.1
 
   '@mercuryworkshop/libcurl-transport@2.0.6':
@@ -2321,8 +2321,8 @@ packages:
   state-local@1.0.7:
     resolution: {integrity: sha512-HTEHMNieakEnoe33shBYcZ7NX83ACUjCu8c40iOGEZsngj9zRnkqS9j1pqQPXwobB0ZcVTk27REb7COQ0UR59w==}
 
-  stomp-rewrite@https://codeload.github.com/Fracital/powerMouse/tar.gz/96e65fab119b86bea85aef01e2ea20ce34229ad8:
-    resolution: {gitHosted: true, integrity: sha512-JSpH+/TAFehUr7CJ5N5Q6PiXoSG/h8bsl6bxiOOLc4KK8rWHmi0yDjsyhf8dOMp9Uo5KwkFJapYMomgF5GHN+g==, tarball: https://codeload.github.com/Fracital/powerMouse/tar.gz/96e65fab119b86bea85aef01e2ea20ce34229ad8}
+  stomp-rewrite@https://codeload.github.com/Fracital/powerMouse/tar.gz/7242cfb73cd49f1411b0c02ebfdaba200bc806f2:
+    resolution: {gitHosted: true, integrity: sha512-PG96HOs1qEf5YJ+Nq0sCbCAqEg2R3djuDV8h5dpaEKDG2tRHM4erXa7Gy7w4x4y1Nb7UNz6eX24iGpaJSdxWYQ==, tarball: https://codeload.github.com/Fracital/powerMouse/tar.gz/7242cfb73cd49f1411b0c02ebfdaba200bc806f2}
     version: 4.2.0
     engines: {node: '>=22'}
 
@@ -3005,7 +3005,7 @@ snapshots:
 
   '@levischuck/tiny-cbor@0.2.11': {}
 
-  '@mercuryworkshop/epoxy-transport@https://codeload.github.com/Fracital/EpoxyTransport/tar.gz/98d9189f038f8718f0b0b71565ee8ad4e4dd1010': {}
+  '@mercuryworkshop/epoxy-transport@https://codeload.github.com/Fracital/EpoxyTransport/tar.gz/989d05dab7394317fda2b98a400a24958d14fc69': {}
 
   '@mercuryworkshop/libcurl-transport@2.0.6':
     dependencies:
@@ -4520,7 +4520,7 @@ snapshots:
 
   state-local@1.0.7: {}
 
-  stomp-rewrite@https://codeload.github.com/Fracital/powerMouse/tar.gz/96e65fab119b86bea85aef01e2ea20ce34229ad8:
+  stomp-rewrite@https://codeload.github.com/Fracital/powerMouse/tar.gz/7242cfb73cd49f1411b0c02ebfdaba200bc806f2:
     dependencies:
       '@javascript-obfuscator/escodegen': 2.4.2
       '@mercuryworkshop/proxy-transports': 1.0.2
