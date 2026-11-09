@@ -7,6 +7,7 @@ import { cryptoFetch } from "./api-crypto-fetch";
 import { createAuthClient } from "better-auth/client";
 import { saveLogin, clearLogin } from "../types";
 import { compressImage, IMAGE_PRESETS } from "./compressImage";
+import { connectLastfmInProxy, lastfmProxyAvailable } from "./lastfmProxy";
 
 export const authClient = createAuthClient({
 	baseURL: typeof window !== "undefined" ? window.location.origin : undefined,
@@ -157,10 +158,30 @@ function waitForPopup(popup: Window, type: string): Promise<void> {
 }
 
 /**
- * Runs Last.fm's web auth in a popup. `signin` signs in (creating an account on first use);
- * `link` connects (or reconnects) Last.fm on the signed-in account.
+ * Runs Last.fm's web auth. `signin` signs in (creating an account on first use);
+ * `link` connects (or reconnects) Last.fm on the signed-in account. With the stomp
+ * engine active the sign-in happens in a proxy tab (lastfmProxy.ts); otherwise, or
+ * when that cannot start, in a popup. Resolves once the account is refreshed.
  */
 export async function connectLastfm(mode: "signin" | "link"): Promise<void> {
+	if (lastfmProxyAvailable()) {
+		try {
+			await connectLastfmInProxy(mode);
+		} catch (err) {
+			// The server declined to begin (not configured, signed out): the popup path
+			// gets the same answer from the same server, so only a failure to start falls
+			// back; a failed or cancelled sign-in is the user's answer.
+			if ((err as { status?: number }).status === undefined) throw err;
+			return connectLastfmPopup(mode);
+		}
+		await refreshMe();
+		return;
+	}
+	return connectLastfmPopup(mode);
+}
+
+/** The popup path: /api/auth/lastfm/start redirects to Last.fm, the done page reports back by postMessage. */
+export async function connectLastfmPopup(mode: "signin" | "link"): Promise<void> {
 	const popup = openPopup(`/api/auth/lastfm/start?mode=${mode}`);
 	await waitForPopup(popup, "fracital:lastfm");
 	await refreshMe();

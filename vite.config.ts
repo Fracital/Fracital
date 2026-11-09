@@ -4,6 +4,8 @@ import { viteStaticCopy } from "vite-plugin-static-copy";
 import react from "@vitejs/plugin-react-swc";
 import tailwindcss from "@tailwindcss/vite";
 import { scramjetPath } from "@mercuryworkshop/scramjet/path";
+import { stompPath } from "stomp-rewrite/path";
+import { randomBytes } from "node:crypto";
 import { server as wisp } from "@mercuryworkshop/wisp-js/server";
 import { isWebOS } from "./src/types";
 import { cloakRouting } from "./src/server/cloak-routing";
@@ -11,8 +13,45 @@ import { musicApi } from "./src/server/music-api";
 import { shieldPlugin } from "./src/server/shield/vite-plugin";
 import { buildObfuscatorPlugin } from "./src/server/build-obfuscator-plugin";
 
+// The second proxy engine (stomp) ships under this neutral directory, which is
+// also its service worker's scope. The file names are told to the engine at
+// boot (`assets`), so no served URL carries the package name. Keep this map in
+// step with STOMP_DIRECTORY / STOMP_ASSETS in src/libs/stompEngine.ts.
+const STOMP_DIR = "vendor/rt";
+const STOMP_FILES: [string, string][] = [
+	["serviceWorker.js", "sw.js"],
+	["injectDocument.js", "doc.js"],
+	["injectWorker.js", "wk.js"],
+	["transportWorker.js", "tw.js"],
+	["rewriteWorker.js", "rw.js"],
+	["controller.mjs", "api.mjs"],
+];
+// Source maps are pruned from dist; drop the pointer so nothing references a
+// file that is not there.
+const stripSourceMap = (content: string | Buffer) => content.toString().replace(/\n\/\/# sourceMappingURL=\S+\s*$/, "\n");
+
+// The five helper globals stomp's rewriter, inject bundles and error page
+// rendezvous on, minted once per build (and per dev server start) so a
+// deployment never carries the package defaults. Each is an identifier no
+// plain window has.
+const mintHelperName = () => {
+	const letters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+	const bytes = randomBytes(6);
+	return `$${Array.from(bytes, b => letters[b % letters.length]).join("")}`;
+};
+const mintHelperNames = () => {
+	const names = new Set<string>();
+	while (names.size < 5) names.add(mintHelperName());
+	const [access, client, globalProxy, globalName, error] = names;
+	return { access, client, globalProxy, globalName, error };
+};
+const stompNames = mintHelperNames();
+
 // https://vite.dev/config/
 export default defineConfig({
+	define: {
+		__STOMP_NAMES__: JSON.stringify(stompNames),
+	},
 	optimizeDeps: {
 		include: ["music-metadata"],
 		exclude: ["@ruffle-rs/ruffle"],
@@ -124,6 +163,36 @@ export default defineConfig({
 							src: "node_modules/@mercuryworkshop/scramjet-controller/dist/controller.inject.js",
 							dest: "vendor",
 							rename: { stripBase: true, name: "ctl.frame.js" },
+							overwrite: true,
+						},
+						// The stomp engine: the service worker, the two inject bundles, the
+						// transport worker and the controller module, under neutral names.
+						...STOMP_FILES.map(([from, to]) => ({
+							src: `${stompPath}/${from}`.replace(/\\/g, "/"),
+							dest: STOMP_DIR,
+							rename: { stripBase: true as const, name: to },
+							overwrite: true,
+							transform: stripSourceMap,
+						})),
+						// The engine's error page, given the name of the global the service
+						// worker sets on it (names.error); see src/stomp/error.html.
+						{
+							src: "src/stomp/error.html",
+							dest: STOMP_DIR,
+							rename: { stripBase: true, name: "err.html" },
+							overwrite: true,
+							transform: (content: string | Buffer) => {
+								const text = content.toString();
+								if (!text.includes("__STOMP_ERROR_NAME__")) throw new Error("error page placeholder missing (src/stomp/error.html changed shape)");
+								return text.split("__STOMP_ERROR_NAME__").join(stompNames.error);
+							},
+						},
+						// The transport module stomp's transport worker imports: epoxy over
+						// the relay, the Fracital build (wasm inlined, one file).
+						{
+							src: "node_modules/@mercuryworkshop/epoxy-transport/dist/index.mjs",
+							dest: STOMP_DIR,
+							rename: { stripBase: true, name: "link.mjs" },
 							overwrite: true,
 						},
 						// Transport engine wasm, self-hosted (never a CDN: filters

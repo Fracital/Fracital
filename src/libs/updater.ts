@@ -31,6 +31,8 @@ export const DEFAULT_SETTINGS: Record<string, unknown> = {
 	"tracks-visualizer": true,
 	"big-player-visualizer": true,
 	"big-player-default": true,
+	// Off: stomp is not offered in the engine selector until the user opts in.
+	"experimental-proxies": false,
 };
 
 interface ThemeMeta {

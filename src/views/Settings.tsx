@@ -7,7 +7,8 @@ import { quickLinks } from "../libs/init";
 import type { linkProps } from "./Home";
 import { BIG_PLAYER_DEFAULT_SETTING, useSettingsStore } from "../store";
 import { loadTheme } from "../libs/theme";
-import { ThemePath, SettingsPath } from "../types";
+import { ThemePath, SettingsPath, EXPERIMENTAL_PROXIES_SETTING, getProxy } from "../types";
+import { HolyText } from "../components/common/HolyText";
 import { useModal } from "../components/Modal/ModalContext";
 import { Modal } from "../components/Modal/Modal";
 import FavoriteModal from "../components/Modal/Favorite";
@@ -219,6 +220,44 @@ const Settings = ({ className }: SettingsProps) => {
 						</div>
 					</div>
 				</div>
+				<HolyText as="h1" className="text-2xl font-bold" text="Proxy" />
+				<div className="flex gap-2">
+					<HolyText as="h2" className="text-xl font-medium" text="Experimental Proxies" />
+					<label className="flex items-center gap-3 cursor-pointer select-none">
+						<input
+							type="checkbox"
+							checked={settings[EXPERIMENTAL_PROXIES_SETTING] === true}
+							onChange={async () => {
+								const next = !(settings[EXPERIMENTAL_PROXIES_SETTING] === true);
+								await window.fr.fs.promises.writeFile(SettingsPath, JSON.stringify({ ...settings, [EXPERIMENTAL_PROXIES_SETTING]: next }, null, 4), "utf-8");
+								setSettings(EXPERIMENTAL_PROXIES_SETTING, next);
+								// Turning it off takes the experimental engine out of the selector; a tab on it goes back to the default.
+								if (!next && (await getProxy()) === "st") window.dispatchEvent(new CustomEvent("proxy-change", { detail: { proxy: "sj" } }));
+							}}
+							className="sr-only peer"
+						/>
+						<span
+							className={
+								"relative inline-block w-12 h-7 transition-colors duration-200 rounded-full" +
+								" " +
+								`
+                            ${settings[EXPERIMENTAL_PROXIES_SETTING] === true ? "bg-(--accent)" : `${settings.brightness === "dark" ? "bg-[#ffffff10] hover:bg-[#ffffff20]" : "bg-[#00000025] hover:bg-[#00000035]"}`}
+                        `
+							}
+						>
+							<span
+								className={
+									"absolute left-1 top-1 w-5 h-5 bg-white rounded-full shadow transform transition-transform duration-200" +
+									" " +
+									`
+                                ${settings[EXPERIMENTAL_PROXIES_SETTING] === true ? "translate-x-5" : ""}
+                            `
+								}
+							/>
+						</span>
+					</label>
+				</div>
+				<HolyText as="p" className="text-(--text-secondary)" text="Adds the Stomp engine to the engine selector in the top bar. It is new and may not work on every site." />
 			</div>
 		),
 		app: (

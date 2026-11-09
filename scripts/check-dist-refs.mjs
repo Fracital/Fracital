@@ -34,7 +34,7 @@ if (!existsSync(DIST) || !statSync(DIST).isDirectory()) {
 // Explicit list only. Source-derived stems were tried and rejected: generic
 // words such as "search" also name shipped vendor files. Top-level emitted
 // assets are instead held to the stricter content-hash rule.
-const EXPLICIT_TOKENS = ["scramjet", "controller", "fracital", "Fracital", "wisp", "baremux", "bare-mux", "epoxy", "libcurl", "CloakGate", "HolyText", "HolyProse", "HolyDynamic", "HolyRich", "playback"];
+const EXPLICIT_TOKENS = ["scramjet", "stomp", "controller", "fracital", "Fracital", "wisp", "baremux", "bare-mux", "epoxy", "libcurl", "CloakGate", "HolyText", "HolyProse", "HolyDynamic", "HolyRich", "playback"];
 function walk(dir, out = []) {
 	for (const name of readdirSync(dir)) {
 		if (name === "node_modules") continue;

@@ -17,6 +17,8 @@ export interface TabProps {
 	current?: boolean;
 	groupId?: string;
 	refreshKey?: number;
+	/** Bumped by every navigation the user asks for (navigateTab); a proxied tab runs one go() per value. */
+	navNonce?: number;
 }
 
 export const Tab = ({ title, url, id, icon }: TabProps) => {

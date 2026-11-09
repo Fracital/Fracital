@@ -141,8 +141,19 @@ in any user-facing copy.
   itself emitted into the bundle.
 - Chunk and asset names are content hashes only (`assets/[hash]`). Never add a
   fixed or module-derived bundle name; `check-dist-refs.mjs` hard-fails on one.
-- The vendored proxy runtime ships only as the five renamed files under
-  `dist/vendor/` (see vite.config.ts). Never reintroduce a `/scramjet/`,
+- The vendored proxy runtimes ship only as renamed files under `dist/vendor/`:
+  Scramjet's five files, and the stomp engine's files under `dist/vendor/rt/`
+  (see vite.config.ts; `src/libs/stompEngine.ts` tells stomp those names
+  through its `assets` option). Both engine names are in the proxy
+  transform's rename list and the canary list; stomp's error page
+  (`src/stomp/error.html`) reads a global minted per build, never the
+  engine's default name, and the adapter imports the controller as the
+  module's default export. The transform maps wasm only inside import/export
+  names, data segments and custom sections (`wasmNameRanges` in
+  `scripts/obfuscate-build.mjs`), never code: a name list entry can match
+  bytes in any vendored wasm (Ruffle's data spells `stomP`), and
+  `WebAssembly.validate` depends on the build host's CPU (terp has no SSE4.1,
+  so V8 rejects Ruffle's SIMD build there). Never reintroduce a `/scramjet/`, `/stomp/`,
   `/controller/`, or similar fingerprint path, and never ship `.map`/`.d.ts`
   artifacts (`scripts/prune-dist.mjs` removes them; if it removed something,
   find out what shipped them).

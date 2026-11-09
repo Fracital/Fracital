@@ -14,7 +14,7 @@ import assert from "node:assert/strict";
 import vm from "node:vm";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { obfuscateJs, decoderSource, obfuscateSvg, wrapCdata, shouldProcessJs, obfuscateProxyJs, mapProxyText, isProxyVendor, hasProxyName } from "./obfuscate-build.mjs";
+import { obfuscateJs, decoderSource, obfuscateSvg, wrapCdata, shouldProcessJs, obfuscateProxyJs, mapProxyText, mapWasmBytes, isProxyVendor, hasProxyName } from "./obfuscate-build.mjs";
 
 function evalScript(code) {
 	const sandbox = { atob, TextDecoder, Uint8Array, Uint32Array, String, Math, Object, Array, JSON, Date, result: undefined };
@@ -424,6 +424,53 @@ test("proxy: embedded wasm export names are renamed in the binary, and the modul
 	const names = evalWith(out.code, { WebAssembly }).names;
 	assert.deepEqual([...names], [mapProxyText("scramjet_add")]);
 	assert.equal(names[0].length, "scramjet_add".length);
+});
+
+test("proxy: wasm mapping renames names and data only, never code bytes that happen to spell a name", () => {
+	// Ruffle's wasm spells "stomP" inside "initCustomPrototype" in its data
+	// section; its SIMD build does not validate at all on a build host without
+	// SSE4.1. Here the code section also spells "stomp": i32.xor, i32.shl,
+	// i32.rem_s, i32.div_s, i32.rem_u are 0x73 0x74 0x6f 0x6d 0x70. Renaming
+	// those bytes would turn them into other opcodes; they must stay as they are.
+	const sec = (id, body) => Buffer.concat([Buffer.from([id, body.length]), body]);
+	const str = s => Buffer.concat([Buffer.from([s.length]), Buffer.from(s, "latin1")]);
+	const module = code => {
+		const body = Buffer.concat([Buffer.from([0x00]), code, Buffer.from([0x0b])]);
+		return Buffer.concat([
+			Buffer.from([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00]),
+			sec(0x01, Buffer.from([0x01, 0x60, 0x00, 0x01, 0x7f])),
+			sec(0x03, Buffer.from([0x01, 0x00])),
+			sec(0x05, Buffer.from([0x01, 0x00, 0x01])),
+			sec(0x07, Buffer.concat([Buffer.from([0x01]), str("stomp_value"), Buffer.from([0x00, 0x00])])),
+			sec(0x0a, Buffer.concat([Buffer.from([0x01, body.length]), body])),
+			sec(0x0b, Buffer.concat([Buffer.from([0x01, 0x00, 0x41, 0x00, 0x0b]), str("initCustomPrototype")])),
+		]);
+	};
+	const opcodes = Buffer.from("stomp", "latin1");
+	const code = Buffer.concat([Buffer.from([0x41, 60, 0x41, 50, 0x41, 40, 0x41, 3, 0x41, 1, 0x41, 2]), opcodes]);
+	const wasm = module(code);
+	assert.equal(WebAssembly.validate(wasm), true);
+	const out = mapWasmBytes(wasm);
+	assert.equal(out.length, wasm.length);
+	const at = wasm.indexOf(code);
+	assert.deepEqual(out.subarray(at, at + code.length), code, "the code bytes are untouched");
+	assert.equal(WebAssembly.validate(out), true);
+	const exports = new WebAssembly.Instance(new WebAssembly.Module(out)).exports;
+	assert.deepEqual(Object.keys(exports), [mapProxyText("stomp_value")]);
+	assert.equal(exports[mapProxyText("stomp_value")](), new WebAssembly.Instance(new WebAssembly.Module(wasm)).exports.stomp_value());
+	const mapped = mapProxyText("initCustomPrototype");
+	assert.notEqual(mapped, "initCustomPrototype");
+	assert.equal(out.includes(Buffer.from(mapped, "latin1")), true, "the data string is renamed");
+	assert.equal(out.toString("latin1").toLowerCase().split("stomp").length - 1, 1, "only the opcode bytes still spell the name");
+
+	// A module this host cannot validate (as Ruffle's SIMD build on a CPU
+	// without SSE4.1; here a type error stands in) is still mapped by its
+	// structure instead of being rejected.
+	const unvalidatable = module(Buffer.from([0x6a])); // i32.add with an empty stack
+	assert.equal(WebAssembly.validate(unvalidatable), false);
+	const mappedUnvalidatable = mapWasmBytes(unvalidatable);
+	assert.equal(mappedUnvalidatable.includes(Buffer.from(mapped, "latin1")), true);
+	assert.equal(mappedUnvalidatable.toString("latin1").toLowerCase().includes("stomp"), false);
 });
 
 test("proxy: shared name with bare var declaration + assignment + reads (controller pattern)", () => {
