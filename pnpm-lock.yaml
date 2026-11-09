@@ -30,8 +30,8 @@ importers:
         specifier: ^2.1.6
         version: 2.1.6(hono@4.13.16)
       '@mercuryworkshop/epoxy-transport':
-        specifier: git+https://github.com/Fracital/EpoxyTransport.git#98d9189f038f8718f0b0b71565ee8ad4e4dd1010
-        version: https://codeload.github.com/Fracital/EpoxyTransport/tar.gz/98d9189f038f8718f0b0b71565ee8ad4e4dd1010
+        specifier: git+https://github.com/Fracital/EpoxyTransport.git#989d05dab7394317fda2b98a400a24958d14fc69
+        version: https://codeload.github.com/Fracital/EpoxyTransport/tar.gz/989d05dab7394317fda2b98a400a24958d14fc69
       '@mercuryworkshop/libcurl-transport':
         specifier: ^2.0.6
         version: 2.0.6
@@ -726,8 +726,8 @@ packages:
   '@levischuck/tiny-cbor@0.2.11':
     resolution: {integrity: sha512-llBRm4dT4Z89aRsm6u2oEZ8tfwL/2l6BwpZ7JcyieouniDECM5AqNgr/y08zalEIvW3RSK4upYyybDcmjXqAow==}
 
-  '@mercuryworkshop/epoxy-transport@https://codeload.github.com/Fracital/EpoxyTransport/tar.gz/98d9189f038f8718f0b0b71565ee8ad4e4dd1010':
-    resolution: {gitHosted: true, integrity: sha512-wLHRogNpTvLo75LOpwRJeDLYMUOajxC5yAgyf9ALX5u/crbxxQPiI0GqAs2HPyln3A8E0dverdhnCj6IKyvp7g==, tarball: https://codeload.github.com/Fracital/EpoxyTransport/tar.gz/98d9189f038f8718f0b0b71565ee8ad4e4dd1010}
+  '@mercuryworkshop/epoxy-transport@https://codeload.github.com/Fracital/EpoxyTransport/tar.gz/989d05dab7394317fda2b98a400a24958d14fc69':
+    resolution: {gitHosted: true, integrity: sha512-kf3pOb/hkGjairyELd4MLbiJcw3Mgm6dMX33pPnAexrZfuo1DVb+fo9SUzTE08tu9dYiDjAc0kSH6nm653BaHQ==, tarball: https://codeload.github.com/Fracital/EpoxyTransport/tar.gz/989d05dab7394317fda2b98a400a24958d14fc69}
     version: 3.0.2-fracital.1
 
   '@mercuryworkshop/libcurl-transport@2.0.6':
@@ -3005,7 +3005,7 @@ snapshots:
 
   '@levischuck/tiny-cbor@0.2.11': {}
 
-  '@mercuryworkshop/epoxy-transport@https://codeload.github.com/Fracital/EpoxyTransport/tar.gz/98d9189f038f8718f0b0b71565ee8ad4e4dd1010': {}
+  '@mercuryworkshop/epoxy-transport@https://codeload.github.com/Fracital/EpoxyTransport/tar.gz/989d05dab7394317fda2b98a400a24958d14fc69': {}
 
   '@mercuryworkshop/libcurl-transport@2.0.6':
     dependencies:
