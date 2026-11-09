@@ -1,9 +1,10 @@
-import { HeartIcon, PlayIcon, UserCircleIcon } from "@heroicons/react/24/solid";
+import { HeartIcon, MusicalNoteIcon, PlayIcon, UserCircleIcon } from "@heroicons/react/24/solid";
 import { faLastfm } from "@fortawesome/free-brands-svg-icons";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { createId } from "@paralleldrive/cuid2";
 import { useEffect, useState } from "react";
 import { Shelf } from "../components/Shelf";
+import { HolyText } from "../components/common/HolyText";
 import { PlayCount } from "../components/PlayCount";
 import { connectLastfm, getMe, type Me } from "../libs/auth";
 import { songKey, useLastfmStore } from "../libs/lastfmState";
@@ -53,6 +54,7 @@ interface Data {
 /** The user's music (My Music) or their personal Browse feed, from Last.fm listening and saved music. */
 export const YourLibrary = ({ mode, dark, onPlayList, onOpenArtist, onOpenAlbum, onOpenAlbumId, onSongMenu }: Props) => {
 	const username = useLastfmStore(s => s.username);
+	const service = useLastfmStore(s => s.service);
 	const loved = useLastfmStore(s => s.loved);
 	const markLoved = useLastfmStore(s => s.markLoved);
 	const [me, setMe] = useState<Me | null | undefined>(undefined);
@@ -148,10 +150,11 @@ export const YourLibrary = ({ mode, dark, onPlayList, onOpenArtist, onOpenAlbum,
 	// Not connected: invite the user to sign in / connect.
 	let connectCard: React.ReactNode = null;
 	if (!username) {
+		const openAccount = () => newTab({ id: createId(), url: "about:account", displayUrl: "about:account", title: "Fracital Account", icon: null, current: true });
 		const connect = async () => {
 			setError("");
 			if (!me) {
-				newTab({ id: createId(), url: "about:account", displayUrl: "about:account", title: "Fracital Account", icon: null, current: true });
+				openAccount();
 				return;
 			}
 			setConnecting(true);
@@ -172,9 +175,17 @@ export const YourLibrary = ({ mode, dark, onPlayList, onOpenArtist, onOpenAlbum,
 					<span className="font-bold">Build your library from Last.fm</span>
 					<span className="text-sm text-(--text-tertiary)">{error || "Your liked songs, top artists, recent plays and picks made for you, plus scrobbling as you listen."}</span>
 				</div>
-				<button className="shrink-0 px-4 py-2 rounded-full font-semibold text-sm text-white bg-[#d51007] hover:brightness-110 disabled:opacity-60 duration-150" disabled={connecting} onClick={connect}>
-					{connecting ? "Waiting…" : me ? "Connect Last.fm" : "Sign in"}
-				</button>
+				<div className="flex flex-col items-end gap-1 shrink-0">
+					<button className="px-4 py-2 rounded-full font-semibold text-sm text-white bg-[#d51007] hover:brightness-110 disabled:opacity-60 duration-150" disabled={connecting} onClick={connect}>
+						{connecting ? "Waiting…" : me ? "Connect Last.fm" : "Sign in"}
+					</button>
+					{/* ListenBrainz connects with a pasted token, on the account page. */}
+					{me && (
+						<button className="text-xs text-(--text-tertiary) hover:underline cursor-pointer" onClick={openAccount}>
+							<HolyText text="or use ListenBrainz" />
+						</button>
+					)}
+				</div>
 			</div>
 		);
 	}
@@ -291,7 +302,7 @@ export const YourLibrary = ({ mode, dark, onPlayList, onOpenArtist, onOpenAlbum,
 				{personal && <h2 className="text-xl font-bold px-1">For You</h2>}
 				<Shelf title="Jump Back In" dark={dark}>
 					{(data.recent ?? []).map((t, i, list) => (
-						<TrackTile key={`${t.id}-${i}`} track={t} list={list} index={i} meta={t.nowPlaying ? <span className="text-[#ff3b5c] font-semibold">● Scrobbling now</span> : t.playedAt ? timeAgo(t.playedAt) : undefined} />
+						<TrackTile key={`${t.id}-${i}`} track={t} list={list} index={i} meta={t.nowPlaying ? <span className="text-[#ff3b5c] font-semibold">{service === "listenbrainz" ? "● Playing now" : "● Scrobbling now"}</span> : t.playedAt ? timeAgo(t.playedAt) : undefined} />
 					))}
 				</Shelf>
 				<Shelf title="New Releases For You" dark={dark}>
@@ -341,7 +352,8 @@ export const YourLibrary = ({ mode, dark, onPlayList, onOpenArtist, onOpenAlbum,
 					<h2 className="text-xl font-bold">Your Library</h2>
 					{username && (
 						<span className="flex items-center gap-1 text-xs text-(--text-tertiary)">
-							<FontAwesomeIcon icon={faLastfm} className="size-3 text-[#d51007]" />@{username}
+							{service === "listenbrainz" ? <MusicalNoteIcon className="size-3 text-[#eb743b]" /> : <FontAwesomeIcon icon={faLastfm} className="size-3 text-[#d51007]" />}
+							{service === "listenbrainz" ? username : `@${username}`}
 						</span>
 					)}
 				</div>

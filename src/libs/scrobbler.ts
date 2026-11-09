@@ -1,14 +1,15 @@
 /**
- * Scrobbles what plays in Fracital to the signed-in user's Last.fm account.
+ * Scrobbles what plays in Fracital to the signed-in user's Last.fm and/or ListenBrainz account.
  *
  * Follows Last.fm's rules: "now playing" when a song starts, and a scrobble once a
  * song longer than 30s has actually been listened to for half its length or 4 minutes.
  * Only real listening counts: seeks don't, and listening time can't outrun the clock.
  * Restarting a song after a counted listen (repeat-one, or seeking back to the start) is a new listen.
  *
- * Scrobbles go through a per-account queue in localStorage, so ones made offline, while
- * Last.fm is down, or while Last.fm access needs reconnecting are sent later (Last.fm
- * accepts scrobbles up to 14 days old).
+ * Scrobbles go through a queue per account and service in localStorage, so ones made offline,
+ * while a service is down, or while its access needs reconnecting are sent later (Last.fm
+ * accepts scrobbles up to 14 days old). Separate queues mean a failure on one service never
+ * re-sends to the other.
  *
  * Also counts plays (30s of listening) for Fracital's own artist stats, signed in or not.
  */
@@ -51,10 +52,23 @@ let started = false;
 
 const primaryArtist = (t: Track) => (Array.isArray(t.artists) ? t.artists[0] : t.artists) || "";
 
-/** The Last.fm-connected account, or null. `needsReconnect` accounts still queue scrobbles. */
-async function lastfmAccount() {
+type Service = "lastfm" | "listenbrainz";
+
+interface ScrobbleAccount {
+	userId: string;
+	service: Service;
+	/** Still queues scrobbles; they're sent after a reconnect. */
+	needsReconnect: boolean;
+}
+
+/** The signed-in account's connected services. */
+async function scrobbleAccounts(): Promise<ScrobbleAccount[]> {
 	const me = await getMe();
-	return me?.lastfm ? { userId: me.user.id, needsReconnect: !!me.lastfm.needsReconnect } : null;
+	if (!me) return [];
+	const out: ScrobbleAccount[] = [];
+	if (me.lastfm) out.push({ userId: me.user.id, service: "lastfm", needsReconnect: !!me.lastfm.needsReconnect });
+	if (me.listenbrainz) out.push({ userId: me.user.id, service: "listenbrainz", needsReconnect: !!me.listenbrainz.needsReconnect });
+	return out;
 }
 
 function payload(t: Track, duration: number) {
@@ -63,11 +77,14 @@ function payload(t: Track, duration: number) {
 
 // --- Queue ---
 
-const queueKey = (userId: string) => QUEUE_PREFIX + userId;
+type QueueOwner = Pick<ScrobbleAccount, "userId" | "service">;
 
-function readQueue(userId: string): QueuedScrobble[] {
+// Last.fm keeps the original key, so scrobbles queued before ListenBrainz existed still send.
+const queueKey = (a: QueueOwner) => QUEUE_PREFIX + (a.service === "lastfm" ? "" : `${a.service}:`) + a.userId;
+
+function readQueue(account: QueueOwner): QueuedScrobble[] {
 	try {
-		const list = JSON.parse(localStorage.getItem(queueKey(userId)) || "[]") as QueuedScrobble[];
+		const list = JSON.parse(localStorage.getItem(queueKey(account)) || "[]") as QueuedScrobble[];
 		const oldest = Date.now() / 1000 - MAX_AGE_S;
 		return Array.isArray(list) ? list.filter(s => s && s.title && s.artist && s.timestamp > oldest) : [];
 	} catch {
@@ -75,40 +92,45 @@ function readQueue(userId: string): QueuedScrobble[] {
 	}
 }
 
-function writeQueue(userId: string, list: QueuedScrobble[]) {
+function writeQueue(account: QueueOwner, list: QueuedScrobble[]) {
 	try {
-		if (list.length) localStorage.setItem(queueKey(userId), JSON.stringify(list.slice(-QUEUE_MAX)));
-		else localStorage.removeItem(queueKey(userId));
+		if (list.length) localStorage.setItem(queueKey(account), JSON.stringify(list.slice(-QUEUE_MAX)));
+		else localStorage.removeItem(queueKey(account));
 	} catch {
 		// Storage full or blocked: the scrobble is only lost if sending it now fails too.
 	}
 }
 
-function enqueue(userId: string, s: QueuedScrobble) {
-	const list = readQueue(userId);
+function enqueue(account: QueueOwner, s: QueuedScrobble) {
+	const list = readQueue(account);
 	// The same song at the same second is the same listen.
 	if (list.some(q => q.timestamp === s.timestamp && q.title === s.title && q.artist === s.artist)) return;
 	list.push(s);
-	writeQueue(userId, list);
+	writeQueue(account, list);
 }
 
-let flushing = false;
-let retryTimer: number | undefined;
+const flushing = new Set<Service>();
+const retryTimers: Partial<Record<Service, number>> = {};
 
-/** Sends queued scrobbles in batches; keeps them on temporary failures and retries later. */
+/** Sends every connected service's queued scrobbles. */
 export async function flushScrobbles(): Promise<void> {
-	if (flushing) return;
-	const account = await lastfmAccount();
-	if (!account || account.needsReconnect || !navigator.onLine) return;
-	flushing = true;
-	window.clearTimeout(retryTimer);
+	if (!navigator.onLine) return;
+	const accounts = (await scrobbleAccounts()).filter(a => !a.needsReconnect);
+	await Promise.all(accounts.map(flushService));
+}
+
+/** Sends one service's queue in batches; keeps them on temporary failures and retries later. */
+async function flushService(account: ScrobbleAccount): Promise<void> {
+	if (flushing.has(account.service)) return;
+	flushing.add(account.service);
+	window.clearTimeout(retryTimers[account.service]);
 	try {
-		let list = readQueue(account.userId);
+		let list = readQueue(account);
 		while (list.length) {
 			const batch = list.slice(0, BATCH);
 			let res: { ok?: boolean; retry?: boolean; revoked?: boolean };
 			try {
-				res = await meFetch("/api/me/scrobble", { method: "POST", body: JSON.stringify({ scrobbles: batch }) });
+				res = await meFetch("/api/me/scrobble", { method: "POST", body: JSON.stringify({ service: account.service, scrobbles: batch }) });
 			} catch (err) {
 				const data = (err as { data?: { retry?: boolean } }).data;
 				const status = (err as { status?: number }).status ?? 0;
@@ -121,16 +143,16 @@ export async function flushScrobbles(): Promise<void> {
 				return;
 			}
 			if (!res.ok && res.retry) {
-				retryTimer = window.setTimeout(() => void flushScrobbles(), RETRY_MS);
+				retryTimers[account.service] = window.setTimeout(() => void flushScrobbles(), RETRY_MS);
 				return;
 			}
 			// Sent, or permanently rejected: drop this batch. Re-read in case more were queued meanwhile.
 			const sent = new Set(batch.map(s => `${s.timestamp}|${s.artist}|${s.title}`));
-			list = readQueue(account.userId).filter(s => !sent.has(`${s.timestamp}|${s.artist}|${s.title}`));
-			writeQueue(account.userId, list);
+			list = readQueue(account).filter(s => !sent.has(`${s.timestamp}|${s.artist}|${s.title}`));
+			writeQueue(account, list);
 		}
 	} finally {
-		flushing = false;
+		flushing.delete(account.service);
 	}
 }
 
@@ -144,8 +166,9 @@ function beginPlay(track: Track) {
 async function sendNowPlaying(s: PlayState, duration: number) {
 	s.nowPlayingSent = true;
 	if (!s.track.title || !primaryArtist(s.track)) return;
-	const account = await lastfmAccount();
-	if (!account || account.needsReconnect || !navigator.onLine) return;
+	// The server sends it to every connected service.
+	const accounts = await scrobbleAccounts();
+	if (!accounts.some(a => !a.needsReconnect) || !navigator.onLine) return;
 	const res = await meFetch<{ revoked?: boolean }>("/api/me/nowplaying", { method: "POST", body: JSON.stringify(payload(s.track, duration)) }).catch(() => null);
 	if (res?.revoked) void refreshMe();
 }
@@ -153,9 +176,9 @@ async function sendNowPlaying(s: PlayState, duration: number) {
 async function scrobble(s: PlayState, duration: number) {
 	s.scrobbled = true;
 	if (!s.track.title || !primaryArtist(s.track)) return;
-	const account = await lastfmAccount();
-	if (!account) return;
-	enqueue(account.userId, { ...payload(s.track, duration), timestamp: Math.floor(s.startedAt / 1000) });
+	const accounts = await scrobbleAccounts();
+	if (!accounts.length) return;
+	for (const account of accounts) enqueue(account, { ...payload(s.track, duration), timestamp: Math.floor(s.startedAt / 1000) });
 	void flushScrobbles();
 }
 
@@ -201,14 +224,14 @@ export function startScrobbler() {
 		}
 	});
 
-	// Send anything left from earlier: at start, when back online, and after (re)connecting Last.fm.
+	// Send anything left from earlier: at start, when back online, and after (re)connecting a service.
 	window.addEventListener("online", () => void flushScrobbles());
 	window.addEventListener("account-upd", () => void flushScrobbles());
 	window.setTimeout(() => void flushScrobbles(), 5000);
 }
 
-/** Scrobbles waiting to be sent for the signed-in account. */
-export async function pendingScrobbles(): Promise<number> {
+/** Scrobbles waiting to be sent for the signed-in account, per service. */
+export async function pendingScrobbles(service: Service): Promise<number> {
 	const me = await getMe();
-	return me ? readQueue(me.user.id).length : 0;
+	return me ? readQueue({ userId: me.user.id, service }).length : 0;
 }

@@ -1,6 +1,6 @@
 /**
  * Fracital Accounts client. Accounts live on the Fracital server itself
- * (/api/auth via better-auth, /api/me for profile, settings and Last.fm).
+ * (/api/auth via better-auth, /api/me for profile, settings, Last.fm/ListenBrainz and Discord status).
  */
 import { passkeyClient } from "@better-auth/passkey/client";
 import { cryptoFetch } from "./api-crypto-fetch";
@@ -28,13 +28,15 @@ export interface AuthOptions {
 	passkeys: boolean;
 	/** Password reset and verification emails can be sent. */
 	mail: boolean;
-	/** Redirect-based sign-in (OAuth, Last.fm) returns to this host. */
+	/** OAuth providers call back to this host, so OAuth runs right here. */
 	redirectOk: boolean;
-	/** Off the auth host: its sign-in handoff page, opened in a proxy tab (authHandoff.ts). */
-	handoff: string | null;
+	/** The origin that keeps this browser signed in across our sites (crossSite.ts); null when off. */
+	hub: string | null;
+	/** Off the auth host: its origin, where OAuth runs in a popup and hands the session back (crossSite.ts). */
+	authHost: string | null;
 }
 
-const NO_OPTIONS: AuthOptions = { social: [], lastfm: false, terbium: false, passkeys: false, mail: false, redirectOk: false, handoff: null };
+const NO_OPTIONS: AuthOptions = { social: [], lastfm: false, terbium: false, passkeys: false, mail: false, redirectOk: false, hub: null, authHost: null };
 let optionsCache: Promise<AuthOptions> | null = null;
 
 /** Sign-in methods this server offers. */
@@ -45,6 +47,9 @@ export function getAuthOptions(): Promise<AuthOptions> {
 	});
 	return optionsCache;
 }
+
+/** OAuth sign-in and connecting work here: on the auth host, or through it. */
+export const oauthUsable = (options: AuthOptions | null) => !!options && (options.redirectOk || !!options.authHost);
 
 export const passkeysUsable = (options: AuthOptions) => options.passkeys && typeof window.PublicKeyCredential !== "undefined";
 
@@ -58,6 +63,25 @@ export interface LastfmProfile {
 	needsReconnect?: boolean;
 }
 
+export interface ListenbrainzProfile {
+	username: string;
+	listenCount: number;
+	url: string;
+	/** ListenBrainz stopped accepting the token (it was reset); listens queue up until it's reconnected. */
+	needsReconnect?: boolean;
+}
+
+/** The opt-in Discord status; null when the server doesn't offer it. */
+export interface DiscordPresenceState {
+	/** Discord is a sign-in method on this account. */
+	discord: boolean;
+	/** Discord granted permission to set the status. */
+	connected: boolean;
+	enabled: boolean;
+	/** Why the last update was refused (until reconnected or turned back on). */
+	error?: string;
+}
+
 export interface Me {
 	user: { id: string; name: string; email: string | null; image: string | null; emailVerified?: boolean };
 	hasPassword: boolean;
@@ -66,6 +90,8 @@ export interface Me {
 	passkeys?: number;
 	lastfm: LastfmProfile | null;
 	lastfmAvailable: boolean;
+	listenbrainz?: ListenbrainzProfile | null;
+	discordPresence?: DiscordPresenceState | null;
 	isAdmin?: boolean;
 	username?: string | null;
 	premium?: boolean;
@@ -106,7 +132,7 @@ export async function refreshMe(): Promise<Me | null> {
 	try {
 		me = await meFetch<Me>("/api/me");
 		meCache = Promise.resolve(me);
-		await saveLogin({ id: me.user.id, display: me.user.name, handle: me.username || me.lastfm?.username || me.user.email || me.user.name, avatar: me.user.image || me.lastfm?.image || null });
+		await saveLogin({ id: me.user.id, display: me.user.name, handle: me.username || me.lastfm?.username || me.listenbrainz?.username || me.user.email || me.user.name, avatar: me.user.image || me.lastfm?.image || null });
 	} catch (err) {
 		meCache = null;
 		const status = (err as { status?: number }).status;
@@ -117,6 +143,8 @@ export async function refreshMe(): Promise<Me | null> {
 }
 
 export async function signOut(): Promise<void> {
+	// Signing out also unlinks this browser from cross-site sign-in, or the next site would sign it back in.
+	await import("./crossSite").then(m => m.unlinkCrossSite()).catch(() => {});
 	await authClient.signOut().catch(() => {});
 	meCache = null;
 	await clearLogin();
@@ -189,12 +217,22 @@ export async function connectLastfmPopup(mode: "signin" | "link"): Promise<void>
 	await refreshMe();
 }
 
-/** Signs in with (or, signed in, connects) an OAuth provider in a popup. */
-export async function connectSocial(provider: SocialProvider, mode: "signin" | "link"): Promise<void> {
+/** Signs in with (or, signed in, connects) an OAuth provider in a popup. `scopes` adds to the provider's defaults when linking. */
+export async function connectSocial(provider: SocialProvider, mode: "signin" | "link", scopes?: string[]): Promise<void> {
 	const popup = openPopup();
+	const { authHost } = await getAuthOptions();
+	if (authHost) {
+		try {
+			await import("./crossSite").then(m => m.oauthThroughAuthHost(popup, authHost, provider, mode, scopes));
+		} finally {
+			if (!popup.closed) popup.close();
+		}
+		await refreshMe();
+		return;
+	}
 	try {
 		const urls = { callbackURL: "/api/me/oauth/done?status=ok", errorCallbackURL: "/api/me/oauth/done?status=error", disableRedirect: true };
-		const res = mode === "link" ? await authClient.linkSocial({ provider, ...urls }) : await authClient.signIn.social({ provider, newUserCallbackURL: urls.callbackURL, ...urls });
+		const res = mode === "link" ? await authClient.linkSocial({ provider, scopes, ...urls }) : await authClient.signIn.social({ provider, newUserCallbackURL: urls.callbackURL, ...urls });
 		const url = res.data && "url" in res.data ? res.data.url : undefined;
 		if (res.error || !url) throw new Error(res.error?.message || "Couldn't start sign-in");
 		popup.location.href = url;
@@ -277,6 +315,33 @@ export function importLastfmLoved(username?: string): Promise<{ username: string
 
 export async function disconnectLastfm(): Promise<void> {
 	await meFetch("/api/me/lastfm", { method: "DELETE" });
+	await refreshMe();
+}
+
+/** Connects ListenBrainz with the user token from listenbrainz.org/settings. */
+export async function connectListenbrainz(token: string): Promise<void> {
+	await meFetch("/api/me/listenbrainz", { method: "POST", body: JSON.stringify({ token }) });
+	await refreshMe();
+}
+
+export async function disconnectListenbrainz(): Promise<void> {
+	await meFetch("/api/me/listenbrainz", { method: "DELETE" });
+	await refreshMe();
+}
+
+/** Adds ListenBrainz loved songs to the Fracital library, from the linked account or any username. */
+export function importListenbrainzLoved(username?: string): Promise<{ username: string; found: number; added: number }> {
+	return meFetch("/api/me/listenbrainz/import", { method: "POST", body: JSON.stringify(username ? { username } : {}) });
+}
+
+/** Asks Discord for permission to set the status (links Discord when it isn't yet), then turns it on. */
+export async function connectDiscordPresence(): Promise<void> {
+	await connectSocial("discord", "link", ["activities.write"]);
+	await setDiscordPresence(true);
+}
+
+export async function setDiscordPresence(enabled: boolean): Promise<void> {
+	await meFetch("/api/me/presence/settings", { method: "PUT", body: JSON.stringify({ enabled }) });
 	await refreshMe();
 }
 

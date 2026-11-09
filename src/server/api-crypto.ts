@@ -28,7 +28,8 @@ export function ensureSeedCookie(c: Context): void {
 	c.header("Set-Cookie", `${WCS_COOKIE_NAME}=${seed}; Path=/; SameSite=Lax${secure ? "; Secure" : ""}`, { append: true });
 }
 
-function clientNegotiated(c: Context): boolean {
+/** The client asked for sealed responses (the app's cryptoFetch does; a plain request doesn't). */
+export function clientNegotiated(c: Context): boolean {
 	const value = c.req.header(API_CRYPTO_HEADER) || "";
 	return value.split(",").some(t => t.trim() === API_CRYPTO_TOKEN);
 }
@@ -86,13 +87,13 @@ export function sealApiResponses(): MiddlewareHandler {
 	return async (c, next) => {
 		// Seed for THIS response: the request's cookie when present, else the one
 		// we mint right now (the Set-Cookie lands before the body is read).
-		let seed = seedFromCookieHeader(c.req.header("cookie"));
-		if (!seed) {
-			seed = generateSeed();
-			const secure = c.req.url.startsWith("https:");
-			c.header("Set-Cookie", `${WCS_COOKIE_NAME}=${encodeSeed(seed)}; Path=/; SameSite=Lax${secure ? "; Secure" : ""}`, { append: true });
-		}
+		const existing = seedFromCookieHeader(c.req.header("cookie"));
+		const seed = existing ?? generateSeed();
 		await next();
+		// Appended to the route's response, not set before it runs: Hono replaces the cookies a
+		// handler's own Response sets with ones set beforehand, which dropped better-auth's session
+		// and OAuth state cookies on any request that came without a seed (a first OAuth callback).
+		if (!existing) c.header("Set-Cookie", `${WCS_COOKIE_NAME}=${encodeSeed(seed)}; Path=/; SameSite=Lax${c.req.url.startsWith("https:") ? "; Secure" : ""}`, { append: true });
 		if (!clientNegotiated(c)) return;
 		const res = c.res;
 		if (!(res.headers.get("content-type") || "").includes("application/json")) return;

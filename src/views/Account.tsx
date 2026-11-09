@@ -1,4 +1,4 @@
-import { ArrowLeftStartOnRectangleIcon, ArrowPathIcon, CheckCircleIcon, CubeTransparentIcon, ExclamationTriangleIcon, FingerPrintIcon, KeyIcon, UserCircleIcon } from "@heroicons/react/24/solid";
+import { ArrowLeftStartOnRectangleIcon, ArrowPathIcon, CheckCircleIcon, CubeTransparentIcon, ExclamationTriangleIcon, FingerPrintIcon, KeyIcon, MusicalNoteIcon, UserCircleIcon } from "@heroicons/react/24/solid";
 import { faDiscord, faGithub, faGoogle, faLastfm, faMicrosoft } from "@fortawesome/free-brands-svg-icons";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import type { IconDefinition } from "@fortawesome/fontawesome-svg-core";
@@ -6,23 +6,30 @@ import { createId } from "@paralleldrive/cuid2";
 import { useEffect, useRef, useState } from "react";
 import { Input } from "../components/Input";
 import { HolyText } from "../components/common/HolyText";
+import { useHolyAttr } from "../libs/holy-attr";
 import {
 	addPasskey,
+	connectDiscordPresence,
 	connectLastfm,
+	connectListenbrainz,
 	connectSocial,
 	deletePasskey,
 	disconnectLastfm,
+	disconnectListenbrainz,
 	disconnectProvider,
 	getAuthOptions,
 	getMe,
 	importLastfmLoved,
+	importListenbrainzLoved,
 	listPasskeys,
+	oauthUsable,
 	passkeysUsable,
 	refreshLastfm,
 	refreshMe,
 	requestPasswordReset,
 	resetPassword,
 	sendVerificationEmail,
+	setDiscordPresence,
 	signIn,
 	signInWithPasskey,
 	signOut,
@@ -35,7 +42,7 @@ import {
 	type PasskeyInfo,
 	type SocialProvider,
 } from "../libs/auth";
-import { signInViaHandoff } from "../libs/authHandoff";
+import { CROSS_SITE_EVENT, crossSiteStatus, linkCrossSite, unlinkCrossSite } from "../libs/crossSite";
 import { formatCount } from "../libs/music-service";
 import { useSavedStore } from "../libs/savedLibrary";
 import { pendingScrobbles } from "../libs/scrobbler";
@@ -46,6 +53,8 @@ interface AccountProps {
 }
 
 const LASTFM_RED = "#d51007";
+const LISTENBRAINZ_ORANGE = "#eb743b";
+const DISCORD_BLURPLE = "#5865f2";
 
 const PROVIDERS: Record<SocialProvider, { label: string; icon: IconDefinition; bg: string; fg: string }> = {
 	google: { label: "Google", icon: faGoogle, bg: "#ffffff", fg: "#1f1f1f" },
@@ -151,6 +160,8 @@ export const SignIn = ({ initialPage, resetToken, notice, onSignedIn, branding =
 	const finish = async () => {
 		const me = await refreshMe();
 		onSignedIn(me);
+		// On by default: remember this browser so our other sites sign in too (unless turned off here).
+		if (me) void linkCrossSite("signin");
 		// Pull this account's synced settings, if it has any.
 		await window.fr?.sync.get().catch(() => false);
 	};
@@ -205,10 +216,8 @@ export const SignIn = ({ initialPage, resetToken, notice, onSignedIn, branding =
 	const title = page === "register" ? branding.registerTitle : page === "forgot" ? "Reset your password" : page === "reset" ? "Choose a new password" : terbium ? "Sign in with Terbium" : branding.loginTitle;
 	const subtitle = page === "forgot" ? "We'll email you a link to choose a new password." : page === "reset" ? "Use at least 8 characters." : terbium ? "Use your Terbium Account email and password." : branding.subtitle;
 	const credentialsPage = page === "login" || page === "register";
-	const redirectOk = !!options?.redirectOk;
-	// Off the auth host, redirect-based methods sign in there through a proxy tab instead.
-	const handoff = redirectOk ? null : options?.handoff || null;
-	const redirectSignIn = (method: string, direct: () => Promise<void>) => (handoff ? signInViaHandoff(handoff, method) : direct());
+	// OAuth runs here on the auth host, or through it in a popup from any of our other sites.
+	const oauthOk = oauthUsable(options);
 
 	return (
 		<div className="flex flex-col items-center justify-center min-h-full gap-5 py-6 overflow-auto">
@@ -228,10 +237,9 @@ export const SignIn = ({ initialPage, resetToken, notice, onSignedIn, branding =
 
 				{credentialsPage && !terbium && (
 					<>
-						{options?.lastfm && (redirectOk || handoff) && (
-							<LastfmButton label={page === "login" ? "Continue with Last.fm" : "Sign up with Last.fm"} busy={busy === "lastfm"} onClick={() => run("lastfm", async () => (await redirectSignIn("lastfm", () => connectLastfm("signin")), await finish()))} />
-						)}
-						{!!options?.social.length && (redirectOk || handoff) && (
+						{/* Last.fm returns to whichever of our sites started it, so it works everywhere (unlike OAuth). */}
+						{options?.lastfm && <LastfmButton label={page === "login" ? "Continue with Last.fm" : "Sign up with Last.fm"} busy={busy === "lastfm"} onClick={() => run("lastfm", async () => (await connectLastfm("signin"), await finish()))} />}
+						{!!options?.social.length && oauthOk && (
 							<div className="grid gap-2 w-full" style={{ gridTemplateColumns: `repeat(${Math.min(options.social.length, 3)}, minmax(0, 1fr))` }}>
 								{options.social.map(p => (
 									<button
@@ -239,7 +247,7 @@ export const SignIn = ({ initialPage, resetToken, notice, onSignedIn, branding =
 										className="flex items-center justify-center gap-2 p-2.5 rounded-lg font-semibold text-sm hover:brightness-110 disabled:opacity-60 duration-150 cursor-pointer"
 										style={{ backgroundColor: PROVIDERS[p].bg, color: PROVIDERS[p].fg }}
 										disabled={!!busy}
-										onClick={() => run(p, async () => (await redirectSignIn(p, () => connectSocial(p, "signin")), await finish()))}
+										onClick={() => run(p, async () => (await connectSocial(p, "signin"), await finish()))}
 									>
 										<FontAwesomeIcon icon={PROVIDERS[p].icon} className="size-4" />
 										<HolyText text={busy === p ? "Waiting…" : PROVIDERS[p].label} />
@@ -378,7 +386,7 @@ const Manage = ({ me, notice, onChange }: { me: Me; notice?: string; onChange: (
 
 				<ProfileEditor me={me} onChange={onChange} />
 
-				<LastfmSection me={me} busy={busy} run={run} canDisconnect={signInMethods > 1 || !providers.has("lastfm")} />
+				<ConnectedServices me={me} options={options} busy={busy} run={run} canDisconnect={signInMethods > 1 || !providers.has("lastfm")} />
 
 				<SignInMethods me={me} options={options} busy={busy} run={run} signInMethods={signInMethods} />
 
@@ -398,20 +406,27 @@ const Manage = ({ me, notice, onChange }: { me: Me; notice?: string; onChange: (
 
 type Run = (key: string, fn: () => Promise<unknown>, done?: string) => Promise<void>;
 
-const LastfmSection = ({ me, busy, run, canDisconnect }: { me: Me; busy: string | null; run: Run; canDisconnect: boolean }) => {
+const ConnectedServices = ({ me, options, busy, run, canDisconnect }: { me: Me; options: AuthOptions | null; busy: string | null; run: Run; canDisconnect: boolean }) => {
 	const newTab = useTabsStore(state => state.newTab);
 	const [pending, setPending] = useState(0);
+	const [lbPending, setLbPending] = useState(0);
 	const [importName, setImportName] = useState("");
 	const lastfm = me.lastfm;
+	const listenbrainz = me.listenbrainz ?? null;
+	// Import from the connected service; Last.fm when both or neither are.
+	const [importFrom, setImportFrom] = useState<"lastfm" | "listenbrainz">(!lastfm && listenbrainz ? "listenbrainz" : "lastfm");
+	const importOwn = importFrom === "lastfm" ? lastfm?.username : listenbrainz?.username;
+	const importLabel = importFrom === "lastfm" ? "Last.fm" : "ListenBrainz";
 
 	useEffect(() => {
-		void pendingScrobbles().then(setPending);
+		void pendingScrobbles("lastfm").then(setPending);
+		void pendingScrobbles("listenbrainz").then(setLbPending);
 	}, [me]);
 
 	const importLoved = (username?: string) =>
 		run("import", async () => {
-			const res = await importLastfmLoved(username);
-			if (!res.found) throw new Error(`@${res.username} hasn't loved any songs on Last.fm yet`);
+			const res = importFrom === "lastfm" ? await importLastfmLoved(username) : await importListenbrainzLoved(username);
+			if (!res.found) throw new Error(`${res.username} hasn't loved any songs on ${importLabel} yet`);
 			await useSavedStore.getState().refresh();
 			return res;
 		}).then(() => setImportName(""));
@@ -481,12 +496,25 @@ const LastfmSection = ({ me, busy, run, canDisconnect }: { me: Me; busy: string 
 				</span>
 			)}
 
+			<ListenbrainzRow me={me} busy={busy} run={run} pending={lbPending} />
+
+			{me.discordPresence && <DiscordPresenceRow me={me} options={options} busy={busy} run={run} />}
+
 			<div className="flex flex-col gap-2 pt-1 border-t border-white/10">
-				<span className="text-sm font-semibold pt-2">
-					<HolyText text="Import loved songs" />
-				</span>
+				<div className="flex items-center justify-between gap-2 pt-2">
+					<span className="text-sm font-semibold">
+						<HolyText text="Import loved songs" />
+					</span>
+					<div className="flex items-center gap-1">
+						{(["lastfm", "listenbrainz"] as const).map(id => (
+							<button key={id} className={`text-[11px] font-semibold px-2.5 py-1 rounded-full cursor-pointer duration-150 ${importFrom === id ? "bg-white text-black" : "bg-[#ffffff15] hover:bg-[#ffffff25]"}`} onClick={() => setImportFrom(id)}>
+								<HolyText text={id === "lastfm" ? "Last.fm" : "ListenBrainz"} />
+							</button>
+						))}
+					</div>
+				</div>
 				<span className="text-xs text-(--text-tertiary)">
-					<HolyText text={lastfm ? "Add your Last.fm loved songs to your library, or import from another public Last.fm profile." : "Add the loved songs from any public Last.fm profile to your library. No connection needed."} />
+					<HolyText text={importOwn ? `Add your ${importLabel} loved songs to your library, or import from another public ${importLabel} profile.` : `Add the loved songs from any public ${importLabel} profile to your library. No connection needed.`} />
 				</span>
 				<div className="flex gap-2">
 					<div className="flex flex-1 items-center gap-1 px-3 rounded-xl bg-[#ffffff10] focus-within:bg-[#ffffff18]">
@@ -495,12 +523,12 @@ const LastfmSection = ({ me, busy, run, canDisconnect }: { me: Me; busy: string 
 							className="flex-1 py-2 bg-transparent outline-none text-sm min-w-0"
 							maxLength={64}
 							value={importName}
-							placeholder={lastfm?.username ?? "username"}
+							placeholder={importOwn ?? "username"}
 							onChange={e => setImportName(e.target.value.replace(/[^\w.-]/g, ""))}
-							onKeyDown={e => e.key === "Enter" && (importName || lastfm) && importLoved(importName || undefined)}
+							onKeyDown={e => e.key === "Enter" && (importName || importOwn) && importLoved(importName || undefined)}
 						/>
 					</div>
-					<button className={pill} disabled={!!busy || (!importName && !lastfm)} onClick={() => importLoved(importName || undefined)}>
+					<button className={pill} disabled={!!busy || (!importName && !importOwn)} onClick={() => importLoved(importName || undefined)}>
 						<HolyText text={busy === "import" ? "Importing…" : "Import"} />
 					</button>
 				</div>
@@ -509,7 +537,166 @@ const LastfmSection = ({ me, busy, run, canDisconnect }: { me: Me; busy: string 
 	);
 };
 
-const MethodRow = ({ icon, label, detail, children }: { icon: React.ReactNode; label: string; detail?: string; children?: React.ReactNode }) => (
+/** ListenBrainz: the open alternative to Last.fm, connected with the user token from its settings page. */
+const ListenbrainzRow = ({ me, busy, run, pending }: { me: Me; busy: string | null; run: Run; pending: number }) => {
+	const newTab = useTabsStore(state => state.newTab);
+	const [form, setForm] = useState(false);
+	const [token, setToken] = useState("");
+	const { ref: tokenRef, placeholder: tokenAttrs } = useHolyAttr({ placeholder: "Paste your user token" });
+	const lb = me.listenbrainz ?? null;
+	const open = (url: string) => newTab({ id: createId(), title: "ListenBrainz", url, displayUrl: url, icon: null, current: true });
+	const connect = () => run("lb-link", () => connectListenbrainz(token.trim()), lb ? "ListenBrainz reconnected." : "ListenBrainz connected.").then(() => (setToken(""), setForm(false)));
+	const showForm = form || !!lb?.needsReconnect;
+
+	return (
+		<>
+			<div className="flex items-center gap-3">
+				<div className="flex items-center justify-center size-10 shrink-0 rounded-full text-white" style={{ backgroundColor: LISTENBRAINZ_ORANGE }}>
+					<MusicalNoteIcon className="size-5" />
+				</div>
+				{lb ? (
+					<>
+						<div className="flex flex-col flex-1 min-w-0">
+							<span className="flex items-center gap-1.5 font-semibold">
+								<HolyText text="ListenBrainz" /> {lb.needsReconnect ? <ExclamationTriangleIcon className="size-4 text-amber-400" /> : <CheckCircleIcon className="size-4 text-green-500" />}
+							</span>
+							<button className="text-left text-sm text-(--text-tertiary) hover:underline truncate cursor-pointer" onClick={() => open(lb.url)}>
+								<HolyText text={`${lb.username} · ${formatCount(lb.listenCount)} listens`} />
+							</button>
+						</div>
+						<button className={pill} disabled={!!busy} onClick={() => run("lb-off", disconnectListenbrainz)}>
+							<HolyText text="Disconnect" />
+						</button>
+					</>
+				) : (
+					<>
+						<div className="flex flex-col flex-1 min-w-0">
+							<span className="font-semibold">
+								<HolyText text="ListenBrainz" />
+							</span>
+							<span className="text-sm text-(--text-tertiary)">
+								<HolyText text={me.lastfm ? "Also send your listens to ListenBrainz, the open alternative to Last.fm." : "The open alternative to Last.fm: build your library and save what you play."} />
+							</span>
+						</div>
+						{!form && (
+							<button className="text-sm font-semibold px-3 py-1.5 rounded-full text-white hover:brightness-110 disabled:opacity-50 cursor-pointer duration-150 shrink-0" style={{ backgroundColor: LISTENBRAINZ_ORANGE }} disabled={!!busy} onClick={() => setForm(true)}>
+								<HolyText text="Connect" />
+							</button>
+						)}
+					</>
+				)}
+			</div>
+			{showForm && (
+				<div className="flex flex-col gap-2 pl-13">
+					<span className="text-xs text-(--text-tertiary)">
+						<HolyText
+							text={lb?.needsReconnect ? "ListenBrainz stopped accepting your token, probably because it was reset. Paste the new one to keep sending listens. Listens from meanwhile are saved and sent after you reconnect." : "Copy the user token from your ListenBrainz settings page and paste it here."}
+						/>{" "}
+						<button className="underline hover:text-(--text-secondary) cursor-pointer" onClick={() => open("https://listenbrainz.org/settings/")}>
+							<HolyText text="Open ListenBrainz settings" />
+						</button>
+					</span>
+					<div className="flex gap-2">
+						<input
+							ref={tokenRef}
+							{...tokenAttrs}
+							className="flex-1 px-3 py-2 rounded-xl text-sm outline-none bg-[#ffffff10] focus:bg-[#ffffff18] min-w-0"
+							maxLength={100}
+							value={token}
+							autoComplete="off"
+							spellCheck={false}
+							onChange={e => setToken(e.target.value)}
+							onKeyDown={e => e.key === "Enter" && token.trim() && connect()}
+						/>
+						<button className={pill} disabled={!!busy || !token.trim()} onClick={connect}>
+							<HolyText text={busy === "lb-link" ? "Checking…" : lb ? "Reconnect" : "Connect"} />
+						</button>
+						{form && !lb && (
+							<button className={pill} onClick={() => (setForm(false), setToken(""))}>
+								<HolyText text="Cancel" />
+							</button>
+						)}
+					</div>
+				</div>
+			)}
+			{pending > 0 && (
+				<span className="text-xs text-(--text-tertiary)">
+					<HolyText text={`${pending} ${pending === 1 ? "listen is" : "listens are"} waiting to be sent to ListenBrainz.`} />
+				</span>
+			)}
+		</>
+	);
+};
+
+/** The opt-in Discord status ("Listening to …"), set by the server (discord-presence.ts). */
+const DiscordPresenceRow = ({ me, options, busy, run }: { me: Me; options: AuthOptions | null; busy: string | null; run: Run }) => {
+	const presence = me.discordPresence!;
+	const { ref: switchRef, placeholder: switchAttrs } = useHolyAttr({ "aria-label": "Show what you're listening to on Discord" });
+	// Asking Discord for the permission is OAuth: here on the auth host, or through it from other sites.
+	const canConnect = oauthUsable(options);
+	const connect = () => run("dc-presence", connectDiscordPresence, "Your Discord status will show what you're listening to.");
+
+	return (
+		<>
+			<div className="flex items-center gap-3">
+				<div className="flex items-center justify-center size-10 shrink-0 rounded-full text-white" style={{ backgroundColor: DISCORD_BLURPLE }}>
+					<FontAwesomeIcon icon={faDiscord} className="size-5" />
+				</div>
+				<div className="flex flex-col flex-1 min-w-0">
+					<span className="flex items-center gap-1.5 font-semibold">
+						<HolyText text="Discord status" /> {presence.connected && (presence.error ? <ExclamationTriangleIcon className="size-4 text-amber-400" /> : presence.enabled && <CheckCircleIcon className="size-4 text-green-500" />)}
+					</span>
+					<span className="text-sm text-(--text-tertiary)">
+						<HolyText
+							text={
+								presence.connected
+									? "Shows the song you're playing here as your Discord status."
+									: !canConnect
+										? "Open your account on the main site to connect this."
+										: presence.discord
+											? "Show what you're listening to on your Discord profile."
+											: "Show what you're listening to on your Discord profile. This also adds Discord as a way to sign in."
+							}
+						/>
+					</span>
+				</div>
+				{presence.connected ? (
+					<button
+						ref={switchRef}
+						{...switchAttrs}
+						role="switch"
+						aria-checked={presence.enabled}
+						disabled={!!busy}
+						onClick={() => run("dc-toggle", () => setDiscordPresence(!presence.enabled))}
+						className={`relative inline-block w-12 h-7 shrink-0 rounded-full transition-colors duration-200 disabled:opacity-50 cursor-pointer ${presence.enabled ? "bg-(--accent)" : "bg-[#ffffff15] hover:bg-[#ffffff25]"}`}
+					>
+						<span className={`absolute left-1 top-1 size-5 rounded-full bg-white shadow transition-transform duration-200 ${presence.enabled ? "translate-x-5" : ""}`} />
+					</button>
+				) : (
+					canConnect && (
+						<button className="text-sm font-semibold px-3 py-1.5 rounded-full text-white hover:brightness-110 disabled:opacity-50 cursor-pointer duration-150 shrink-0" style={{ backgroundColor: DISCORD_BLURPLE }} disabled={!!busy} onClick={connect}>
+							<HolyText text={busy === "dc-presence" ? "Waiting…" : "Connect"} />
+						</button>
+					)
+				)}
+			</div>
+			{presence.connected && presence.error && (
+				<div className="flex items-center gap-3 p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-sm">
+					<span className="flex-1">
+						<HolyText text={presence.error} />
+					</span>
+					{canConnect && (
+						<button className="text-sm font-semibold px-3 py-1.5 rounded-full text-white hover:brightness-110 disabled:opacity-50 cursor-pointer shrink-0" style={{ backgroundColor: DISCORD_BLURPLE }} disabled={!!busy} onClick={connect}>
+							<HolyText text={busy === "dc-presence" ? "Waiting…" : "Reconnect"} />
+						</button>
+					)}
+				</div>
+			)}
+		</>
+	);
+};
+
+const MethodRow = ({ icon, label, detail, children }: { icon: React.ReactNode; label: string; detail?: React.ReactNode; children?: React.ReactNode }) => (
 	<div className="flex items-center gap-3">
 		<div className="flex items-center justify-center size-10 shrink-0 rounded-full bg-[#ffffff12]">{icon}</div>
 		<div className="flex flex-col flex-1 min-w-0">
@@ -538,7 +725,7 @@ const SignInMethods = ({ me, options, busy, run, signInMethods }: { me: Me; opti
 	}, [canPasskey, me.passkeys]);
 
 	const last = signInMethods <= 1;
-	const redirectOk = !!options?.redirectOk;
+	const oauthOk = oauthUsable(options);
 
 	return (
 		<section className="flex flex-col gap-3 p-4 rounded-2xl bg-(--tertiary)">
@@ -565,7 +752,7 @@ const SignInMethods = ({ me, options, busy, run, signInMethods }: { me: Me; opti
 								<HolyText text="Disconnect" />
 							</button>
 						) : (
-							redirectOk && (
+							oauthOk && (
 								<button className={pill} disabled={!!busy} onClick={() => run(p, () => connectSocial(p, "link"), `${PROVIDERS[p].label} connected.`)}>
 									<HolyText text={busy === p ? "Waiting…" : "Connect"} />
 								</button>
@@ -628,7 +815,56 @@ const SignInMethods = ({ me, options, busy, run, signInMethods }: { me: Me; opti
 					<HolyText text="Add another sign-in method before removing this one." />
 				</span>
 			)}
+
+			{options?.hub && <CrossSiteRow busy={busy} run={run} />}
 		</section>
+	);
+};
+
+/** "Stay signed in across sites": this browser's link at the hub (crossSite.ts). */
+const CrossSiteRow = ({ busy, run }: { busy: string | null; run: Run }) => {
+	// undefined while checking, null when the hub can't be reached from this browser.
+	const [linked, setLinked] = useState<boolean | null | undefined>(undefined);
+	const { ref: switchRef, placeholder: switchAttrs } = useHolyAttr({ "aria-label": "Stay signed in across sites" });
+
+	useEffect(() => {
+		let alive = true;
+		const read = () => void crossSiteStatus().then(s => alive && setLinked(s ? s.linked : null));
+		read();
+		// The sign-in that opened this page links the browser in the background; follow it.
+		window.addEventListener(CROSS_SITE_EVENT, read);
+		return () => {
+			alive = false;
+			window.removeEventListener(CROSS_SITE_EVENT, read);
+		};
+	}, []);
+
+	const toggle = () =>
+		run("cross-site", async () => {
+			if (linked) await unlinkCrossSite(true);
+			else if (!(await linkCrossSite("toggle"))) throw new Error("This browser blocks it (third-party cookies are off), or the sign-in hub can't be reached.");
+		});
+
+	return (
+		<MethodRow
+			icon={<ArrowPathIcon className="size-5" />}
+			label="Stay signed in across sites"
+			detail={<HolyText text={linked === null ? "Unavailable in this browser." : "Our other sites sign this browser in automatically."} />}
+		>
+			{linked !== null && (
+				<button
+					ref={switchRef}
+					{...switchAttrs}
+					role="switch"
+					aria-checked={!!linked}
+					disabled={linked === undefined || !!busy}
+					onClick={toggle}
+					className={`relative inline-block w-12 h-7 shrink-0 rounded-full transition-colors duration-200 disabled:opacity-50 cursor-pointer ${linked ? "bg-(--accent)" : "bg-[#ffffff15] hover:bg-[#ffffff25]"}`}
+				>
+					<span className={`absolute left-1 top-1 size-5 rounded-full bg-white shadow transition-transform duration-200 ${linked ? "translate-x-5" : ""}`} />
+				</button>
+			)}
+		</MethodRow>
 	);
 };
 

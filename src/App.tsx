@@ -254,6 +254,23 @@ const App = () => {
 	// stomp is opt-in (the experimental proxies setting) and boots only once it
 	// is the selected engine; Scramjet keeps booting at startup as before.
 	const stompActive = proxy === "st" && settings[EXPERIMENTAL_PROXIES_SETTING] === true;
+	// Cross-site sign-in (libs/crossSite.ts), once per load: a signed-out site signs in from the
+	// hub when this browser is linked; a signed-in one links it, unless it was turned off here.
+	useEffect(() => {
+		void (async () => {
+			const { getMe, refreshMe } = await import("./libs/auth");
+			const cross = await import("./libs/crossSite");
+			if (!(await getMe())) {
+				if (!(await cross.crossSiteSignIn())) return;
+				await refreshMe();
+				await window.fr?.sync.get().catch(() => false);
+				return;
+			}
+			const status = await cross.crossSiteStatus();
+			if (status && !status.linked && !status.off) await cross.linkCrossSite("startup");
+		})().catch(() => undefined);
+	}, []);
+
 	useEffect(() => {
 		useStompStore.setState({ active: stompActive });
 		if (stompActive && !isWebOS) void bootStomp().catch(() => undefined);
@@ -557,7 +574,7 @@ const App = () => {
 													</View>
 												</div>
 											);
-										} else if (stompActive || item.engine === "st") {
+										} else if (stompActive) {
 											// The engine's view waits for its own controller; no url gate needed.
 											return (
 												<StompSite
@@ -842,6 +859,8 @@ function SideAd() {
 				</button>
 			</div>
 			<div className="flex flex-col items-center gap-2 px-2 pb-2">
+				{/* RevIQ fills this rail slot by its data-ad name when js.rev.iq runs. */}
+				<div data-ad="left-rail-1" />
 				{Array.from({ length: slots }, (_, i) => (
 					<AdBanner key={i} unit={AD_UNITS.side} refreshMinutes={[5, 10]} className="rounded-lg" />
 				))}

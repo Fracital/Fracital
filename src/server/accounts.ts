@@ -1,13 +1,15 @@
 /**
  * Fracital Accounts: email/password, Last.fm, OAuth, passkey and Terbium sign-in
  * (better-auth on Postgres; providers in auth-providers.ts), settings sync, and the
- * signed-in user's Last.fm library/stats/scrobbling.
+ * signed-in user's listening library/stats/scrobbling from Last.fm or ListenBrainz
+ * (listenbrainz.ts), plus the opt-in Discord status (discord-presence.ts).
  *
  * Mounted by both the production Hono server (backend.ts) and the Vite dev server
  * (music-api.ts) via `getAccountsApp()`. Disabled (503) when DATABASE_URL is unset.
  *
  * Env: DATABASE_URL, BETTER_AUTH_SECRET, LASTFM_API_KEY, LASTFM_API_SECRET,
- *      optional BETTER_AUTH_URL (public origin) and BETTER_AUTH_TRUSTED_ORIGINS (comma list).
+ *      optional BETTER_AUTH_URL (public origin) and BETTER_AUTH_TRUSTED_ORIGINS (comma list),
+ *      DISCORD_PRESENCE=1 (Discord status; needs the Discord sign-in credentials too).
  */
 import { createHash } from "node:crypto";
 import { betterAuth, type BetterAuthPlugin } from "better-auth";
@@ -23,7 +25,10 @@ import { isBanned, migrateArtistTables, registerArtistRoutes, userMeta } from ".
 import { mailEnabled, sendPasswordResetEmail, sendVerificationEmail } from "./mail";
 import { enabledSocialProviders, passkeyPlugin, passkeyRpId, socialProviders, terbiumEnabled, terbiumPlugin } from "./auth-providers";
 import { setStatStore } from "./music-stats";
-import { allowedReturnOrigin, HANDOFF_LANDING, HANDOFF_PAGE, handoffPlugin, handoffUrlFor, renderHandoffPage } from "./auth-handoff";
+import { clientNegotiated } from "./api-crypto";
+import { authOrigin, handoffPlugin, hubOrigin, ownOrigin, registerHubRoutes } from "./cross-site";
+import { lbFeedback, lbListenCount, lbLookupRecording, lbLoved, lbRecent, lbRevoked, lbSubmit, lbTemporary, lbTopAlbums, lbTopArtists, lbTopTracks, lbValidateToken, type ListenTrack } from "./listenbrainz";
+import { discordPresenceEnabled, hasPresenceScope, migratePresence, readPresence, sendPresence, writePresence, type NowPlaying } from "./discord-presence";
 
 const MUSIC_API = "/api/music";
 const STATE_COOKIE = "fracital_lastfm_state";
@@ -51,10 +56,18 @@ const lastfmModeQuery = z.object({ mode: z.enum(["signin", "link"]).default("sig
  * Shared by the redirecting start route (the popup path) and the JSON route
  * (the proxied path, which opens the URL in a proxy tab instead).
  */
-async function beginLastfmAuth(ctx: { query: { mode: "signin" | "link" }; context: { secret: string; baseURL: string }; setSignedCookie: (name: string, value: string, secret: string, opts: Record<string, unknown>) => Promise<unknown> }) {
+async function beginLastfmAuth(ctx: {
+	query: { mode: "signin" | "link" };
+	headers?: Headers;
+	context: { secret: string; baseURL: string };
+	setSignedCookie: (name: string, value: string, secret: string, opts: Record<string, unknown>) => Promise<unknown>;
+}) {
 	const nonce = createHash("sha256").update(`${Math.random()}${Date.now()}`).digest("hex").slice(0, 24);
 	await ctx.setSignedCookie(STATE_COOKIE, JSON.stringify({ mode: ctx.query.mode, nonce }), ctx.context.secret, { maxAge: 600, httpOnly: true, sameSite: "lax", path: "/" });
-	const callback = `${ctx.context.baseURL}/lastfm/callback`;
+	// Last.fm takes any callback, so it returns to the site the user started on (any of our
+	// hosts, where the state cookie and session belong) instead of only BETTER_AUTH_URL.
+	const own = ownOrigin(ctx.headers);
+	const callback = own ? `${own}/api/auth/lastfm/callback` : `${ctx.context.baseURL}/lastfm/callback`;
 	return { url: `https://www.last.fm/api/auth/?api_key=${encodeURIComponent(lastfmKey())}&cb=${encodeURIComponent(callback)}`, callback };
 }
 
@@ -309,6 +322,15 @@ function init() {
 				primary key (user_id, game_key)
 			)`);
 			await migrateArtistTables(pool);
+			// ListenBrainz isn't a sign-in method, so its link lives here instead of in "account".
+			// An empty token means ListenBrainz rejected it; the row stays so a reconnect keeps the account.
+			await pool.query(`create table if not exists fracital_listenbrainz (
+				user_id text primary key references "user"(id) on delete cascade,
+				username text not null unique,
+				token text not null,
+				updated_at timestamptz not null default now()
+			)`);
+			await migratePresence(pool);
 			// Play/listener counts survive restarts and are shared between deploys on the same database.
 			await pool.query(`create table if not exists fracital_stat_cache (
 				key text primary key,
@@ -385,6 +407,10 @@ async function playable(t: LastfmTrack): Promise<LibraryTrack | null> {
 
 const playableAll = async (tracks: LastfmTrack[]) => (await Promise.all(tracks.map(playable))).filter((t): t is LibraryTrack => !!t);
 
+/** A ListenBrainz song in Last.fm's shape, so both go through the same `playable`. */
+const fromListen = (t: ListenTrack): LastfmTrack => ({ name: t.title, artist: t.artist, album: t.album ? { "#text": t.album } : undefined, playcount: t.plays ? String(t.plays) : undefined, date: t.at ? { uts: String(t.at) } : undefined, "@attr": t.nowPlaying ? { nowplaying: "true" } : undefined });
+const playableListens = (tracks: ListenTrack[]) => playableAll(tracks.map(fromListen));
+
 async function artistCard(name: string, extra: Record<string, unknown> = {}) {
 	const dz = await findDeezerArtist(name).catch(() => null);
 	return { name, picture: dz?.picture_big || dz?.picture_medium || "", fans: dz?.nb_fan, ...extra };
@@ -454,57 +480,37 @@ export function getAccountsApp() {
 <script>
 const data = { type: ${escapeForScript(type)}, status: ${escapeForScript(status)}, message: ${escapeForScript(message)} };
 if (window.opener) { window.opener.postMessage(data, location.origin); window.close(); }
-else {
-	// Started from the sign-in handoff page (in a proxy tab): go back there with the result.
-	const back = sessionStorage.getItem("fr:handoff");
-	const next = back ? new URL(back) : null;
-	if (next && next.origin === location.origin) {
-		if (data.status === "ok") next.searchParams.set("done", "1");
-		else next.searchParams.set("error_message", data.message || "Sign-in didn't finish");
-		location.replace(next.href);
-	} else setTimeout(() => location.replace("/"), 1500);
-}
+else setTimeout(() => location.replace("/"), 1500);
 </script></body>`);
 	};
 	app.get("/api/me/lastfm/done", popupDone("fracital:lastfm", "Last.fm"));
 	app.get("/api/me/oauth/done", popupDone("fracital:oauth", "Sign in"));
 
-	// Sign-in handoff (auth-handoff.ts). The page lives on the auth host and is opened in a
-	// proxy tab by the app on another of our hosts; it returns a one-time code to that host.
-	app.get(HANDOFF_PAGE, async c => {
-		c.header("Cache-Control", "no-store");
-		c.header("Referrer-Policy", "no-referrer");
-		const returnTo = allowedReturnOrigin(c.req.query("return"));
-		const challenge = c.req.query("challenge") || "";
-		if (!returnTo || !/^[A-Za-z0-9_-]{43,128}$/.test(challenge)) return c.text("This sign-in link isn't valid.", 400);
-		const method = c.req.query("method") || "";
-		return c.html(
-			renderHandoffPage({
-				returnTo,
-				challenge,
-				method: /^[a-z]{1,20}$/.test(method) ? method : "",
-				social: enabledSocialProviders(),
-				lastfm: !!(lastfmKey() && lastfmSecret()),
-				terbium: terbiumEnabled(),
-			}),
-		);
-	});
-	// The app reads the code from this URL before it loads (the proxy won't proxy its own
-	// origin). Reaching it directly does nothing: the code is useless without the app's verifier.
-	app.get(HANDOFF_LANDING, c => {
-		c.header("Referrer-Policy", "no-referrer");
-		return c.redirect("/", 302);
-	});
+	// Staying signed in across our sites (cross-site.ts): the hub's frame and endpoints.
+	registerHubRoutes(
+		app,
+		async () => {
+			const ctx = await init();
+			if (!ctx) return null;
+			return {
+				adapter: (await ctx.auth.$context).internalAdapter,
+				sessionUserId: async headers => (await ctx.auth.api.getSession({ headers }).catch(() => null))?.user.id ?? null,
+			};
+		},
+		oauthErrorMessage,
+	);
 
 	// Which sign-in methods this server offers (public; the sign-in page builds its buttons from it).
 	app.get("/api/me/options", c => {
 		// Redirect-based sign-in comes back to BETTER_AUTH_URL's host, so it only works there.
 		const base = process.env.BETTER_AUTH_URL;
-		// Host names only come from the request, so a decoy host never learns the real one.
+		// Host names only come from the request; the real hosts (hub, auth host) are only told to the
+		// app (sealed responses), so a plain request to a decoy host never learns them.
 		const host = c.req.header("x-forwarded-host") || c.req.header("host") || "";
 		const hostname = host.replace(/:\d+$/, "");
 		const redirectOk = !base || new URL(base).host === host;
 		const rp = passkeyRpId();
+		const sealed = clientNegotiated(c);
 		return c.json({
 			social: enabledSocialProviders(),
 			lastfm: !!(lastfmKey() && lastfmSecret()),
@@ -512,8 +518,10 @@ else {
 			passkeys: hostname === rp || hostname.endsWith(`.${rp}`),
 			mail: mailEnabled(),
 			redirectOk,
-			// Off the auth host: where to sign in through a proxy tab instead (null when not needed).
-			handoff: redirectOk ? null : handoffUrlFor(hostname),
+			// Where this browser's cross-site sign-in lives (cross-site.ts); null when it isn't set up.
+			hub: sealed ? hubOrigin() : null,
+			// Off the auth host, OAuth runs there in a popup and hands the session back (cross-site.ts).
+			authHost: sealed && !redirectOk ? authOrigin() : null,
 		});
 	});
 
@@ -556,6 +564,7 @@ else {
 		return {
 			// An empty session key means Last.fm revoked it; the link stays so a reconnect keeps the same account.
 			link: acc ? { id: acc.id, username: acc.accountId, sessionKey: acc.accessToken || "" } : null,
+			discord: accounts.find(a => a.providerId === "discord") ?? null,
 			hasPassword: accounts.some(a => a.providerId === "credential"),
 			providers: [...new Set(accounts.map(a => a.providerId))],
 		};
@@ -583,7 +592,44 @@ else {
 		}
 	};
 
+	/** The ListenBrainz link, or null. An empty token means ListenBrainz rejected it (reconnect needed). */
+	const lbLink = async (c: Ctx) => {
+		const { rows } = await c.get("pool").query<{ username: string; token: string }>("select username, token from fracital_listenbrainz where user_id = $1", [c.get("user").id]);
+		return rows[0] ?? null;
+	};
+
+	const lbMarkRevoked = async (c: Ctx) => {
+		await c
+			.get("pool")
+			.query("update fracital_listenbrainz set token = '', updated_at = now() where user_id = $1", [c.get("user").id])
+			.catch(() => {});
+		invalidateUser(c.get("user").id, "profile");
+	};
+
+	/** A ListenBrainz write, answered like `lastfmWrite`: `revoked`: reconnect needed; `retry`: temporary. */
+	const lbWrite = async (c: Ctx, lb: { token: string }, write: (token: string) => Promise<void>) => {
+		if (!lb.token) return { ok: false, revoked: true, retry: true };
+		try {
+			await write(lb.token);
+			return { ok: true, revoked: false, retry: false };
+		} catch (err) {
+			if (lbRevoked(err)) {
+				await lbMarkRevoked(c);
+				return { ok: false, revoked: true, retry: true };
+			}
+			return { ok: false, revoked: false, retry: lbTemporary(err) };
+		}
+	};
+
 	// --- Profile ---
+
+	const lbProfile = async (userId: string, lb: { username: string; token: string }) => ({ username: lb.username, listenCount: await cached(`${userId}:profile-lb`, 10 * 60_000, () => lbListenCount(lb.username)), url: `https://listenbrainz.org/user/${encodeURIComponent(lb.username)}/`, needsReconnect: !lb.token });
+
+	const presenceStatus = async (c: Ctx, discord: { scope?: string | null } | null) => {
+		if (!discordPresenceEnabled()) return null;
+		const row = await readPresence(c.get("pool"), c.get("user").id).catch(() => null);
+		return { discord: !!discord, connected: hasPresenceScope(discord?.scope), enabled: row?.enabled ?? true, error: row?.error || undefined };
+	};
 
 	const lastfmProfile = async (userId: string, username: string, sessionKey: string) => {
 		const info = await cached(`${userId}:profile`, 10 * 60_000, () => lastfmCall<LastfmUserInfo>({ method: "user.getInfo", user: username }));
@@ -599,8 +645,8 @@ else {
 
 	app.get("/api/me", async c => {
 		const user = c.get("user") as Env["Variables"]["user"] & { emailVerified?: boolean };
-		const [{ link, hasPassword, providers }, passkeys] = await Promise.all([lastfmLink(c), countPasskeys(c)]);
-		const lastfm = link ? await lastfmProfile(user.id, link.username, link.sessionKey) : null;
+		const [{ link, discord, hasPassword, providers }, passkeys, lb] = await Promise.all([lastfmLink(c), countPasskeys(c), lbLink(c)]);
+		const [lastfm, listenbrainz, discordPresence] = await Promise.all([link ? lastfmProfile(user.id, link.username, link.sessionKey) : null, lb ? lbProfile(user.id, lb) : null, presenceStatus(c, discord)]);
 		const { isAdmin, username, premium } = await userMeta(c.get("pool"), user);
 		const placeholderEmail = user.email.endsWith("@lastfm.invalid");
 		return c.json({
@@ -610,6 +656,8 @@ else {
 			passkeys,
 			lastfm,
 			lastfmAvailable: !!(lastfmKey() && lastfmSecret()),
+			listenbrainz,
+			discordPresence,
 			isAdmin,
 			username,
 			premium,
@@ -682,17 +730,82 @@ else {
 			return c.json({ error: code === 6 ? `Last.fm user @${username} doesn't exist` : code === 17 ? `@${username}'s Last.fm profile is private` : "Couldn't reach Last.fm. Try again." }, code === 6 || code === 17 ? 404 : 502);
 		}
 
-		const pool = c.get("pool");
-		const userId = c.get("user").id;
-		const tracks = await playableAll(loved);
+		return c.json({ ok: true, username, found: loved.length, added: await saveTracks(c, await playableAll(loved)) });
+	});
+
+	/** Adds songs to the user's saved library; returns how many weren't there yet. */
+	const saveTracks = async (c: Ctx, tracks: LibraryTrack[]) => {
 		const perUser = new Set(["lovedAt", "playedAt", "userPlays", "nowPlaying"]);
 		let added = 0;
 		for (const t of tracks) {
 			const data = Object.fromEntries(Object.entries(t).filter(([k]) => !perUser.has(k)));
-			const res = await pool.query("insert into fracital_saved_items (user_id, kind, item_id, data) values ($1, 'track', $2, $3) on conflict do nothing", [userId, t.id, JSON.stringify(data)]);
+			const res = await c.get("pool").query("insert into fracital_saved_items (user_id, kind, item_id, data) values ($1, 'track', $2, $3) on conflict do nothing", [c.get("user").id, t.id, JSON.stringify(data)]);
 			added += res.rowCount ?? 0;
 		}
-		return c.json({ ok: true, username, found: loved.length, added });
+		return added;
+	};
+
+	// --- ListenBrainz (connect with the user token from listenbrainz.org/settings) ---
+
+	app.post("/api/me/listenbrainz", async c => {
+		const body = z
+			.object({
+				token: z
+					.string()
+					.trim()
+					.min(8)
+					.max(100)
+					.regex(/^[\w-]+$/),
+			})
+			.safeParse(await c.req.json().catch(() => null));
+		if (!body.success) return c.json({ error: "Paste the user token from your ListenBrainz settings page" }, 400);
+		let username: string | null;
+		try {
+			username = await lbValidateToken(body.data.token);
+		} catch {
+			return c.json({ error: "Couldn't reach ListenBrainz. Try again." }, 502);
+		}
+		if (!username) return c.json({ error: "ListenBrainz didn't accept that token. Copy it again from your ListenBrainz settings." }, 400);
+		const userId = c.get("user").id;
+		try {
+			await c.get("pool").query("insert into fracital_listenbrainz (user_id, username, token, updated_at) values ($1, $2, $3, now()) on conflict (user_id) do update set username = excluded.username, token = excluded.token, updated_at = now()", [userId, username, body.data.token]);
+		} catch (err) {
+			if ((err as { code?: string }).code === "23505") return c.json({ error: `${username} is already connected to another Fracital account` }, 409);
+			throw err;
+		}
+		invalidateUser(userId);
+		return c.json({ ok: true, username });
+	});
+
+	app.delete("/api/me/listenbrainz", async c => {
+		await c.get("pool").query("delete from fracital_listenbrainz where user_id = $1", [c.get("user").id]);
+		invalidateUser(c.get("user").id);
+		return c.json({ ok: true });
+	});
+
+	// Loved songs are public on ListenBrainz too: import from the linked account or any username.
+	app.post("/api/me/listenbrainz/import", async c => {
+		const body = z
+			.object({
+				username: z
+					.string()
+					.trim()
+					.min(1)
+					.max(64)
+					.regex(/^[\w.-]+$/)
+					.optional(),
+			})
+			.safeParse(await c.req.json().catch(() => ({})));
+		if (!body.success) return c.json({ error: "Enter a valid ListenBrainz username" }, 400);
+		const username = body.data.username || (await lbLink(c))?.username;
+		if (!username) return c.json({ error: "Connect ListenBrainz or enter a ListenBrainz username" }, 409);
+		const loved: ListenTrack[] = [];
+		for (let offset = 0; offset < 200; offset += 100) {
+			const page = await lbLoved(username, 100, offset);
+			loved.push(...page.tracks);
+			if (loved.length >= page.total || page.tracks.length < 100) break;
+		}
+		return c.json({ ok: true, username, found: loved.length, added: await saveTracks(c, await playableListens(loved)) });
 	});
 
 	// --- Settings sync (replaces the old Terbium KV store) ---
@@ -801,6 +914,78 @@ else {
 		return c.json({ ok: true });
 	});
 
+	// --- ListenBrainz library (the same sections and shapes as Last.fm's below) ---
+
+	const listenbrainzSection = (userId: string, user: string, section: string, period: string, limit: number) => {
+		switch (section) {
+			case "loved":
+				return cached(`${userId}:loved:${limit}`, 3 * 60_000, async () => {
+					const res = await lbLoved(user, limit);
+					const tracks = await playableListens(res.tracks);
+					return { total: res.total, tracks: tracks.map(t => ({ ...t, lovedAt: t.playedAt, playedAt: undefined })) };
+				});
+			case "recent":
+				return cached(`${userId}:recent:${limit}`, 30_000, async () => {
+					const seen = new Set<string>();
+					const unique = (await lbRecent(user, Math.min(limit, 30))).filter(t => {
+						const key = `${t.artist}|${t.title}`.toLowerCase();
+						if (seen.has(key)) return false;
+						seen.add(key);
+						return true;
+					});
+					return { tracks: await playableListens(unique) };
+				});
+			case "top-tracks":
+				return cached(`${userId}:top-tracks:${period}:${limit}`, 10 * 60_000, async () => ({ period, tracks: await playableListens(await lbTopTracks(user, period, limit)) }));
+			case "top-artists":
+				return cached(`${userId}:top-artists:${period}:${limit}`, 10 * 60_000, async () => ({ period, artists: await Promise.all((await lbTopArtists(user, period, limit)).map(a => artistCard(a.name, { userPlays: a.plays }))) }));
+			case "top-albums":
+				return cached(`${userId}:top-albums:${period}:${limit}`, 10 * 60_000, async () => ({ period, albums: (await lbTopAlbums(user, period, limit)).map(a => ({ title: a.title, artist: a.artist, artwork: a.artwork, userPlays: a.plays })) }));
+			default:
+				return null;
+		}
+	};
+
+	/** The user's loved songs (by songKey) and all-time play counts on ListenBrainz, for the per-song stats. */
+	const lbLovedSet = (userId: string, user: string) => cached(`${userId}:loved-set`, 10 * 60_000, async () => new Set((await lbLoved(user, 1000)).tracks.map(t => `${t.artist}|${t.title}`.toLowerCase())));
+	const lbPlays = (userId: string, user: string) => cached(`${userId}:plays-all`, 30 * 60_000, async () => new Map((await lbTopTracks(user, "overall", 1000)).map(t => [`${t.artist}|${t.title}`.toLowerCase(), t.plays ?? 0])));
+	const lbArtistPlays = (userId: string, user: string) => cached(`${userId}:plays-artists`, 30 * 60_000, async () => new Map((await lbTopArtists(user, "overall", 1000)).map(a => [a.name.toLowerCase(), a.plays])));
+
+	/**
+	 * Artists similar to the user's top artists, and songs similar to their top songs. Similarity
+	 * comes from Last.fm's public data (the server's API key), whichever service the listening is on.
+	 */
+	const recommend = async (topArtists: string[], topTracks: { title: string; artist: string }[]) => {
+		type Named = { name?: string; match?: string; artist?: { name?: string } };
+		const known = new Set(topArtists.map(n => n.toLowerCase()));
+
+		// Score similar artists across the user's top 6, so overlapping taste ranks higher.
+		const scores = new Map<string, { name: string; score: number; because: string }>();
+		const similarLists = await Promise.all(topArtists.slice(0, 6).map(seed => lastfmCall<{ similarartists?: { artist?: Named | Named[] } }>({ method: "artist.getSimilar", artist: seed, limit: "15" }).then(r => ({ seed, list: asArray(r?.similarartists?.artist) }))));
+		for (const { seed, list } of similarLists) {
+			for (const a of list) {
+				if (!a.name || known.has(a.name.toLowerCase())) continue;
+				const prev = scores.get(a.name.toLowerCase());
+				const score = (prev?.score ?? 0) + Number(a.match || 0);
+				scores.set(a.name.toLowerCase(), { name: a.name, score, because: prev?.because ?? seed });
+			}
+		}
+		const artistPicks = [...scores.values()].sort((a, b) => b.score - a.score).slice(0, 18);
+		const artists = await Promise.all(artistPicks.map(a => artistCard(a.name, { because: a.because })));
+
+		const seen = new Set<string>();
+		const similarTracks = (await Promise.all(topTracks.slice(0, 6).map(t => lastfmCall<{ similartracks?: { track?: LastfmTrack | LastfmTrack[] } }>({ method: "track.getSimilar", artist: t.artist, track: t.title, limit: "6" }))))
+			.flatMap(r => asArray(r?.similartracks?.track))
+			.filter(t => {
+				const key = `${artistName(t.artist)}|${t.name}`.toLowerCase();
+				if (seen.has(key) || known.has(artistName(t.artist).toLowerCase())) return false;
+				seen.add(key);
+				return true;
+			})
+			.slice(0, 20);
+		return { artists, tracks: await playableAll(similarTracks) };
+	};
+
 	// --- Last.fm library ---
 
 	const requireLink = async (c: Parameters<typeof lastfmLink>[0]) => {
@@ -810,12 +995,18 @@ else {
 
 	app.get("/api/me/library/:section", async c => {
 		const link = await requireLink(c);
-		if (!link) return c.json({ error: "Connect Last.fm first" }, 409);
 		const userId = c.get("user").id;
-		const user = link.username;
 		const section = c.req.param("section");
 		const period = PERIODS.has(c.req.query("period") || "") ? c.req.query("period")! : "6month";
 		const limit = String(Math.min(Number(c.req.query("limit")) || 30, 50));
+		if (!link) {
+			// Last.fm is the library's source when both are connected; otherwise ListenBrainz.
+			const lb = await lbLink(c);
+			if (!lb) return c.json({ error: "Connect Last.fm or ListenBrainz first" }, 409);
+			const res = await listenbrainzSection(userId, lb.username, section, period, Number(limit));
+			return res ? c.json(res) : c.json({ error: "Unknown section" }, 404);
+		}
+		const user = link.username;
 
 		switch (section) {
 			case "loved":
@@ -879,51 +1070,32 @@ else {
 	// Recommendations: artists similar to the user's top artists, and songs similar to their top songs.
 	app.get("/api/me/recommendations", async c => {
 		const link = await requireLink(c);
-		if (!link) return c.json({ error: "Connect Last.fm first" }, 409);
-		const user = link.username;
+		const lb = link ? null : await lbLink(c);
+		if (!link && !lb) return c.json({ error: "Connect Last.fm or ListenBrainz first" }, 409);
 		return c.json(
 			await cached(`${c.get("user").id}:recs`, 30 * 60_000, async () => {
-				type Named = { name?: string; match?: string; artist?: { name?: string } };
+				if (lb) {
+					// Stats only cover ranges with listens; someone who hasn't listened lately is seeded by all time.
+					const [recentArtists, recentTracks] = await Promise.all([lbTopArtists(lb.username, "3month", 50), lbTopTracks(lb.username, "1month", 8)]);
+					const artists = recentArtists.length ? recentArtists : await lbTopArtists(lb.username, "overall", 50);
+					const tracks = recentTracks.length ? recentTracks : await lbTopTracks(lb.username, "overall", 8);
+					return recommend(
+						artists.map(a => a.name),
+						tracks,
+					);
+				}
+				const user = link!.username;
+				type Named = { name?: string };
 				const [topArtistsRes, topTracksRes] = await Promise.all([
 					lastfmCall<{ topartists?: { artist?: Named | Named[] } }>({ method: "user.getTopArtists", user, period: "3month", limit: "50" }),
 					lastfmCall<{ toptracks?: { track?: LastfmTrack | LastfmTrack[] } }>({ method: "user.getTopTracks", user, period: "1month", limit: "8" }),
 				]);
-				const topArtists = asArray(topArtistsRes?.topartists?.artist)
-					.map(a => a.name || "")
-					.filter(Boolean);
-				const known = new Set(topArtists.map(n => n.toLowerCase()));
-
-				// Score similar artists across the user's top 6, so overlapping taste ranks higher.
-				const scores = new Map<string, { name: string; score: number; because: string }>();
-				const similarLists = await Promise.all(topArtists.slice(0, 6).map(seed => lastfmCall<{ similarartists?: { artist?: Named | Named[] } }>({ method: "artist.getSimilar", artist: seed, limit: "15" }).then(r => ({ seed, list: asArray(r?.similarartists?.artist) }))));
-				for (const { seed, list } of similarLists) {
-					for (const a of list) {
-						if (!a.name || known.has(a.name.toLowerCase())) continue;
-						const prev = scores.get(a.name.toLowerCase());
-						const score = (prev?.score ?? 0) + Number(a.match || 0);
-						scores.set(a.name.toLowerCase(), { name: a.name, score, because: prev?.because ?? seed });
-					}
-				}
-				const artistPicks = [...scores.values()].sort((a, b) => b.score - a.score).slice(0, 18);
-				const artists = await Promise.all(artistPicks.map(a => artistCard(a.name, { because: a.because })));
-
-				const seen = new Set<string>();
-				const similarTracks = (
-					await Promise.all(
-						asArray(topTracksRes?.toptracks?.track)
-							.slice(0, 6)
-							.map(t => lastfmCall<{ similartracks?: { track?: LastfmTrack | LastfmTrack[] } }>({ method: "track.getSimilar", artist: artistName(t.artist), track: t.name || "", limit: "6" })),
-					)
-				)
-					.flatMap(r => asArray(r?.similartracks?.track))
-					.filter(t => {
-						const key = `${artistName(t.artist)}|${t.name}`.toLowerCase();
-						if (seen.has(key) || known.has(artistName(t.artist).toLowerCase())) return false;
-						seen.add(key);
-						return true;
-					})
-					.slice(0, 20);
-				return { artists, tracks: await playableAll(similarTracks) };
+				return recommend(
+					asArray(topArtistsRes?.topartists?.artist)
+						.map(a => a.name || "")
+						.filter(Boolean),
+					asArray(topTracksRes?.toptracks?.track).map(t => ({ title: t.name || "", artist: artistName(t.artist) })),
+				);
 			}),
 		);
 	});
@@ -931,9 +1103,15 @@ else {
 	// The user's own play counts + loved state for a batch of songs.
 	app.post("/api/me/stats/tracks", async c => {
 		const link = await requireLink(c);
-		if (!link) return c.json({});
 		const body = (await c.req.json().catch(() => null)) as { tracks?: { key?: string; title?: string; artist?: string }[] } | null;
 		const tracks = (body?.tracks ?? []).filter(t => t.key && t.title && t.artist).slice(0, 50);
+		if (!link) {
+			const lb = await lbLink(c);
+			if (!lb) return c.json({});
+			const userId = c.get("user").id;
+			const [loved, plays] = await Promise.all([lbLovedSet(userId, lb.username), lbPlays(userId, lb.username)]);
+			return c.json(Object.fromEntries(tracks.map(t => [t.key!, { userPlays: plays.get(`${t.artist}|${t.title}`.toLowerCase()) ?? 0, loved: loved.has(`${t.artist}|${t.title}`.toLowerCase()) }])));
+		}
 		const entries = await Promise.all(
 			tracks.map(async t => {
 				// Long-lived: scrobbles and likes made here invalidate the song's entry.
@@ -947,7 +1125,11 @@ else {
 	app.get("/api/me/stats/artist", async c => {
 		const link = await requireLink(c);
 		const name = c.req.query("name")?.trim();
-		if (!link || !name) return c.json({ userPlays: null });
+		if (!name) return c.json({ userPlays: null });
+		if (!link) {
+			const lb = await lbLink(c);
+			return c.json({ userPlays: lb ? ((await lbArtistPlays(c.get("user").id, lb.username)).get(name.toLowerCase()) ?? 0) : null });
+		}
 		const info = await cached(`${c.get("user").id}:artist:${name.toLowerCase()}`, 30 * 60_000, () => lastfmCall<{ artist?: { stats?: { userplaycount?: string } } }>({ method: "artist.getInfo", artist: name, username: link.username }));
 		return c.json({ userPlays: toCount(info?.artist?.stats?.userplaycount) });
 	});
@@ -956,44 +1138,79 @@ else {
 
 	const writeBody = z.object({ title: z.string().min(1).max(500), artist: z.string().min(1).max(500), album: z.string().max(500).optional(), duration: z.number().int().positive().max(86_400).optional() });
 
+	/** ListenBrainz feedback is per MusicBrainz recording; matches are stable, so they're kept (misses aren't: they may be a failed lookup). */
+	const recordingIds = new Map<string, string>();
+	const lbLove = async (c: Ctx, lb: { token: string }, title: string, artist: string, loved: boolean) => {
+		if (!lb.token) return { ok: false, revoked: true, retry: true, unmatched: false };
+		const key = `${artist}|${title}`.toLowerCase();
+		if (!recordingIds.has(key)) {
+			const found = await lbLookupRecording(lb.token, title, artist);
+			if (recordingIds.size > 5000) recordingIds.clear();
+			if (found) recordingIds.set(key, found);
+		}
+		const mbid = recordingIds.get(key);
+		if (!mbid) return { ok: false, revoked: false, retry: false, unmatched: true };
+		return { ...(await lbWrite(c, lb, token => lbFeedback(token, mbid, loved ? 1 : 0))), unmatched: false };
+	};
+
+	// Likes go to every connected service; the library's source (Last.fm when both) decides the answer.
 	app.post("/api/me/love", async c => {
-		const link = await requireLink(c);
-		if (!link) return c.json({ error: "Connect Last.fm first" }, 409);
+		const [link, lb] = await Promise.all([requireLink(c), lbLink(c)]);
+		if (!link && !lb) return c.json({ error: "Connect Last.fm or ListenBrainz first" }, 409);
 		const body = writeBody.extend({ loved: z.boolean() }).safeParse(await c.req.json().catch(() => null));
 		if (!body.success) return c.json({ error: "Invalid request" }, 400);
 		const { title, artist, loved } = body.data;
-		const res = await lastfmWrite(c, link, { method: loved ? "track.love" : "track.unlove", track: title, artist });
-		if (res.revoked) return c.json({ error: "Last.fm access was removed. Reconnect Last.fm from your account page.", revoked: true }, 409);
-		if (!res.data) return c.json({ error: "Last.fm rejected the request" }, 502);
+		const [lf, lbRes] = await Promise.all([link ? lastfmWrite(c, link, { method: loved ? "track.love" : "track.unlove", track: title, artist }) : null, lb ? lbLove(c, lb, title, artist, loved) : null]);
 		invalidateUser(c.get("user").id, "loved");
 		invalidateUser(c.get("user").id, statSection(artist, title));
+		if (lf) {
+			if (lf.revoked) return c.json({ error: "Last.fm access was removed. Reconnect Last.fm from your account page.", revoked: true }, 409);
+			if (!lf.data) return c.json({ error: "Last.fm rejected the request" }, 502);
+		} else if (lbRes && !lbRes.ok) {
+			if (lbRes.revoked) return c.json({ error: "ListenBrainz didn't accept your token anymore. Reconnect ListenBrainz from your account page.", revoked: true }, 409);
+			return c.json({ error: lbRes.unmatched ? "ListenBrainz couldn't find this song to like" : "ListenBrainz rejected the request" }, 502);
+		}
 		return c.json({ ok: true, loved });
 	});
 
 	app.post("/api/me/nowplaying", async c => {
-		const link = await requireLink(c);
-		if (!link) return c.json({ ok: false });
+		const [link, lb] = await Promise.all([requireLink(c), lbLink(c)]);
+		if (!link && !lb) return c.json({ ok: false });
 		const body = writeBody.safeParse(await c.req.json().catch(() => null));
 		if (!body.success) return c.json({ error: "Invalid request" }, 400);
 		const { title, artist, album, duration } = body.data;
 		const params: Record<string, string> = { method: "track.updateNowPlaying", track: title, artist };
 		if (album) params.album = album;
 		if (duration) params.duration = String(duration);
-		const res = await lastfmWrite(c, link, params);
-		return c.json({ ok: !!res.data, revoked: res.revoked });
+		const [lf, lbRes] = await Promise.all([link ? lastfmWrite(c, link, params) : null, lb ? lbWrite(c, lb, token => lbSubmit(token, "playing_now", [{ title, artist, album, duration }])) : null]);
+		return c.json({ ok: !!lf?.data || !!lbRes?.ok, revoked: !!lf?.revoked || !!lbRes?.revoked });
 	});
 
-	// One scrobble, or a batch of up to 50 (the client's offline queue). `retry` tells the client
-	// whether to keep them queued; Last.fm-ignored scrobbles (e.g. too old) are final.
+	// One scrobble, or a batch of up to 50 (the client's offline queue), for one service: the
+	// client keeps a queue per service, so a failure on one never re-sends to the other. `retry`
+	// tells the client whether to keep them queued; Last.fm-ignored scrobbles (e.g. too old) are final.
 	const scrobbleItem = writeBody.extend({ timestamp: z.number().int().positive() });
 	app.post("/api/me/scrobble", async c => {
-		const link = await requireLink(c);
-		if (!link) return c.json({ ok: false, retry: false, error: "Connect Last.fm first" }, 409);
-		const raw = await c.req.json().catch(() => null);
+		const raw = (await c.req.json().catch(() => null)) as { service?: unknown } | null;
+		const service = raw?.service === "listenbrainz" ? "listenbrainz" : "lastfm";
 		const body = z.union([z.object({ scrobbles: z.array(scrobbleItem).min(1).max(50) }), scrobbleItem]).safeParse(raw);
 		if (!body.success) return c.json({ error: "Invalid request", retry: false }, 400);
 		const items = "scrobbles" in body.data ? body.data.scrobbles : [body.data];
+		const userId = c.get("user").id;
 
+		if (service === "listenbrainz") {
+			const lb = await lbLink(c);
+			if (!lb) return c.json({ ok: false, retry: false, error: "Connect ListenBrainz first" }, 409);
+			const listens = items.map(s => ({ title: s.title, artist: s.artist, album: s.album, duration: s.duration, at: s.timestamp }));
+			const res = await lbWrite(c, lb, token => lbSubmit(token, listens.length === 1 ? "single" : "import", listens));
+			if (!res.ok) return c.json({ ok: false, revoked: res.revoked, retry: res.retry });
+			invalidateUser(userId, "recent");
+			invalidateUser(userId, "profile");
+			return c.json({ ok: true, accepted: items.length, ignored: 0, retry: false });
+		}
+
+		const link = await requireLink(c);
+		if (!link) return c.json({ ok: false, retry: false, error: "Connect Last.fm first" }, 409);
 		const params: Record<string, string> = { method: "track.scrobble" };
 		items.forEach((s, i) => {
 			params[`track[${i}]`] = s.title;
@@ -1005,7 +1222,6 @@ else {
 		const res = await lastfmWrite<{ scrobbles?: { "@attr"?: { accepted?: number | string; ignored?: number | string } } }>(c, link, params);
 		if (!res.data) return c.json({ ok: false, revoked: res.revoked, retry: res.retry });
 
-		const userId = c.get("user").id;
 		invalidateUser(userId, "recent");
 		invalidateUser(userId, "profile");
 		for (const s of items) {
@@ -1014,6 +1230,73 @@ else {
 		}
 		const attr = res.data.scrobbles?.["@attr"];
 		return c.json({ ok: true, accepted: toCount(attr?.accepted), ignored: toCount(attr?.ignored), retry: false });
+	});
+
+	// --- Discord status (discord-presence.ts; off unless DISCORD_PRESENCE=1) ---
+
+	/** A refused scope isn't retried for this long, unless the user reconnects or turns it back on. */
+	const PRESENCE_BACKOFF_MS = 10 * 60_000;
+	const presenceSentAt = new Map<string, number>();
+
+	app.post("/api/me/presence", async c => {
+		if (!discordPresenceEnabled()) return c.json({ ok: false, error: "Discord status isn't available" }, 404);
+		const nowPlaying = z.object({ title: z.string().min(1).max(500), artist: z.string().min(1).max(500), album: z.string().max(500).optional(), artwork: z.string().max(2000).optional(), duration: z.number().positive().max(86_400).optional(), position: z.number().min(0).max(86_400).optional() });
+		const body = z.object({ song: nowPlaying.nullable() }).safeParse(await c.req.json().catch(() => null));
+		if (!body.success) return c.json({ error: "Invalid request" }, 400);
+		const song: NowPlaying | null = body.data.song;
+		const userId = c.get("user").id;
+		const { discord } = await lastfmLink(c);
+		if (!discord || !hasPresenceScope(discord.scope)) return c.json({ ok: false, connected: false });
+		const pool = c.get("pool");
+		const row = await readPresence(pool, userId);
+		if (!row.enabled) return c.json({ ok: true, enabled: false });
+		if (!song && !row.session_token) return c.json({ ok: true });
+		if (song && row.error && row.error_at && Date.now() - row.error_at.getTime() < PRESENCE_BACKOFF_MS) return c.json({ ok: false, error: row.error });
+		// Songs change at most every couple of seconds; clearing always goes through.
+		if (song && Date.now() - (presenceSentAt.get(userId) ?? 0) < 2000) return c.json({ ok: true, throttled: true });
+		presenceSentAt.set(userId, Date.now());
+
+		let accessToken = "";
+		try {
+			// Refreshes the Discord token when it has expired.
+			accessToken = (await c.get("auth").api.getAccessToken({ body: { accountId: discord.id, userId } })).accessToken;
+		} catch {
+			// handled below
+		}
+		if (!accessToken) {
+			const error = "Discord sign-in expired. Reconnect Discord to show your status.";
+			await writePresence(pool, userId, { session_token: "", error });
+			return c.json({ ok: false, error });
+		}
+		const res = await sendPresence(accessToken, row.session_token, song);
+		if (res.ok) {
+			if (res.token !== row.session_token || row.error) await writePresence(pool, userId, { session_token: res.token, error: "" });
+			return c.json({ ok: true });
+		}
+		if (!res.temporary) await writePresence(pool, userId, { session_token: "", error: res.error });
+		return c.json({ ok: false, error: res.error, retry: res.temporary });
+	});
+
+	// Turning it on (also after reconnecting Discord) clears an earlier refusal; turning it off clears the status.
+	app.put("/api/me/presence/settings", async c => {
+		if (!discordPresenceEnabled()) return c.json({ ok: false, error: "Discord status isn't available" }, 404);
+		const body = z.object({ enabled: z.boolean() }).safeParse(await c.req.json().catch(() => null));
+		if (!body.success) return c.json({ error: "Invalid request" }, 400);
+		const pool = c.get("pool");
+		const userId = c.get("user").id;
+		const row = await readPresence(pool, userId);
+		if (!body.data.enabled && row.session_token) {
+			const { discord } = await lastfmLink(c);
+			const token = discord
+				? await c
+						.get("auth")
+						.api.getAccessToken({ body: { accountId: discord.id, userId } })
+						.catch(() => null)
+				: null;
+			if (token?.accessToken) await sendPresence(token.accessToken, row.session_token, null);
+		}
+		await writePresence(pool, userId, { enabled: body.data.enabled, session_token: body.data.enabled ? row.session_token : "", error: "" });
+		return c.json({ ok: true, enabled: body.data.enabled });
 	});
 
 	return app;

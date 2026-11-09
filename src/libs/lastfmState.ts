@@ -1,7 +1,7 @@
 /**
- * Client-side state for the signed-in user's Last.fm: whether it's connected, which
- * songs they've loved, and their personal play counts. Shared so a heart toggled in
- * one place updates everywhere.
+ * Client-side state for the signed-in user's listening service (Last.fm, or ListenBrainz
+ * when Last.fm isn't connected): whether one is connected, which songs they've loved, and
+ * their personal play counts. Shared so a heart toggled in one place updates everywhere.
  */
 import { create } from "zustand";
 import { getMe } from "./auth";
@@ -15,7 +15,9 @@ const loading = new Set<string>();
 interface LastfmState {
 	/** undefined until checked. */
 	username: string | null | undefined;
-	/** Last.fm access was revoked: reads still work, likes and scrobbles wait for a reconnect. */
+	/** Where the library comes from: Last.fm when it's connected, else ListenBrainz. */
+	service: "lastfm" | "listenbrainz" | null;
+	/** Access was revoked: reads still work, likes and scrobbles wait for a reconnect. */
 	needsReconnect: boolean;
 	loved: Record<string, boolean>;
 	userPlays: Record<string, number>;
@@ -28,12 +30,14 @@ interface LastfmState {
 
 export const useLastfmStore = create<LastfmState>((set, get) => ({
 	username: undefined,
+	service: null,
 	needsReconnect: false,
 	loved: {},
 	userPlays: {},
 	refresh: async () => {
 		const me = await getMe();
-		set({ username: me?.lastfm?.username ?? null, needsReconnect: !!me?.lastfm?.needsReconnect });
+		const source = me?.lastfm ?? me?.listenbrainz ?? null;
+		set({ username: source?.username ?? null, service: me?.lastfm ? "lastfm" : me?.listenbrainz ? "listenbrainz" : null, needsReconnect: !!source?.needsReconnect });
 	},
 	loadStats: async tracks => {
 		if (!get().username) return;
@@ -73,7 +77,7 @@ export const useLastfmStore = create<LastfmState>((set, get) => ({
 	markLoved: keys => set(s => ({ loved: { ...s.loved, ...Object.fromEntries(keys.map(k => [k, true])) } })),
 }));
 
-// Account changes (sign in/out, connect/disconnect Last.fm) reset what we know.
+// Account changes (sign in/out, connect/disconnect a service) reset what we know.
 if (typeof window !== "undefined") {
 	window.addEventListener("account-upd", () => {
 		loading.clear();

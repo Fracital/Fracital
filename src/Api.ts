@@ -1,6 +1,7 @@
 import { meFetch, refreshMe } from "./libs/auth";
 import { applySettingsDefaults } from "./libs/updater";
 import { startScrobbler } from "./libs/scrobbler";
+import { startDiscordPresence } from "./libs/discordPresence";
 import { initRadio } from "./libs/radio";
 import { useSettingsStore } from "./store";
 import { getLogin, SettingsPath, ThemePath, wispURL, type COM } from "./types";
@@ -87,6 +88,7 @@ export const Api = async () => {
 		void libcurl.load_wasm("/vendor/net.wasm").catch(error => console.error("Failed to load libcurl WASM:", error));
 
 		startScrobbler();
+		startDiscordPresence();
 		initRadio();
 		void (async () => {
 			// Confirm the saved login still has a live session (clears it if it expired).
