@@ -8,6 +8,9 @@ importers:
 
   .:
     dependencies:
+      '@better-auth/infra':
+        specifier: ^0.4.27
+        version: 0.4.27(@better-auth/core@1.7.18(@better-auth/utils@0.5.1)(@better-fetch/fetch@1.3.3)(better-call@1.4.5(zod@4.6.7))(jose@6.2.15)(kysely@0.29.8)(nanostores@1.5.5))(better-auth@1.7.18(pg@8.23.1)(react-dom@19.3.1(react@19.3.1))(react@19.3.1))(zod@4.6.7)
       '@better-auth/passkey':
         specifier: ^1.7.18
         version: 1.7.18(@better-auth/core@1.7.18(@better-auth/utils@0.5.1)(@better-fetch/fetch@1.3.3)(better-call@1.4.5(zod@4.6.7))(jose@6.2.15)(kysely@0.29.8)(nanostores@1.5.5))(@better-auth/utils@0.5.1)(@better-fetch/fetch@1.3.3)(better-auth@1.7.18(pg@8.23.1)(react-dom@19.3.1(react@19.3.1))(react@19.3.1))(better-call@1.4.5(zod@4.6.7))(nanostores@1.5.5)
@@ -105,8 +108,8 @@ importers:
         specifier: ^7.18.5
         version: 7.18.5(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
       stomp-rewrite:
-        specifier: git+https://github.com/Fracital/powerMouse.git#7242cfb73cd49f1411b0c02ebfdaba200bc806f2
-        version: https://codeload.github.com/Fracital/powerMouse/tar.gz/7242cfb73cd49f1411b0c02ebfdaba200bc806f2
+        specifier: git+https://github.com/Fracital/powerMouse.git#8ea81e0d9e31a16b1e18b25e042c5383bcdd4955
+        version: https://codeload.github.com/Fracital/powerMouse/tar.gz/8ea81e0d9e31a16b1e18b25e042c5383bcdd4955
       svg-parser:
         specifier: ^2.1.0
         version: 2.1.0
@@ -281,6 +284,29 @@ packages:
       drizzle-orm: ^0.45.2 || >=1.0.0-rc.1 <2.0.0
     peerDependenciesMeta:
       drizzle-orm:
+        optional: true
+
+  '@better-auth/infra@0.4.27':
+    resolution: {integrity: sha512-fx8Siqh1Z5ti+dZVhhUyCKpMKJa9BhgjQjGwuE0VoztrjEmavlrofxuoYH29S71sCINBRR/5UfgrmsIYm+w+Zw==}
+    peerDependencies:
+      '@better-auth/core': '>=1.4.0'
+      '@react-native-async-storage/async-storage': '>=1.21.0'
+      better-auth: '>=1.4.0'
+      expo-constants: '>=16.0.0'
+      expo-crypto: '>=13.0.0'
+      expo-device: '>=6.0.0'
+      react-native: '>=0.74.0'
+      zod: '>=4.1.12'
+    peerDependenciesMeta:
+      '@react-native-async-storage/async-storage':
+        optional: true
+      expo-constants:
+        optional: true
+      expo-crypto:
+        optional: true
+      expo-device:
+        optional: true
+      react-native:
         optional: true
 
   '@better-auth/kysely-adapter@1.7.18':
@@ -1226,6 +1252,10 @@ packages:
     peerDependencies:
       vite: ^4 || ^5 || ^6 || ^7 || ^8
 
+  '@xmldom/xmldom@0.9.12':
+    resolution: {integrity: sha512-5AXjrcMClTryPe9LgZrygpB1lj7s0S9E0+W+AHaVKAVyHanafK86iPSvG5xHVSp/jC+VH1UXu0TAEmY279xH7A==}
+    engines: {node: '>=14.6'}
+
   acorn-jsx@5.3.2:
     resolution: {integrity: sha512-rq9s+JNhf0IChjtDXxllJ7g41oZk5SlXtp0LHwyA5cejwn7vKmKp4pPri6YEePv2PU65sAsegbXtIinmDFDXgQ==}
     peerDependencies:
@@ -1892,6 +1922,9 @@ packages:
   libcurl.js@0.7.5:
     resolution: {integrity: sha512-O7OizjbbSYvAGFkbat3gwih2PXpI4jKTk25SD2tPJnMsmKTU5UIK7x8exbD9DCBFPkL3FEcqYJAvqlELESBmYA==}
 
+  libphonenumber-js@1.13.15:
+    resolution: {integrity: sha512-AHdhEQeDFEJ4GKDAQ9AwxChy+v2kUILUB3TGQRpkXMkWePjXTU/WQEzWVQoIx/Gz8fE73Wr5SEuZCy2vk8jrMQ==}
+
   lie@3.3.0:
     resolution: {integrity: sha512-UaiMJzeWRlEujzAuw5LokY1L5ecNQYZKfmyZ9L7wDHb/p5etKaxXhohBcrw0EYby+G/NA52vRSN4N39dxHAIwQ==}
 
@@ -2321,8 +2354,8 @@ packages:
   state-local@1.0.7:
     resolution: {integrity: sha512-HTEHMNieakEnoe33shBYcZ7NX83ACUjCu8c40iOGEZsngj9zRnkqS9j1pqQPXwobB0ZcVTk27REb7COQ0UR59w==}
 
-  stomp-rewrite@https://codeload.github.com/Fracital/powerMouse/tar.gz/7242cfb73cd49f1411b0c02ebfdaba200bc806f2:
-    resolution: {gitHosted: true, integrity: sha512-PG96HOs1qEf5YJ+Nq0sCbCAqEg2R3djuDV8h5dpaEKDG2tRHM4erXa7Gy7w4x4y1Nb7UNz6eX24iGpaJSdxWYQ==, tarball: https://codeload.github.com/Fracital/powerMouse/tar.gz/7242cfb73cd49f1411b0c02ebfdaba200bc806f2}
+  stomp-rewrite@https://codeload.github.com/Fracital/powerMouse/tar.gz/8ea81e0d9e31a16b1e18b25e042c5383bcdd4955:
+    resolution: {gitHosted: true, integrity: sha512-So+FrSXIedBNeS6yAqkOy8dzySirLq3iKLgEJyjy+6Nt5g55f+kKxK8VWHgjVMfYsx/A5DN3l9ODepFBBYqQaw==, tarball: https://codeload.github.com/Fracital/powerMouse/tar.gz/8ea81e0d9e31a16b1e18b25e042c5383bcdd4955}
     version: 4.2.0
     engines: {node: '>=22'}
 
@@ -2696,6 +2729,19 @@ snapshots:
     dependencies:
       '@better-auth/core': 1.7.18(@better-auth/utils@0.5.1)(@better-fetch/fetch@1.3.3)(better-call@1.4.5(zod@4.6.7))(jose@6.2.15)(kysely@0.29.8)(nanostores@1.5.5)
       '@better-auth/utils': 0.5.1
+
+  '@better-auth/infra@0.4.27(@better-auth/core@1.7.18(@better-auth/utils@0.5.1)(@better-fetch/fetch@1.3.3)(better-call@1.4.5(zod@4.6.7))(jose@6.2.15)(kysely@0.29.8)(nanostores@1.5.5))(better-auth@1.7.18(pg@8.23.1)(react-dom@19.3.1(react@19.3.1))(react@19.3.1))(zod@4.6.7)':
+    dependencies:
+      '@better-auth/core': 1.7.18(@better-auth/utils@0.5.1)(@better-fetch/fetch@1.3.3)(better-call@1.4.5(zod@4.6.7))(jose@6.2.15)(kysely@0.29.8)(nanostores@1.5.5)
+      '@better-auth/utils': 0.5.1
+      '@better-fetch/fetch': 1.3.3
+      '@noble/hashes': 2.4.0
+      '@xmldom/xmldom': 0.9.12
+      better-auth: 1.7.18(pg@8.23.1)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
+      better-call: 1.4.5(zod@4.6.7)
+      jose: 6.2.15
+      libphonenumber-js: 1.13.15
+      zod: 4.6.7
 
   '@better-auth/kysely-adapter@1.7.18(@better-auth/core@1.7.18(@better-auth/utils@0.5.1)(@better-fetch/fetch@1.3.3)(better-call@1.4.5(zod@4.6.7))(jose@6.2.15)(kysely@0.29.8)(nanostores@1.5.5))(@better-auth/utils@0.5.1)(kysely@0.29.8)':
     dependencies:
@@ -3495,6 +3541,8 @@ snapshots:
     transitivePeerDependencies:
       - '@swc/helpers'
 
+  '@xmldom/xmldom@0.9.12': {}
+
   acorn-jsx@5.3.2(acorn@8.19.0):
     dependencies:
       acorn: 8.19.0
@@ -4137,6 +4185,8 @@ snapshots:
 
   libcurl.js@0.7.5: {}
 
+  libphonenumber-js@1.13.15: {}
+
   lie@3.3.0:
     dependencies:
       immediate: 3.0.6
@@ -4520,7 +4570,7 @@ snapshots:
 
   state-local@1.0.7: {}
 
-  stomp-rewrite@https://codeload.github.com/Fracital/powerMouse/tar.gz/7242cfb73cd49f1411b0c02ebfdaba200bc806f2:
+  stomp-rewrite@https://codeload.github.com/Fracital/powerMouse/tar.gz/8ea81e0d9e31a16b1e18b25e042c5383bcdd4955:
     dependencies:
       '@javascript-obfuscator/escodegen': 2.4.2
       '@mercuryworkshop/proxy-transports': 1.0.2
