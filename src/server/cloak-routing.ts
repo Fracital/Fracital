@@ -77,6 +77,14 @@ const directHosts = new Set(
 		.filter(Boolean),
 );
 
+let servedHostSet: Set<string> | null = null;
+
+/** Every host this server answers for by name: the decoys plus the direct hosts. Read once, like the cloak routes. */
+export function servedHosts(): Set<string> {
+	servedHostSet ??= new Set([...discoverCloakSites().hosts, ...directHosts]);
+	return servedHostSet;
+}
+
 /** @deprecated use cloak-endpoints.injectUncloakScript(html, hostname) */
 export function injectUncloakScriptForHost(html: string, hostname: string): string {
 	// Legacy single-name entry, kept so old bookmarks/deep links still resolve.

@@ -35,6 +35,7 @@ import {
 	type PasskeyInfo,
 	type SocialProvider,
 } from "../libs/auth";
+import { signInViaHandoff } from "../libs/authHandoff";
 import { formatCount } from "../libs/music-service";
 import { useSavedStore } from "../libs/savedLibrary";
 import { pendingScrobbles } from "../libs/scrobbler";
@@ -205,6 +206,9 @@ export const SignIn = ({ initialPage, resetToken, notice, onSignedIn, branding =
 	const subtitle = page === "forgot" ? "We'll email you a link to choose a new password." : page === "reset" ? "Use at least 8 characters." : terbium ? "Use your Terbium Account email and password." : branding.subtitle;
 	const credentialsPage = page === "login" || page === "register";
 	const redirectOk = !!options?.redirectOk;
+	// Off the auth host, redirect-based methods sign in there through a proxy tab instead.
+	const handoff = redirectOk ? null : options?.handoff || null;
+	const redirectSignIn = (method: string, direct: () => Promise<void>) => (handoff ? signInViaHandoff(handoff, method) : direct());
 
 	return (
 		<div className="flex flex-col items-center justify-center min-h-full gap-5 py-6 overflow-auto">
@@ -224,8 +228,10 @@ export const SignIn = ({ initialPage, resetToken, notice, onSignedIn, branding =
 
 				{credentialsPage && !terbium && (
 					<>
-						{options?.lastfm && redirectOk && <LastfmButton label={page === "login" ? "Continue with Last.fm" : "Sign up with Last.fm"} busy={busy === "lastfm"} onClick={() => run("lastfm", async () => (await connectLastfm("signin"), await finish()))} />}
-						{!!options?.social.length && redirectOk && (
+						{options?.lastfm && (redirectOk || handoff) && (
+							<LastfmButton label={page === "login" ? "Continue with Last.fm" : "Sign up with Last.fm"} busy={busy === "lastfm"} onClick={() => run("lastfm", async () => (await redirectSignIn("lastfm", () => connectLastfm("signin")), await finish()))} />
+						)}
+						{!!options?.social.length && (redirectOk || handoff) && (
 							<div className="grid gap-2 w-full" style={{ gridTemplateColumns: `repeat(${Math.min(options.social.length, 3)}, minmax(0, 1fr))` }}>
 								{options.social.map(p => (
 									<button
@@ -233,7 +239,7 @@ export const SignIn = ({ initialPage, resetToken, notice, onSignedIn, branding =
 										className="flex items-center justify-center gap-2 p-2.5 rounded-lg font-semibold text-sm hover:brightness-110 disabled:opacity-60 duration-150 cursor-pointer"
 										style={{ backgroundColor: PROVIDERS[p].bg, color: PROVIDERS[p].fg }}
 										disabled={!!busy}
-										onClick={() => run(p, async () => (await connectSocial(p, "signin"), await finish()))}
+										onClick={() => run(p, async () => (await redirectSignIn(p, () => connectSocial(p, "signin")), await finish()))}
 									>
 										<FontAwesomeIcon icon={PROVIDERS[p].icon} className="size-4" />
 										<HolyText text={busy === p ? "Waiting…" : PROVIDERS[p].label} />

@@ -19,6 +19,8 @@ export interface TabProps {
 	refreshKey?: number;
 	/** Bumped by every navigation the user asks for (navigateTab); a proxied tab runs one go() per value. */
 	navNonce?: number;
+	/** Runs this tab on stomp even when it isn't the selected engine (the sign-in handoff tab). */
+	engine?: "st";
 }
 
 export const Tab = ({ title, url, id, icon }: TabProps) => {

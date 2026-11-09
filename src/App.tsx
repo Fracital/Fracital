@@ -557,7 +557,7 @@ const App = () => {
 													</View>
 												</div>
 											);
-										} else if (stompActive) {
+										} else if (stompActive || item.engine === "st") {
 											// The engine's view waits for its own controller; no url gate needed.
 											return (
 												<StompSite

@@ -30,9 +30,11 @@ export interface AuthOptions {
 	mail: boolean;
 	/** Redirect-based sign-in (OAuth, Last.fm) returns to this host. */
 	redirectOk: boolean;
+	/** Off the auth host: its sign-in handoff page, opened in a proxy tab (authHandoff.ts). */
+	handoff: string | null;
 }
 
-const NO_OPTIONS: AuthOptions = { social: [], lastfm: false, terbium: false, passkeys: false, mail: false, redirectOk: false };
+const NO_OPTIONS: AuthOptions = { social: [], lastfm: false, terbium: false, passkeys: false, mail: false, redirectOk: false, handoff: null };
 let optionsCache: Promise<AuthOptions> | null = null;
 
 /** Sign-in methods this server offers. */

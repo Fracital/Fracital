@@ -32,7 +32,11 @@ jobs:
           node-version: 26
           cache: npm
 
+      # The build check doesn't need the yt-dlp binary, and its download hits
+      # GitHub's unauthenticated API rate limit on shared runners.
       - run: npm ci
+        env:
+          YOUTUBE_DL_SKIP_DOWNLOAD: "1"
 
       - run: npm run build
 

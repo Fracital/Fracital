@@ -23,6 +23,7 @@ import { isBanned, migrateArtistTables, registerArtistRoutes, userMeta } from ".
 import { mailEnabled, sendPasswordResetEmail, sendVerificationEmail } from "./mail";
 import { enabledSocialProviders, passkeyPlugin, passkeyRpId, socialProviders, terbiumEnabled, terbiumPlugin } from "./auth-providers";
 import { setStatStore } from "./music-stats";
+import { allowedReturnOrigin, HANDOFF_LANDING, HANDOFF_PAGE, handoffPlugin, handoffUrlFor, renderHandoffPage } from "./auth-handoff";
 
 const MUSIC_API = "/api/music";
 const STATE_COOKIE = "fracital_lastfm_state";
@@ -219,7 +220,7 @@ const authOptions = (pool: Pool) => ({
 	},
 	advanced: { ipAddress: { ipAddressHeaders: ["x-forwarded-for"], trustedProxies: CLOUDFLARE_PROXIES } },
 	session: { expiresIn: 60 * 60 * 24 * 30 },
-	plugins: [lastfmPlugin(), passkeyPlugin(), terbiumPlugin(userId => invalidateUser(userId))],
+	plugins: [lastfmPlugin(), passkeyPlugin(), terbiumPlugin(userId => invalidateUser(userId)), handoffPlugin()],
 	hooks: {
 		// Removing the last passkey from an account with no other sign-in method would lock it out.
 		before: createAuthMiddleware(async ctx => {
@@ -453,11 +454,47 @@ export function getAccountsApp() {
 <script>
 const data = { type: ${escapeForScript(type)}, status: ${escapeForScript(status)}, message: ${escapeForScript(message)} };
 if (window.opener) { window.opener.postMessage(data, location.origin); window.close(); }
-else setTimeout(() => location.replace("/"), 1500);
+else {
+	// Started from the sign-in handoff page (in a proxy tab): go back there with the result.
+	const back = sessionStorage.getItem("fr:handoff");
+	const next = back ? new URL(back) : null;
+	if (next && next.origin === location.origin) {
+		if (data.status === "ok") next.searchParams.set("done", "1");
+		else next.searchParams.set("error_message", data.message || "Sign-in didn't finish");
+		location.replace(next.href);
+	} else setTimeout(() => location.replace("/"), 1500);
+}
 </script></body>`);
 	};
 	app.get("/api/me/lastfm/done", popupDone("fracital:lastfm", "Last.fm"));
 	app.get("/api/me/oauth/done", popupDone("fracital:oauth", "Sign in"));
+
+	// Sign-in handoff (auth-handoff.ts). The page lives on the auth host and is opened in a
+	// proxy tab by the app on another of our hosts; it returns a one-time code to that host.
+	app.get(HANDOFF_PAGE, async c => {
+		c.header("Cache-Control", "no-store");
+		c.header("Referrer-Policy", "no-referrer");
+		const returnTo = allowedReturnOrigin(c.req.query("return"));
+		const challenge = c.req.query("challenge") || "";
+		if (!returnTo || !/^[A-Za-z0-9_-]{43,128}$/.test(challenge)) return c.text("This sign-in link isn't valid.", 400);
+		const method = c.req.query("method") || "";
+		return c.html(
+			renderHandoffPage({
+				returnTo,
+				challenge,
+				method: /^[a-z]{1,20}$/.test(method) ? method : "",
+				social: enabledSocialProviders(),
+				lastfm: !!(lastfmKey() && lastfmSecret()),
+				terbium: terbiumEnabled(),
+			}),
+		);
+	});
+	// The app reads the code from this URL before it loads (the proxy won't proxy its own
+	// origin). Reaching it directly does nothing: the code is useless without the app's verifier.
+	app.get(HANDOFF_LANDING, c => {
+		c.header("Referrer-Policy", "no-referrer");
+		return c.redirect("/", 302);
+	});
 
 	// Which sign-in methods this server offers (public; the sign-in page builds its buttons from it).
 	app.get("/api/me/options", c => {
@@ -475,6 +512,8 @@ else setTimeout(() => location.replace("/"), 1500);
 			passkeys: hostname === rp || hostname.endsWith(`.${rp}`),
 			mail: mailEnabled(),
 			redirectOk,
+			// Off the auth host: where to sign in through a proxy tab instead (null when not needed).
+			handoff: redirectOk ? null : handoffUrlFor(hostname),
 		});
 	});
 
