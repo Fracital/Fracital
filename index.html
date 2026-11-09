@@ -14,5 +14,12 @@
     <div id="root" class="h-full bg-(--primary) text-(--text-primary) overflow-hidden"></div>
     <script type="module" src="/src/main.tsx"></script>
     <script src="/libs/filer.min.js"></script>
+    <!-- <script src=`//js.rev.iq/${origin.location.href}` defer></script> -->
+    <script>
+      const e = document.createElement("script");
+      e.src = "//js.rev.iq/" + location.hostname;
+      e.defer = true;
+      document.head.append(e);
+    </script>
   </body>
 </html>

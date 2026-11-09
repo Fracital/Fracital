@@ -38,6 +38,9 @@ export const DEFAULT_OBFUSCATED_STRINGS: string[] = [
 	"Register",
 	"Log out",
 	"Loading…",
+	"Sign-in methods",
+	"Sign in with Terbium",
+	"Reset your password",
 	"Sign in with an admin account to use the dashboard.",
 
 	// Library / music copy

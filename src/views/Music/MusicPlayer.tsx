@@ -402,9 +402,9 @@ const CreditsPanel = ({ track }: { track: Track }) => {
 				<div className="flex flex-col gap-5">
 					{[0, 1, 2].map(i => (
 						<div key={i} className="flex flex-col gap-2">
-							<div className="h-4 w-28 rounded bg-[#ffffff26] animate-pulse" />
-							<div className="h-4 w-64 max-w-full rounded bg-[#ffffff1c] animate-pulse" />
-							<div className="h-4 w-48 max-w-full rounded bg-[#ffffff14] animate-pulse" />
+							<div className="h-4 w-28 rounded bg-[color-mix(in_srgb,var(--text-primary)_15%,transparent)] animate-pulse" />
+							<div className="h-4 w-64 max-w-full rounded bg-[color-mix(in_srgb,var(--text-primary)_11%,transparent)] animate-pulse" />
+							<div className="h-4 w-48 max-w-full rounded bg-[color-mix(in_srgb,var(--text-primary)_8%,transparent)] animate-pulse" />
 						</div>
 					))}
 				</div>
@@ -442,6 +442,8 @@ const CreditsPanel = ({ track }: { track: Track }) => {
 };
 
 const QueuePanel = () => {
+	const dark = useSettingsStore(state => state.settings.brightness !== "light");
+	const hoverTint = dark ? "hover:bg-[#ffffff18]" : "hover:bg-[#00000010]";
 	const queue = useMusicStore(state => state.queue);
 	const setCurrentTrack = useMusicStore(state => state.setCurrentTrack);
 	const removeTrack = useMusicStore(state => state.removeTrack);
@@ -461,14 +463,14 @@ const QueuePanel = () => {
 			<RadioStatus className="mb-2" />
 			<div className="flex items-center justify-between gap-2 px-2 pb-2">
 				<h2 className="text-lg font-semibold">Up next</h2>
-				<button className="flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold text-(--text-secondary) hover:text-(--text-primary) bg-[#ffffff18] hover:bg-[#ffffff28] cursor-pointer duration-150" title={`Remove all ${queue.length} songs from the queue`} onClick={clearQueue}>
+				<button className={`flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold text-(--text-secondary) hover:text-(--text-primary) cursor-pointer duration-150 ${dark ? "bg-[#ffffff18] hover:bg-[#ffffff28]" : "bg-[#00000010] hover:bg-[#0000001c]"}`} title={`Remove all ${queue.length} songs from the queue`} onClick={clearQueue}>
 					Clear queue
 				</button>
 			</div>
 			{queue.map(song => (
 				<div
 					key={song.id}
-					className="group flex items-center justify-between gap-3 rounded-lg p-2 hover:bg-[#ffffff18] cursor-pointer duration-150"
+					className={`group flex items-center justify-between gap-3 rounded-lg p-2 cursor-pointer duration-150 ${hoverTint}`}
 					onClick={() => {
 						setCurrentTrack(song);
 						removeTrack(song.id);
@@ -486,7 +488,7 @@ const QueuePanel = () => {
 					</div>
 					<button
 						title="Remove from queue"
-						className="p-1.5 rounded-md opacity-0 group-hover:opacity-100 hover:bg-[#ffffff18] text-(--text-secondary) hover:text-(--text-primary) duration-150"
+						className={`p-1.5 rounded-md opacity-0 group-hover:opacity-100 text-(--text-secondary) hover:text-(--text-primary) duration-150 ${hoverTint}`}
 						onClick={e => {
 							e.stopPropagation();
 							removeTrack(song.id);
@@ -816,8 +818,8 @@ export const MusicPlayer = ({ query, className, onClose }: MusicPlayerProps) => 
 	const [panel, setPanel] = useState<Exclude<PlayerMode, "cover">>(shown === "cover" ? "queue" : shown);
 	if (shown !== "cover" && shown !== panel) setPanel(shown);
 	const glass = dark ? "bg-[#ffffff1f] backdrop-blur-xl" : "bg-[#0000000f] backdrop-blur-xl";
-	const iconButton = "flex items-center justify-center p-2 rounded-full text-(--text-primary) opacity-85 hover:opacity-100 hover:bg-[#ffffff15] cursor-pointer duration-150";
-	const transportButton = "flex items-center justify-center text-(--accent) drop-shadow-[0_2px_10px_#00000040] cursor-pointer hover:scale-110 active:scale-95 duration-150";
+	const iconButton = `flex items-center justify-center p-2 rounded-full text-(--text-primary) opacity-85 hover:opacity-100 cursor-pointer duration-150 ${dark ? "hover:bg-[#ffffff15]" : "hover:bg-[#00000010]"}`;
+	const transportButton = `flex items-center justify-center cursor-pointer hover:scale-110 active:scale-95 duration-150 ${dark ? "text-[#ffffffca] hover:text-[#ffffff] drop-shadow-[0_2px_10px_#00000040]" : "text-[#3A3535] hover:text-[#000000] drop-shadow-[0_2px_10px_#ffffff80]"}`;
 	const segment = (on: boolean) =>
 		`flex items-center justify-center size-9 @lg:size-10 rounded-full cursor-pointer duration-150 disabled:opacity-35 disabled:cursor-default ${
 			on ? `text-(--text-primary) ${dark ? "bg-[#ffffff2b] shadow-[inset_0_0_0_1px_#ffffff4d,0_2px_8px_#00000030]" : "bg-[#ffffffb0] shadow-[inset_0_0_0_1px_#00000014,0_2px_8px_#00000018]"}` : "text-(--text-secondary) enabled:hover:text-(--text-primary)"
@@ -963,7 +965,7 @@ export const MusicPlayer = ({ query, className, onClose }: MusicPlayerProps) => 
 								<SeekBar dark={dark} />
 								<div className="flex w-full items-center">
 									<div className="flex flex-1 basis-0 justify-start">
-										<button title={loop ? "Repeat: on" : "Repeat: off"} aria-pressed={loop} className={`${iconButton} ${loop ? "text-(--accent)! opacity-100 bg-[#ffffff1a]" : ""}`} onClick={toggleLoop}>
+										<button title={loop ? "Repeat: on" : "Repeat: off"} aria-pressed={loop} className={`${iconButton} ${loop ? `text-(--accent)! opacity-100 ${dark ? "bg-[#ffffff1a]" : "bg-[#00000012]"}` : ""}`} onClick={toggleLoop}>
 											<ArrowPathRoundedSquareIcon className="size-7" />
 										</button>
 									</div>
@@ -972,7 +974,7 @@ export const MusicPlayer = ({ query, className, onClose }: MusicPlayerProps) => 
 											<BackwardIcon className="size-8 @lg:size-10" />
 										</button>
 										<button title={isPlaying ? "Pause" : "Play"} className={transportButton} onClick={() => void togglePlay()}>
-											{isPlaying ? <PauseIcon className="size-11 @lg:size-13 overflow-visible stroke-current stroke-3 [stroke-linejoin:round] [&_path]:[vector-effect:non-scaling-stroke]" /> : <PlayIcon className="size-11 @lg:size-13 translate-x-0.5" />}
+											{isPlaying ? <PauseIcon className="size-11 @lg:size-13 overflow-visible stroke-current stroke-3 [stroke-linejoin:round] [&_path]:[vector-effect:non-scaling-stroke] duration-150" /> : <PlayIcon className="size-11 @lg:size-13 translate-x-0.5" />}
 										</button>
 										<button title="Next" className={transportButton} onClick={next}>
 											<ForwardIcon className="size-8 @lg:size-10" />

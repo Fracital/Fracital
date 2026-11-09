@@ -16,7 +16,6 @@ import { getPageFromUrl, updatePageTab } from "../../libs/aboutPages";
 import { useTabsStore } from "../../store";
 import { SignalIcon } from "@heroicons/react/24/solid";
 import { MusicPlayer } from "./MusicPlayer";
-import { Shelf } from "../../components/Shelf";
 
 type MusicSection = "digilib" | "library" | "upload" | "player";
 const SECTIONS: MusicSection[] = ["digilib", "library", "upload", "player"];
@@ -396,10 +395,18 @@ export const MusicLibrary = ({ query }: MusicLibraryProps) => {
 	const pages = {
 		library: (
 			<div className="flex flex-col gap-2">
-				<h1 className="text-2xl font-bold">My Music</h1>
+				<div className="flex items-baseline gap-1.5 px-1">
+					<h2 className="text-base font-bold">Your Uploads</h2>
+					{library.length > 0 && <span className="text-xs text-(--text-tertiary)">{library.length}</span>}
+				</div>
 				<div className="flex flex-wrap gap-2">
 					{library.length === 0 ? (
-						<span className="text-lg text-text-tertiary">No songs found.</span>
+						<span className="px-1 text-sm text-(--text-tertiary)">
+							No uploads yet.{" "}
+							<button className="font-semibold text-(--text-secondary) hover:underline cursor-pointer" onClick={() => setpage("upload")}>
+								Upload music
+							</button>
+						</span>
 					) : (
 						library.map((song, index) => (
 							<div
@@ -934,48 +941,9 @@ export const MusicLibrary = ({ query }: MusicLibraryProps) => {
 		</nav>
 	);
 
-	// The user's uploads, on the Browse home (manage them under My Music).
-	const uploadsShelf =
-		library.length > 0 ? (
-			<Shelf
-				title="Your Uploads"
-				count={library.length}
-				dark={dark}
-				action={
-					<button className={`text-[11px] font-semibold px-2.5 py-1 rounded-full duration-150 ${dark ? "bg-[#ffffff1f] hover:bg-[#ffffff33]" : "bg-[#00000012] hover:bg-[#00000022]"}`} onClick={() => setpage("library")}>
-						Manage
-					</button>
-				}
-			>
-				{library.map((song, i) => (
-					<div key={`${song.id}-${i}`} className={`group flex flex-col gap-1.5 w-32 shrink-0 p-1.5 rounded-lg cursor-pointer duration-150 ${dark ? "hover:bg-[#ffffff10]" : "hover:bg-[#00000008]"}`} onClick={() => currentTrack !== song && playUpload(song)}>
-						<div className="relative">
-							{song.cover ? (
-								<img src={song.cover} alt="" className="w-full aspect-square rounded-md object-cover bg-(--tertiary)" loading="lazy" />
-							) : (
-								<div className="flex items-center justify-center w-full aspect-square rounded-md bg-(--tertiary) text-(--text-tertiary)">
-									<MusicalNoteIcon className="size-8" />
-								</div>
-							)}
-							<div className="absolute inset-0 hidden group-hover:flex items-center justify-center rounded-md bg-black/40">
-								<PlayIcon className="size-7 text-white" />
-							</div>
-						</div>
-						<div className="flex flex-col min-w-0 leading-tight">
-							<span title={song.title} className="text-xs font-semibold truncate">
-								{song.title}
-							</span>
-							<span className="text-[11px] text-(--text-tertiary) truncate">{Array.isArray(song.artists) ? song.artists.join(", ") : song.artists}</span>
-						</div>
-					</div>
-				))}
-			</Shelf>
-		) : null;
-
-	// Other sections render under the shared header. My Music/Upload stay mounted so a half-filled upload survives switching.
+	// Upload and Now Playing render under the shared header. Upload stays mounted so a half-filled upload survives switching.
 	const sections = (
 		<>
-			<div className={page === "library" ? "h-full overflow-y-auto" : "hidden"}>{pages.library}</div>
 			<div className={page === "upload" ? "h-full overflow-y-auto" : "hidden"}>{pages.upload}</div>
 			{page === "player" && <MusicPlayer query={playerMode} className="relative h-full w-full rounded-2xl" onClose={() => setpage("digilib")} />}
 		</>
@@ -983,7 +951,7 @@ export const MusicLibrary = ({ query }: MusicLibraryProps) => {
 
 	return (
 		<div className="size-full">
-			<DigitalLibrary query={digiQuery} urlPage="music" urlPrefix="digilib" nav={nav} override={sections} showOverride={page !== "digilib"} onBrowse={() => page !== "digilib" && setpage("digilib")} homeExtra={uploadsShelf} />
+			<DigitalLibrary query={digiQuery} urlPage="music" urlPrefix="digilib" nav={nav} override={sections} showOverride={page === "upload" || page === "player"} onBrowse={() => page !== "digilib" && setpage("digilib")} myMusic={pages.library} showMyMusic={page === "library"} />
 			{contextMenu?.visible && <ContextMenu items={contextMenu.items} position={{ x: contextMenu.x, y: contextMenu.y }} onClose={() => setContextMenu(null)} />}
 		</div>
 	);

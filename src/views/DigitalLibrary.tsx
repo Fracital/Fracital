@@ -240,11 +240,12 @@ interface DigitalLibraryProps {
 	showOverride?: boolean;
 	/** Called when the user starts searching, so the host can switch back to this section. */
 	onBrowse?: () => void;
-	/** Extra content at the top of the home page (e.g. the user's uploads). */
-	homeExtra?: React.ReactNode;
+	/** My Music: the user's library, with this extra content (their uploads) under it. */
+	myMusic?: React.ReactNode;
+	showMyMusic?: boolean;
 }
 
-export const DigitalLibrary = ({ query, urlPage = "library", urlPrefix, nav, override, showOverride = false, onBrowse, homeExtra }: DigitalLibraryProps) => {
+export const DigitalLibrary = ({ query, urlPage = "library", urlPrefix, nav, override, showOverride = false, onBrowse, myMusic, showMyMusic = false }: DigitalLibraryProps) => {
 	const overrideShown = !!override && showOverride;
 	const settings = useSettingsStore(state => state.settings);
 	const brightness = settings.brightness as string;
@@ -828,11 +829,10 @@ export const DigitalLibrary = ({ query, urlPage = "library", urlPrefix, nav, ove
 
 	const HomePage = () => (
 		<div className="flex flex-col gap-6">
-			{homeExtra}
-			<YourLibrary dark={brightness === "dark"} onPlayList={playListFrom} onOpenArtist={openArtistByName} onOpenAlbum={openAlbumByName} onSongMenu={openSongMenu} />
+			<YourLibrary mode="browse" dark={brightness === "dark"} onPlayList={playListFrom} onOpenArtist={openArtistByName} onOpenAlbum={openAlbumByName} onOpenAlbumId={openAlbum} onSongMenu={openSongMenu} />
 			{chartAlbums.length > 0 && (
 				<div className="flex flex-col gap-2">
-					<h2 className="text-lg font-bold px-1">Popular Albums</h2>
+					<h2 className="text-lg font-bold px-1">Popular Right Now</h2>
 					<div className="grid grid-cols-[repeat(auto-fill,minmax(140px,1fr))] gap-1">
 						{chartAlbums.slice(0, 8).map(album => (
 							<AlbumCard key={album.id} album={album} />
@@ -858,6 +858,20 @@ export const DigitalLibrary = ({ query, urlPage = "library", urlPrefix, nav, ove
 					</div>
 				</div>
 			)}
+		</div>
+	);
+
+	// My Music opens albums/artists in Browse, so the host switches sections first.
+	const viaBrowse =
+		<A extends unknown[]>(open: (...args: A) => unknown) =>
+		(...args: A) => {
+			onBrowse?.();
+			void open(...args);
+		};
+	const MyMusicPage = () => (
+		<div className="flex flex-col gap-6">
+			<YourLibrary mode="library" dark={brightness === "dark"} onPlayList={playListFrom} onOpenArtist={viaBrowse(openArtistByName)} onOpenAlbum={viaBrowse(openAlbumByName)} onOpenAlbumId={viaBrowse(openAlbum)} onSongMenu={openSongMenu} />
+			{myMusic}
 		</div>
 	);
 
@@ -1435,7 +1449,7 @@ export const DigitalLibrary = ({ query, urlPage = "library", urlPrefix, nav, ove
 			{/* Header */}
 			<div className="flex flex-wrap items-center gap-3 p-4 pb-2">
 				<div className="flex items-center gap-2 min-w-0">
-					{page !== "home" && !overrideShown && (
+					{page !== "home" && !overrideShown && !showMyMusic && (
 						<button
 							className={`p-1.5 rounded-lg duration-150 ${brightness === "dark" ? "hover:bg-[#ffffff15]" : "hover:bg-[#00000010]"}`}
 							onClick={() => {
@@ -1487,11 +1501,12 @@ export const DigitalLibrary = ({ query, urlPage = "library", urlPrefix, nav, ove
 			{/* Content */}
 			<div className={`flex-1 overflow-auto px-4 pb-4 ${overrideShown ? "hidden" : ""}`}>
 				{/* Called (not <HomePage />) so Your Library keeps its state across re-renders. */}
-				{page === "home" && HomePage()}
-				{page === "search" && <SearchPage />}
-				{page === "album" && AlbumPage()}
+				{showMyMusic && MyMusicPage()}
+				{!showMyMusic && page === "home" && HomePage()}
+				{!showMyMusic && page === "search" && <SearchPage />}
+				{!showMyMusic && page === "album" && AlbumPage()}
 				{/* Called, not mounted as <ArtistPage />: a fresh component identity each render would remount it as play counts stream in. */}
-				{page === "artist" && ArtistPage()}
+				{!showMyMusic && page === "artist" && ArtistPage()}
 			</div>
 			{override && <div className={`flex-1 min-h-0 px-4 pb-4 ${overrideShown ? "" : "hidden"}`}>{override}</div>}
 			{songMenu && <ContextMenu items={songMenu.items} position={songMenu.position} onClose={() => setSongMenu(null)} />}

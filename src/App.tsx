@@ -1,6 +1,6 @@
 import { createId } from "@paralleldrive/cuid2";
 import { AD_UNITS, AdBanner, useShowAds } from "./components/AdBanner";
-import { useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { RectangleStackIcon, PlusIcon, Cog6ToothIcon, ChevronLeftIcon, ChevronRightIcon, XMarkIcon } from "@heroicons/react/24/solid";
 import type { detailProps } from "./libs/eventBus";
 import { useLocation } from "react-router-dom";
@@ -8,25 +8,26 @@ import { useLocation } from "react-router-dom";
 import { Api } from "./Api";
 
 import Shell from "./gui/Shell";
-import { QuickPlayer } from "./gui/QuickPlayer";
 import { Tab } from "./components/Tab";
 
-import Home from "./views/Home";
-import ExternalSite from "./views/ExternalSite";
+const QuickPlayer = lazy(() => import("./gui/QuickPlayer").then(module => ({ default: module.QuickPlayer })));
+const Home = lazy(() => import("./views/Home"));
+const ExternalSite = lazy(() => import("./views/ExternalSite"));
 
 import { Controller } from "@mercuryworkshop/scramjet-controller";
-import LibcurlTransport from "@mercuryworkshop/libcurl-transport";
+import { ResilientTransport } from "./libs/resilientTransport";
 
 import { useMusicStore, usePanelsStore, useSettingsStore, useTabsStore } from "./store";
 import { init, quickLinks } from "./libs/init";
 import { initTheme } from "./libs/theme";
 import { startGameSaveSync } from "./libs/gameSaves";
 import { View } from "./gui/View";
+import { SpinnerLoader } from "./components/SsrLoader";
 import TabGroup from "./components/TabGroup";
 import { ModalProvider } from "./components/Modal/ModalContext";
 import { getProxy, isWebOS, SettingsPath, wispURL } from "./types";
 import { aboutPages, getPageFromUrl, getQueryFromUrl } from "./libs/aboutPages";
-import { isPlayerUrl } from "./libs/playback";
+import { isPlayerUrl, togglePlay } from "./libs/playback";
 
 declare global {
 	interface Window {
@@ -139,7 +140,7 @@ const regSw = async () => {
 	const serviceWorker = await waitForServiceWorker("./", "./sw.js");
 	const scramjet = new Controller({
 		serviceworker: serviceWorker,
-		transport: new LibcurlTransport({
+		transport: new ResilientTransport({
 			wisp: wispURL,
 		}),
 	});
@@ -207,6 +208,20 @@ const App = () => {
 		window.history.replaceState(null, "", window.location.pathname);
 		const url = `about:artists?invite=${code}`;
 		newTab({ id: createId(), url, displayUrl: url, title: "Fracital for Artists", icon: null, current: true });
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, []);
+
+	// Links from account emails land on /?account=verified or /?account=reset&token=… (or &error=…).
+	useEffect(() => {
+		const params = new URLSearchParams(window.location.search);
+		const kind = params.get("account");
+		if (kind !== "verified" && kind !== "reset") return;
+		window.history.replaceState(null, "", window.location.pathname);
+		const token = params.get("token") || "";
+		const error = params.get("error") ? "error" : "";
+		const query = kind === "reset" ? (token && !error && /^[\w-]{8,200}$/.test(token) ? `reset=${token}` : "reset-error") : error ? "verify-error" : "verified";
+		const url = `about:account?${query}`;
+		newTab({ id: createId(), url, displayUrl: kind === "reset" ? "about:account" : url, title: "Fracital Account", icon: null, current: true });
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, []);
 
@@ -350,6 +365,26 @@ const App = () => {
 		document.title = "Fracital";
 	}, []);
 
+	// Space plays/pauses while a music page is the open tab, unless you're typing. A button that was
+	// clicked keeps focus and Space would press it again, so only keyboard-focused controls keep Space.
+	useEffect(() => {
+		const MUSIC_PAGES = new Set(["music", "player", "library"]);
+		const onSpace = (e: KeyboardEvent) => {
+			if (e.code !== "Space" || e.repeat || e.ctrlKey || e.altKey || e.metaKey || e.shiftKey || e.defaultPrevented) return;
+			const tab = useTabsStore.getState().tabs.find(t => t.current);
+			if (!tab || !MUSIC_PAGES.has(getPageFromUrl(tab.url) ?? "") || !useMusicStore.getState().currentTrack) return;
+			const focused = document.activeElement;
+			if (focused instanceof HTMLElement && focused !== document.body) {
+				if (focused.isContentEditable || focused.closest("input, textarea, select, [contenteditable], [role=textbox], [role=combobox], [role=slider], iframe")) return;
+				if (focused.matches(":focus-visible")) return;
+			}
+			e.preventDefault();
+			void togglePlay();
+		};
+		window.addEventListener("keydown", onSpace);
+		return () => window.removeEventListener("keydown", onSpace);
+	}, []);
+
 	useEffect(() => {
 		const handleKeys = (e: KeyboardEvent) => {
 			const key = e.key.toLowerCase();
@@ -439,6 +474,7 @@ const App = () => {
 						{/* Ad panel (hidden for premium accounts and on narrow windows) */}
 						<SideAd />
 						<div className={"relative flex-1 min-h-0 h-[calc(100%+2px)] bg-(--secondary) inset-shadow-(--inset-shadow-primary) rounded-2xl overflow-hidden"}>
+							<Suspense fallback={<SpinnerLoader />}>
 							{tabs.length > 0 ? (
 								tabs.map(item => {
 									if (item.url.includes("about:")) {
@@ -531,6 +567,7 @@ const App = () => {
 							) : (
 								<Home />
 							)}
+							</Suspense>
 						</div>
 						<div
 							className={
@@ -737,12 +774,13 @@ const App = () => {
 
 export default App;
 
-/** Left-side 160×600 ad; the ad refreshes every 5–10 minutes (random). */
+/** Left-side 160×600 ads plus a 160×300 when space remains; each refreshes every 5–10 minutes (random). */
 function SideAd() {
 	const show = useShowAds();
 	const [closed, setClosed] = useState(false);
 	const panelRef = useRef<HTMLDivElement>(null);
 	const [slots, setSlots] = useState(2);
+	const [shortSlot, setShortSlot] = useState(false);
 
 	useEffect(() => {
 		if (!closed) return;
@@ -755,7 +793,9 @@ function SideAd() {
 		if (!el) return;
 		const fit = () => {
 			const usable = el.clientHeight - 48;
-			setSlots(Math.min(3, Math.max(2, Math.floor(usable / (AD_UNITS.side.height + 8)))));
+			const tall = Math.min(3, Math.max(2, Math.floor(usable / (AD_UNITS.side.height + 8))));
+			setSlots(tall);
+			setShortSlot(usable - tall * (AD_UNITS.side.height + 8) >= AD_UNITS.sideShort.height + 8);
 		};
 		fit();
 		const ro = new ResizeObserver(fit);
@@ -776,6 +816,7 @@ function SideAd() {
 				{Array.from({ length: slots }, (_, i) => (
 					<AdBanner key={i} unit={AD_UNITS.side} refreshMinutes={[5, 10]} className="rounded-lg" />
 				))}
+				{shortSlot && <AdBanner key="short" unit={AD_UNITS.sideShort} refreshMinutes={[5, 10]} className="rounded-lg" />}
 			</div>
 		</div>
 	);

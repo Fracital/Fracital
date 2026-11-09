@@ -39,6 +39,17 @@ LASTFM_API_SECRET=your_shared_secret
 
 Tables are created automatically on first start. Without `DATABASE_URL`, accounts are disabled.
 
+More ways to sign in, each turned on by its env keys in `.env.example`:
+
+- **Google, Discord, GitHub, Microsoft**: set `<PROVIDER>_CLIENT_ID` and `<PROVIDER>_CLIENT_SECRET`. Register `<BETTER_AUTH_URL>/api/auth/callback/<provider>` as the redirect URI with each provider.
+- **Passkeys**: always on, but tied to one domain (`PASSKEY_RP_ID`, which defaults to the `BETTER_AUTH_URL` hostname).
+- **Terbium Accounts**: set `TERBIUM_AUTH_URL`.
+- **Password reset and email verification**: need SMTP (`SMTP_HOST` and related keys).
+
+OAuth and Last.fm sign-in finish on the `BETTER_AUTH_URL` host, so the buttons only appear there. Signed-in users can link or unlink providers and passkeys in `about:account`. Removing the last sign-in method on an account is blocked.
+
+Scrobbles wait in a queue on the device until they're sent. That covers being offline, Last.fm being down, and revoked Last.fm access ("Reconnect" in `about:account`). Loved songs from any public Last.fm profile can be imported into the library without connecting it.
+
 ### Last.fm stats
 
 Digital Library artist pages show song play counts and artist listener counts from Last.fm. Get a free API key and shared secret at https://www.last.fm/api/account/create. Without a key, song plays fall back to YouTube view counts and artists show Deezer fan counts.

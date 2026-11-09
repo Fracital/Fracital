@@ -1,6 +1,7 @@
 /**
- * Fracital Accounts: email/password + Last.fm sign-in (better-auth on Postgres),
- * settings sync, and the signed-in user's Last.fm library/stats/scrobbling.
+ * Fracital Accounts: email/password, Last.fm, OAuth, passkey and Terbium sign-in
+ * (better-auth on Postgres; providers in auth-providers.ts), settings sync, and the
+ * signed-in user's Last.fm library/stats/scrobbling.
  *
  * Mounted by both the production Hono server (backend.ts) and the Vite dev server
  * (music-api.ts) via `getAccountsApp()`. Disabled (503) when DATABASE_URL is unset.
@@ -10,16 +11,18 @@
  */
 import { createHash } from "node:crypto";
 import { betterAuth, type BetterAuthPlugin } from "better-auth";
-import { createAuthEndpoint, getSessionFromCtx } from "better-auth/api";
+import { APIError, createAuthEndpoint, createAuthMiddleware, getSessionFromCtx } from "better-auth/api";
 import { setSessionCookie } from "better-auth/cookies";
 import { getMigrations } from "better-auth/db/migration";
-import { Hono, type MiddlewareHandler } from "hono";
+import { type Context, Hono, type MiddlewareHandler } from "hono";
 import { Pool } from "pg";
 import * as z from "zod";
-import { asArray, lastfmCall, lastfmImage, lastfmKey, lastfmSecret, toCount } from "./lastfm";
+import { asArray, lastfmCall, LastfmError, lastfmImage, lastfmKey, lastfmSecret, toCount } from "./lastfm";
 import { findDeezerArtist, findDeezerTrack, type RadioTrack } from "./music-radio";
 import { isBanned, migrateArtistTables, registerArtistRoutes, userMeta } from "./artists";
-import { mailEnabled, sendVerificationEmail } from "./mail";
+import { mailEnabled, sendPasswordResetEmail, sendVerificationEmail } from "./mail";
+import { enabledSocialProviders, passkeyPlugin, passkeyRpId, socialProviders, terbiumEnabled, terbiumPlugin } from "./auth-providers";
+import { setStatStore } from "./music-stats";
 
 const MUSIC_API = "/api/music";
 const STATE_COOKIE = "fracital_lastfm_state";
@@ -157,7 +160,24 @@ const authOptions = (pool: Pool) => ({
 	baseURL: process.env.BETTER_AUTH_URL || undefined,
 	basePath: "/api/auth",
 	trustedOrigins,
-	emailAndPassword: { enabled: true, autoSignIn: true, minPasswordLength: 8, maxPasswordLength: 120, revokeSessionsOnPasswordReset: true },
+	emailAndPassword: {
+		enabled: true,
+		autoSignIn: true,
+		minPasswordLength: 8,
+		maxPasswordLength: 120,
+		revokeSessionsOnPasswordReset: true,
+		resetPasswordTokenExpiresIn: 60 * MINUTE,
+		sendResetPassword: async ({ user, url }: { user: { email: string }; url: string }) => {
+			if (!mailEnabled() || user.email.endsWith("@lastfm.invalid")) return;
+			// Not awaited, so response timing doesn't reveal whether the address exists.
+			void sendPasswordResetEmail(user.email, url).catch(err => console.error("Password reset email failed:", err instanceof Error ? err.message : err));
+		},
+	},
+	socialProviders: socialProviders(),
+	account: {
+		// Last.fm-only accounts have a placeholder email, so linking can't require matching emails.
+		accountLinking: { enabled: true, allowDifferentEmails: true },
+	},
 	emailVerification: {
 		sendOnSignUp: mailEnabled(),
 		autoSignInAfterVerification: true,
@@ -172,11 +192,26 @@ const authOptions = (pool: Pool) => ({
 		customRules: {
 			"/sign-in/*": { window: 15 * MINUTE, max: 30 },
 			"/sign-up/*": { window: 15 * MINUTE, max: 5 },
+			"/request-password-reset": { window: 15 * MINUTE, max: 5 },
+			"/send-verification-email": { window: 15 * MINUTE, max: 5 },
+			"/passkey/*": { window: 15 * MINUTE, max: 60 },
 		},
 	},
 	advanced: { ipAddress: { ipAddressHeaders: ["x-forwarded-for"], trustedProxies: CLOUDFLARE_PROXIES } },
 	session: { expiresIn: 60 * 60 * 24 * 30 },
-	plugins: [lastfmPlugin()],
+	plugins: [lastfmPlugin(), passkeyPlugin(), terbiumPlugin(userId => invalidateUser(userId))],
+	hooks: {
+		// Removing the last passkey from an account with no other sign-in method would lock it out.
+		before: createAuthMiddleware(async ctx => {
+			if (ctx.path !== "/passkey/delete-passkey") return;
+			const session = await getSessionFromCtx(ctx);
+			if (!session) return;
+			const accounts = await ctx.context.internalAdapter.findAccounts(session.user.id);
+			if (accounts.length) return;
+			const { rows } = await pool.query<{ n: string }>('select count(*) as n from passkey where "userId" = $1', [session.user.id]);
+			if (Number(rows[0]?.n) <= 1) throw new APIError("BAD_REQUEST", { message: "This passkey is your account's only way to sign in" });
+		}),
+	},
 	databaseHooks: {
 		session: {
 			create: {
@@ -253,6 +288,21 @@ function init() {
 				primary key (user_id, game_key)
 			)`);
 			await migrateArtistTables(pool);
+			// Play/listener counts survive restarts and are shared between deploys on the same database.
+			await pool.query(`create table if not exists fracital_stat_cache (
+				key text primary key,
+				value jsonb,
+				updated_at timestamptz not null default now()
+			)`);
+			setStatStore({
+				get: async key => {
+					const { rows } = await pool.query<{ value: unknown; updated_at: Date }>("select value, updated_at from fracital_stat_cache where key = $1", [key]);
+					return rows[0] ? { value: rows[0].value, at: rows[0].updated_at.getTime() } : null;
+				},
+				set: async (key, value) => {
+					await pool.query("insert into fracital_stat_cache (key, value, updated_at) values ($1, $2, now()) on conflict (key) do update set value = excluded.value, updated_at = now()", [key, JSON.stringify(value)]);
+				},
+			});
 			console.log("Fracital Accounts ready");
 			return { auth, pool };
 		} catch (err) {
@@ -332,6 +382,8 @@ function cached<T>(key: string, ttlMs: number, load: () => Promise<T>): Promise<
 		return value;
 	});
 }
+const statSection = (artist: string, title: string) => `stat:${artist}|${title}`.toLowerCase();
+const statKey = (userId: string, artist: string, title: string) => `${userId}:${statSection(artist, title)}`;
 function invalidateUser(userId: string, section?: string) {
 	for (const key of userCache.keys()) if (key.startsWith(`${userId}:${section ?? ""}`)) userCache.delete(key);
 }
@@ -346,6 +398,22 @@ export type Env = { Variables: { user: { id: string; name: string; email: string
 
 const escapeForScript = (v: unknown) => JSON.stringify(v).replace(/</g, "\\u003c");
 
+/** Readable text for better-auth's OAuth error codes. */
+function oauthErrorMessage(code: string) {
+	const c = code.toLowerCase();
+	if (c.includes("already_linked") || c.includes("account_already")) return "That account is already connected to another Fracital account";
+	if (c.includes("account_not_linked")) return "An account with this email already exists. Sign in to it first, then connect this provider from your account page.";
+	if (c.includes("access_denied") || c.includes("cancel")) return "Sign-in was cancelled";
+	if (c.includes("state")) return "Your sign-in expired. Try again.";
+	if (c.includes("banned") || c.includes("forbidden")) return "This account can't sign in";
+	return "Sign-in failed. Try again.";
+}
+
+// Last.fm errors: 9 = the session key was revoked (the user removed access on Last.fm);
+// 11/16/29 and network failures are temporary.
+const LASTFM_REVOKED = new Set([9]);
+const LASTFM_TEMPORARY = new Set([0, 8, 11, 16, 29]);
+
 let app: Hono<Env> | null = null;
 
 /** Hono app serving /api/auth/* (better-auth) and /api/me/* (account + Last.fm). */
@@ -353,18 +421,41 @@ export function getAccountsApp() {
 	if (app) return app;
 	app = new Hono<Env>();
 
-	// Popup landing page for Last.fm auth: tells the opener how it went, then closes.
-	app.get("/api/me/lastfm/done", c => {
-		const status = c.req.query("status") === "ok" ? "ok" : "error";
-		const message = c.req.query("message") || "";
-		return c.html(`<!doctype html><meta charset="utf-8"><title>Last.fm</title>
+	// Popup landing page for Last.fm and OAuth sign-in: tells the opener how it went, then closes.
+	// OAuth errors arrive as ?error=<code> from better-auth.
+	const popupDone = (type: string, title: string) => (c: Context<Env>) => {
+		const status = c.req.query("status") === "ok" && !c.req.query("error") ? "ok" : "error";
+		const code = c.req.query("error") || "";
+		const message = c.req.query("message") || (code ? oauthErrorMessage(code) : "");
+		return c.html(`<!doctype html><meta charset="utf-8"><title>${title}</title>
 <body style="background:#1a1a1d;color:#eee;font:15px system-ui;display:grid;place-items:center;height:100vh;margin:0">
-<p>${status === "ok" ? "Connected to Last.fm. You can close this window." : "Last.fm sign-in failed."}</p>
+<p>${status === "ok" ? "Signed in. You can close this window." : "Sign-in didn't finish. You can close this window."}</p>
 <script>
-const data = { type: "fracital:lastfm", status: ${escapeForScript(status)}, message: ${escapeForScript(message)} };
+const data = { type: ${escapeForScript(type)}, status: ${escapeForScript(status)}, message: ${escapeForScript(message)} };
 if (window.opener) { window.opener.postMessage(data, location.origin); window.close(); }
 else setTimeout(() => location.replace("/"), 1500);
 </script></body>`);
+	};
+	app.get("/api/me/lastfm/done", popupDone("fracital:lastfm", "Last.fm"));
+	app.get("/api/me/oauth/done", popupDone("fracital:oauth", "Sign in"));
+
+	// Which sign-in methods this server offers (public; the sign-in page builds its buttons from it).
+	app.get("/api/me/options", c => {
+		// Redirect-based sign-in comes back to BETTER_AUTH_URL's host, so it only works there.
+		const base = process.env.BETTER_AUTH_URL;
+		// Host names only come from the request, so a decoy host never learns the real one.
+		const host = c.req.header("x-forwarded-host") || c.req.header("host") || "";
+		const hostname = host.replace(/:\d+$/, "");
+		const redirectOk = !base || new URL(base).host === host;
+		const rp = passkeyRpId();
+		return c.json({
+			social: enabledSocialProviders(),
+			lastfm: !!(lastfmKey() && lastfmSecret()),
+			terbium: terbiumEnabled(),
+			passkeys: hostname === rp || hostname.endsWith(`.${rp}`),
+			mail: mailEnabled(),
+			redirectOk,
+		});
 	});
 
 	app.on(["GET", "POST"], "/api/auth/*", async c => {
@@ -389,41 +480,160 @@ else setTimeout(() => location.replace("/"), 1500);
 	app.use("/api/me/*", requireUser);
 	registerArtistRoutes(app, { init, requireUser });
 
-	const lastfmLink = async (c: { get: <K extends keyof Env["Variables"]>(k: K) => Env["Variables"][K] }) => {
+	type Ctx = { get: <K extends keyof Env["Variables"]>(k: K) => Env["Variables"][K] };
+
+	const countPasskeys = async (c: Ctx) => {
+		const { rows } = await c
+			.get("pool")
+			.query<{ n: string }>('select count(*) as n from passkey where "userId" = $1', [c.get("user").id])
+			.catch(() => ({ rows: [{ n: "0" }] }));
+		return Number(rows[0]?.n) || 0;
+	};
+
+	const lastfmLink = async (c: Ctx) => {
 		const adapter = (await c.get("auth").$context).internalAdapter;
 		const accounts = await adapter.findAccounts(c.get("user").id);
 		const acc = accounts.find(a => a.providerId === "lastfm");
-		return { link: acc ? { id: acc.id, username: acc.accountId, sessionKey: acc.accessToken || "" } : null, hasPassword: accounts.some(a => a.providerId === "credential") };
+		return {
+			// An empty session key means Last.fm revoked it; the link stays so a reconnect keeps the same account.
+			link: acc ? { id: acc.id, username: acc.accountId, sessionKey: acc.accessToken || "" } : null,
+			hasPassword: accounts.some(a => a.providerId === "credential"),
+			providers: [...new Set(accounts.map(a => a.providerId))],
+		};
+	};
+
+	/** Clears a revoked Last.fm session key so the account shows "Reconnect" instead of failing silently. */
+	const markRevoked = async (c: Ctx, linkId: string) => {
+		await (await c.get("auth").$context).internalAdapter.updateAccount(linkId, { accessToken: "" }).catch(() => {});
+		invalidateUser(c.get("user").id, "profile");
+	};
+
+	/** A signed Last.fm write. `revoked`: reconnect needed; `retry`: temporary, safe to send again later. */
+	const lastfmWrite = async <T>(c: Ctx, link: { id: string; sessionKey: string }, params: Record<string, string>) => {
+		if (!link.sessionKey) return { data: null, revoked: true, retry: true };
+		try {
+			const data = await lastfmCall<T>({ ...params, sk: link.sessionKey }, { signed: true, post: true, throwOnError: true });
+			return { data, revoked: false, retry: false };
+		} catch (err) {
+			const code = err instanceof LastfmError ? err.code : 0;
+			if (LASTFM_REVOKED.has(code)) {
+				await markRevoked(c, link.id);
+				return { data: null, revoked: true, retry: true };
+			}
+			return { data: null, revoked: false, retry: LASTFM_TEMPORARY.has(code) || code >= 500 };
+		}
 	};
 
 	// --- Profile ---
 
+	const lastfmProfile = async (userId: string, username: string, sessionKey: string) => {
+		const info = await cached(`${userId}:profile`, 10 * 60_000, () => lastfmCall<LastfmUserInfo>({ method: "user.getInfo", user: username }));
+		return {
+			username,
+			image: lastfmImage(info?.user?.image),
+			playcount: toCount(info?.user?.playcount),
+			url: info?.user?.url || `https://www.last.fm/user/${encodeURIComponent(username)}`,
+			registered: info?.user?.registered?.unixtime ? Number(info.user.registered.unixtime) * 1000 : undefined,
+			needsReconnect: !sessionKey,
+		};
+	};
+
 	app.get("/api/me", async c => {
-		const user = c.get("user");
-		const { link, hasPassword } = await lastfmLink(c);
-		let lastfm = null;
-		if (link) {
-			const info = await cached(`${user.id}:profile`, 10 * 60_000, () => lastfmCall<LastfmUserInfo>({ method: "user.getInfo", user: link.username }));
-			lastfm = {
-				username: link.username,
-				image: lastfmImage(info?.user?.image),
-				playcount: toCount(info?.user?.playcount),
-				url: info?.user?.url || `https://www.last.fm/user/${encodeURIComponent(link.username)}`,
-				registered: info?.user?.registered?.unixtime ? Number(info.user.registered.unixtime) * 1000 : undefined,
-			};
-		}
+		const user = c.get("user") as Env["Variables"]["user"] & { emailVerified?: boolean };
+		const [{ link, hasPassword, providers }, passkeys] = await Promise.all([lastfmLink(c), countPasskeys(c)]);
+		const lastfm = link ? await lastfmProfile(user.id, link.username, link.sessionKey) : null;
 		const { isAdmin, username, premium } = await userMeta(c.get("pool"), user);
-		return c.json({ user: { id: user.id, name: user.name, email: user.email.endsWith("@lastfm.invalid") ? null : user.email, image: user.image ?? null }, hasPassword, lastfm, lastfmAvailable: !!(lastfmKey() && lastfmSecret()), isAdmin, username, premium });
+		const placeholderEmail = user.email.endsWith("@lastfm.invalid");
+		return c.json({
+			user: { id: user.id, name: user.name, email: placeholderEmail ? null : user.email, image: user.image ?? null, emailVerified: !placeholderEmail && !!user.emailVerified },
+			hasPassword,
+			providers,
+			passkeys,
+			lastfm,
+			lastfmAvailable: !!(lastfmKey() && lastfmSecret()),
+			isAdmin,
+			username,
+			premium,
+		});
 	});
 
-	app.delete("/api/me/lastfm", async c => {
-		const { link, hasPassword } = await lastfmLink(c);
-		if (!link) return c.json({ ok: true });
-		// Last.fm-only accounts would be locked out without it.
-		if (!hasPassword) return c.json({ error: "This account signs in with Last.fm, so it can't be disconnected" }, 400);
-		await (await c.get("auth").$context).internalAdapter.deleteAccount(link.id);
+	/** Re-reads the Last.fm profile now instead of waiting out the cache. */
+	app.post("/api/me/lastfm/refresh", async c => {
+		const { link } = await lastfmLink(c);
+		if (!link) return c.json({ error: "Connect Last.fm first" }, 409);
 		invalidateUser(c.get("user").id);
-		return c.json({ ok: true });
+		return c.json({ lastfm: await lastfmProfile(c.get("user").id, link.username, link.sessionKey) });
+	});
+
+	// Disconnects a sign-in provider, unless it's the account's last way to sign in.
+	const disconnect = async (c: Ctx, providerId: string) => {
+		const adapter = (await c.get("auth").$context).internalAdapter;
+		const accounts = await adapter.findAccounts(c.get("user").id);
+		const targets = accounts.filter(a => a.providerId === providerId);
+		if (!targets.length) return { ok: true as const };
+		const otherSignIn = accounts.some(a => a.providerId !== providerId) || (await countPasskeys(c)) > 0;
+		if (!otherSignIn) return { error: "This is your account's only way to sign in. Add a password, passkey or another sign-in method first." };
+		for (const acc of targets) await adapter.deleteAccount(acc.id);
+		invalidateUser(c.get("user").id);
+		return { ok: true as const };
+	};
+
+	app.delete("/api/me/lastfm", async c => {
+		const res = await disconnect(c, "lastfm");
+		return "error" in res ? c.json(res, 400) : c.json(res);
+	});
+
+	app.delete("/api/me/accounts/:provider", async c => {
+		const provider = c.req.param("provider");
+		// Removing the password isn't offered here; resetting it is.
+		if (provider === "credential" || !/^[a-z0-9-]{2,30}$/.test(provider)) return c.json({ error: "Invalid request" }, 400);
+		const res = await disconnect(c, provider);
+		return "error" in res ? c.json(res, 400) : c.json(res);
+	});
+
+	// Import loved tracks into the Fracital library: from the linked account, or any public
+	// Last.fm profile by username (no connection needed — loved tracks are public).
+	app.post("/api/me/lastfm/import", async c => {
+		const body = z
+			.object({
+				username: z
+					.string()
+					.trim()
+					.min(2)
+					.max(64)
+					.regex(/^[\w.-]+$/)
+					.optional(),
+			})
+			.safeParse(await c.req.json().catch(() => ({})));
+		if (!body.success) return c.json({ error: "Enter a valid Last.fm username" }, 400);
+		if (!lastfmKey()) return c.json({ error: "Last.fm isn't configured on this server" }, 503);
+		const username = body.data.username || (await lastfmLink(c)).link?.username;
+		if (!username) return c.json({ error: "Connect Last.fm or enter a Last.fm username" }, 409);
+
+		const loved: LastfmTrack[] = [];
+		try {
+			for (let page = 1; page <= 2; page++) {
+				type Loved = { lovedtracks?: { track?: LastfmTrack | LastfmTrack[]; "@attr"?: { totalPages?: string } } };
+				const res = await lastfmCall<Loved>({ method: "user.getLovedTracks", user: username, limit: "100", page: String(page) }, { throwOnError: true });
+				loved.push(...asArray(res?.lovedtracks?.track));
+				if (page >= toCount(res?.lovedtracks?.["@attr"]?.totalPages)) break;
+			}
+		} catch (err) {
+			const code = err instanceof LastfmError ? err.code : 0;
+			return c.json({ error: code === 6 ? `Last.fm user @${username} doesn't exist` : code === 17 ? `@${username}'s Last.fm profile is private` : "Couldn't reach Last.fm. Try again." }, code === 6 || code === 17 ? 404 : 502);
+		}
+
+		const pool = c.get("pool");
+		const userId = c.get("user").id;
+		const tracks = await playableAll(loved);
+		const perUser = new Set(["lovedAt", "playedAt", "userPlays", "nowPlaying"]);
+		let added = 0;
+		for (const t of tracks) {
+			const data = Object.fromEntries(Object.entries(t).filter(([k]) => !perUser.has(k)));
+			const res = await pool.query("insert into fracital_saved_items (user_id, kind, item_id, data) values ($1, 'track', $2, $3) on conflict do nothing", [userId, t.id, JSON.stringify(data)]);
+			added += res.rowCount ?? 0;
+		}
+		return c.json({ ok: true, username, found: loved.length, added });
 	});
 
 	// --- Settings sync (replaces the old Terbium KV store) ---
@@ -664,10 +874,11 @@ else setTimeout(() => location.replace("/"), 1500);
 		const link = await requireLink(c);
 		if (!link) return c.json({});
 		const body = (await c.req.json().catch(() => null)) as { tracks?: { key?: string; title?: string; artist?: string }[] } | null;
-		const tracks = (body?.tracks ?? []).filter(t => t.key && t.title && t.artist).slice(0, 25);
+		const tracks = (body?.tracks ?? []).filter(t => t.key && t.title && t.artist).slice(0, 50);
 		const entries = await Promise.all(
 			tracks.map(async t => {
-				const info = await cached(`${c.get("user").id}:stat:${t.artist}|${t.title}`.toLowerCase(), 5 * 60_000, () => lastfmCall<{ track?: { userplaycount?: string; userloved?: string } }>({ method: "track.getInfo", artist: t.artist!, track: t.title!, username: link.username, autocorrect: "1" }));
+				// Long-lived: scrobbles and likes made here invalidate the song's entry.
+				const info = await cached(statKey(c.get("user").id, t.artist!, t.title!), 30 * 60_000, () => lastfmCall<{ track?: { userplaycount?: string; userloved?: string } }>({ method: "track.getInfo", artist: t.artist!, track: t.title!, username: link.username, autocorrect: "1" }));
 				return [t.key!, { userPlays: toCount(info?.track?.userplaycount), loved: info?.track?.userloved === "1" }] as const;
 			}),
 		);
@@ -678,7 +889,7 @@ else setTimeout(() => location.replace("/"), 1500);
 		const link = await requireLink(c);
 		const name = c.req.query("name")?.trim();
 		if (!link || !name) return c.json({ userPlays: null });
-		const info = await cached(`${c.get("user").id}:artist:${name}`.toLowerCase(), 10 * 60_000, () => lastfmCall<{ artist?: { stats?: { userplaycount?: string } } }>({ method: "artist.getInfo", artist: name, username: link.username }));
+		const info = await cached(`${c.get("user").id}:artist:${name.toLowerCase()}`, 30 * 60_000, () => lastfmCall<{ artist?: { stats?: { userplaycount?: string } } }>({ method: "artist.getInfo", artist: name, username: link.username }));
 		return c.json({ userPlays: toCount(info?.artist?.stats?.userplaycount) });
 	});
 
@@ -692,10 +903,11 @@ else setTimeout(() => location.replace("/"), 1500);
 		const body = writeBody.extend({ loved: z.boolean() }).safeParse(await c.req.json().catch(() => null));
 		if (!body.success) return c.json({ error: "Invalid request" }, 400);
 		const { title, artist, loved } = body.data;
-		const ok = await lastfmCall({ method: loved ? "track.love" : "track.unlove", track: title, artist, sk: link.sessionKey }, { signed: true, post: true });
-		if (!ok) return c.json({ error: "Last.fm rejected the request" }, 502);
+		const res = await lastfmWrite(c, link, { method: loved ? "track.love" : "track.unlove", track: title, artist });
+		if (res.revoked) return c.json({ error: "Last.fm access was removed. Reconnect Last.fm from your account page.", revoked: true }, 409);
+		if (!res.data) return c.json({ error: "Last.fm rejected the request" }, 502);
 		invalidateUser(c.get("user").id, "loved");
-		invalidateUser(c.get("user").id, `stat:${artist}|${title}`.toLowerCase());
+		invalidateUser(c.get("user").id, statSection(artist, title));
 		return c.json({ ok: true, loved });
 	});
 
@@ -705,24 +917,44 @@ else setTimeout(() => location.replace("/"), 1500);
 		const body = writeBody.safeParse(await c.req.json().catch(() => null));
 		if (!body.success) return c.json({ error: "Invalid request" }, 400);
 		const { title, artist, album, duration } = body.data;
-		const params: Record<string, string> = { method: "track.updateNowPlaying", track: title, artist, sk: link.sessionKey };
+		const params: Record<string, string> = { method: "track.updateNowPlaying", track: title, artist };
 		if (album) params.album = album;
 		if (duration) params.duration = String(duration);
-		return c.json({ ok: !!(await lastfmCall(params, { signed: true, post: true })) });
+		const res = await lastfmWrite(c, link, params);
+		return c.json({ ok: !!res.data, revoked: res.revoked });
 	});
 
+	// One scrobble, or a batch of up to 50 (the client's offline queue). `retry` tells the client
+	// whether to keep them queued; Last.fm-ignored scrobbles (e.g. too old) are final.
+	const scrobbleItem = writeBody.extend({ timestamp: z.number().int().positive() });
 	app.post("/api/me/scrobble", async c => {
 		const link = await requireLink(c);
-		if (!link) return c.json({ ok: false });
-		const body = writeBody.extend({ timestamp: z.number().int().positive() }).safeParse(await c.req.json().catch(() => null));
-		if (!body.success) return c.json({ error: "Invalid request" }, 400);
-		const { title, artist, album, duration, timestamp } = body.data;
-		const params: Record<string, string> = { method: "track.scrobble", track: title, artist, timestamp: String(timestamp), sk: link.sessionKey };
-		if (album) params.album = album;
-		if (duration) params.duration = String(duration);
-		const ok = !!(await lastfmCall(params, { signed: true, post: true }));
-		if (ok) invalidateUser(c.get("user").id, "recent");
-		return c.json({ ok });
+		if (!link) return c.json({ ok: false, retry: false, error: "Connect Last.fm first" }, 409);
+		const raw = await c.req.json().catch(() => null);
+		const body = z.union([z.object({ scrobbles: z.array(scrobbleItem).min(1).max(50) }), scrobbleItem]).safeParse(raw);
+		if (!body.success) return c.json({ error: "Invalid request", retry: false }, 400);
+		const items = "scrobbles" in body.data ? body.data.scrobbles : [body.data];
+
+		const params: Record<string, string> = { method: "track.scrobble" };
+		items.forEach((s, i) => {
+			params[`track[${i}]`] = s.title;
+			params[`artist[${i}]`] = s.artist;
+			params[`timestamp[${i}]`] = String(s.timestamp);
+			if (s.album) params[`album[${i}]`] = s.album;
+			if (s.duration) params[`duration[${i}]`] = String(s.duration);
+		});
+		const res = await lastfmWrite<{ scrobbles?: { "@attr"?: { accepted?: number | string; ignored?: number | string } } }>(c, link, params);
+		if (!res.data) return c.json({ ok: false, revoked: res.revoked, retry: res.retry });
+
+		const userId = c.get("user").id;
+		invalidateUser(userId, "recent");
+		invalidateUser(userId, "profile");
+		for (const s of items) {
+			invalidateUser(userId, statSection(s.artist, s.title));
+			invalidateUser(userId, `artist:${s.artist.toLowerCase()}`);
+		}
+		const attr = res.data.scrobbles?.["@attr"];
+		return c.json({ ok: true, accepted: toCount(attr?.accepted), ignored: toCount(attr?.ignored), retry: false });
 	});
 
 	return app;

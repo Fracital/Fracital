@@ -210,6 +210,40 @@ const playsResolved = new Map<string, TrackPlays | null>();
 
 const playsKey = (title: string, artist: string) => `${artist}|${title}`.toLowerCase();
 
+// Known counts persist across reloads, so lists show them instantly and refresh quietly.
+const PLAYS_STORE = "fr-plays-v1";
+const PLAYS_FRESH_MS = 6 * 60 * 60_000;
+const PLAYS_KEEP_MS = 7 * 24 * 60 * 60_000;
+const PLAYS_MAX = 3000;
+const playsStored: Record<string, [plays: number, uploads: number, official: 0 | 1, at: number]> = (() => {
+	try {
+		const raw = JSON.parse(localStorage.getItem(PLAYS_STORE) || "{}") as typeof playsStored;
+		const cutoff = Date.now() - PLAYS_KEEP_MS;
+		for (const [key, [plays, uploads, official, at]] of Object.entries(raw)) {
+			if (at < cutoff) delete raw[key];
+			else playsResolved.set(key, { plays, uploads, official: !!official, source: "youtube" });
+		}
+		return raw;
+	} catch {
+		return {};
+	}
+})();
+let playsSaveTimer: ReturnType<typeof setTimeout> | undefined;
+function storePlays(key: string, value: TrackPlays | null) {
+	if (!value) return;
+	playsStored[key] = [value.plays, value.uploads, value.official ? 1 : 0, Date.now()];
+	clearTimeout(playsSaveTimer);
+	playsSaveTimer = setTimeout(() => {
+		const entries = Object.entries(playsStored);
+		if (entries.length > PLAYS_MAX) for (const [k] of entries.sort((a, b) => a[1][3] - b[1][3]).slice(0, entries.length - PLAYS_MAX)) delete playsStored[k];
+		try {
+			localStorage.setItem(PLAYS_STORE, JSON.stringify(playsStored));
+		} catch {
+			// Storage full: counts just won't persist.
+		}
+	}, 1000);
+}
+
 /** The cached play count if already loaded: TrackPlays, null (unknown), or undefined (not loaded yet). */
 export function peekTrackPlays(title: string, artist: string): TrackPlays | null | undefined {
 	return playsResolved.get(playsKey(title, artist));
@@ -219,17 +253,23 @@ export function peekTrackPlays(title: string, artist: string): TrackPlays | null
 export function getTrackPlays(title: string, artist: string): Promise<TrackPlays | null> {
 	const key = playsKey(title, artist);
 	let pending = playsCache.get(key);
+	const stored = playsStored[key];
+	if (!pending && stored && Date.now() - stored[3] < PLAYS_FRESH_MS) {
+		pending = Promise.resolve(playsResolved.get(key) ?? null);
+		playsCache.set(key, pending);
+	}
 	if (!pending) {
 		// v=3 skips browser-cached responses from when plays were Last.fm scrobbles.
 		pending = apiFetch<{ plays: number | null; uploads: number | null; official: boolean | null; source: TrackPlays["source"] | null }>(`/plays?title=${encodeURIComponent(title)}&artist=${encodeURIComponent(artist)}&v=3`)
 			.then(r => {
-				const value = r.plays && r.source ? { plays: r.plays, source: r.source, uploads: r.uploads ?? 1, official: r.official ?? true } : null;
+				const value = r.plays && r.source ? { plays: r.plays, source: r.source, uploads: r.uploads ?? 1, official: r.official ?? true } : (playsResolved.get(key) ?? null);
 				playsResolved.set(key, value);
+				storePlays(key, value);
 				return value;
 			})
 			.catch(() => {
 				playsCache.delete(key);
-				return null;
+				return playsResolved.get(key) ?? null;
 			});
 		playsCache.set(key, pending);
 	}
@@ -270,7 +310,7 @@ export type LastfmPeriod = "7day" | "1month" | "3month" | "6month" | "12month" |
 async function meJson<T>(path: string, init: RequestInit = {}): Promise<T> {
 	const res = await cryptoFetch(path, { ...init, credentials: "include", headers: init.body ? { "Content-Type": "application/json" } : undefined });
 	const data = await res.json().catch(() => ({}));
-	if (!res.ok) throw Object.assign(new Error((data as { error?: string }).error || `Request failed (${res.status})`), { status: res.status });
+	if (!res.ok) throw Object.assign(new Error((data as { error?: string }).error || `Request failed (${res.status})`), { status: res.status, data });
 	return data as T;
 }
 

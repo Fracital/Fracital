@@ -78,6 +78,15 @@ export default defineConfig({
 							dest: "vendor",
 							rename: { stripBase: true, name: "core.js" },
 							overwrite: true,
+							// On pages with content outside <html> (Google sign-in etc.) the engine prepends its
+							// scripts ahead of <!doctype>, which drops the page into quirks mode and breaks layout.
+							// Insert them after any leading doctype instead.
+							transform: (content: string | Buffer) => {
+								const text = content.toString();
+								const quirky = /(\w+)\.warn\(`detected quirky document structure parsing @ \$\{\w+\.origin\.href\}!`\),(\w+)\.root\.children\.unshift\(\.\.\.(\w+)\)/;
+								if (!quirky.test(text)) throw new Error("vendor doctype patch target missing (engine package changed shape)");
+								return text.replace(quirky, (_, _log, doc, scripts) => `${doc}.root.children.splice(${doc}.root.children.findIndex(n=>n.type==="directive")+1,0,...${scripts})`);
+							},
 						},
 						{
 							src: `${scramjetPath}/scramjet.wasm`.replace(/\\/g, "/"),

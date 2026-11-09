@@ -16,9 +16,11 @@ declare global {
 
 export const AD_UNITS = {
 	/** New tab page. */
-	newtab: { key: "267f2250ca310d6a47a2dc5e59fc112a", width: 300, height: 250 },
+	newtab: { key: "6c1a75f91a19fdf2a7d7e1a89f1c01f7", width: 300, height: 250 },
 	/** Left side panel skyscraper. */
-	side: { key: "d69b1a96f2afe38bdcf67786bb8eb97a", width: 160, height: 600 },
+	side: { key: "fe947f7abf51a66ed8afa76cb5589d69", width: 160, height: 600 },
+	/** Left side panel half skyscraper, fills leftover space under the skyscrapers. */
+	sideShort: { key: "59b9a7e60886b54d281e449ab1d6e633", width: 160, height: 300 },
 } as const;
 
 type Unit = (typeof AD_UNITS)[keyof typeof AD_UNITS];

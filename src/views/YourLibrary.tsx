@@ -7,7 +7,8 @@ import { Shelf } from "../components/Shelf";
 import { PlayCount } from "../components/PlayCount";
 import { connectLastfm, getMe, type Me } from "../libs/auth";
 import { songKey, useLastfmStore } from "../libs/lastfmState";
-import { formatCount, library, type LastfmPeriod, type LibraryAlbum, type LibraryArtist, type LibraryTrack } from "../libs/music-service";
+import { cleanAlbumTitle, formatCount, library, type LastfmPeriod, type LibraryAlbum, type LibraryArtist, type LibraryTrack } from "../libs/music-service";
+import { loadBrowseFeed, pickSeeds, type BrowseFeed } from "../libs/browseFeed";
 import { useTabsStore } from "../store";
 import { ensureSavedLoaded, useSavedStore } from "../libs/savedLibrary";
 
@@ -19,11 +20,14 @@ const PERIODS: { id: LastfmPeriod; label: string }[] = [
 ];
 
 interface Props {
+	/** "browse": the personal Browse feed. "library": the user's own music (My Music). */
+	mode: "browse" | "library";
 	dark: boolean;
 	/** Plays `list[index]` and queues the rest of the list after it. */
 	onPlayList: (list: LibraryTrack[], index: number) => void;
 	onOpenArtist: (name: string) => void;
 	onOpenAlbum: (title: string, artist: string) => void;
+	onOpenAlbumId: (id: string) => void;
 	onSongMenu: (e: React.MouseEvent, track: LibraryTrack) => void;
 }
 
@@ -46,8 +50,8 @@ interface Data {
 	recs?: { artists: LibraryArtist[]; tracks: LibraryTrack[] };
 }
 
-/** "Your Library" on the Digital Library home: the user's Last.fm listening, made playable. */
-export const YourLibrary = ({ dark, onPlayList, onOpenArtist, onOpenAlbum, onSongMenu }: Props) => {
+/** The user's music (My Music) or their personal Browse feed, from Last.fm listening and saved music. */
+export const YourLibrary = ({ mode, dark, onPlayList, onOpenArtist, onOpenAlbum, onOpenAlbumId, onSongMenu }: Props) => {
 	const username = useLastfmStore(s => s.username);
 	const loved = useLastfmStore(s => s.loved);
 	const markLoved = useLastfmStore(s => s.markLoved);
@@ -60,6 +64,8 @@ export const YourLibrary = ({ dark, onPlayList, onOpenArtist, onOpenAlbum, onSon
 	const savedTracks = useSavedStore(s => s.tracks);
 	const savedAlbums = useSavedStore(s => s.albums);
 	const followed = useSavedStore(s => s.artists);
+	const [feed, setFeed] = useState<BrowseFeed | null>(null);
+	const browse = mode === "browse";
 
 	useEffect(() => {
 		void useLastfmStore.getState().refresh();
@@ -75,10 +81,11 @@ export const YourLibrary = ({ dark, onPlayList, onOpenArtist, onOpenAlbum, onSon
 		if (!username) return;
 		let alive = true;
 		const put = (patch: Data) => alive && setData(d => ({ ...d, ...patch }));
-		library
-			.recent()
-			.then(r => put({ recent: r.tracks }))
-			.catch(() => {});
+		if (browse)
+			library
+				.recent()
+				.then(r => put({ recent: r.tracks }))
+				.catch(() => {});
 		library
 			.loved()
 			.then(r => {
@@ -86,35 +93,52 @@ export const YourLibrary = ({ dark, onPlayList, onOpenArtist, onOpenAlbum, onSon
 				markLoved(r.tracks.map(t => songKey(t.title, t.artist)));
 			})
 			.catch(() => {});
-		library
-			.recommendations()
-			.then(r => put({ recs: r }))
-			.catch(() => {});
+		if (browse)
+			library
+				.recommendations()
+				.then(r => put({ recs: r }))
+				.catch(() => {});
 		return () => {
 			alive = false;
 		};
-	}, [username, markLoved]);
+	}, [username, markLoved, browse]);
 
 	useEffect(() => {
 		if (!username) return;
 		let alive = true;
 		const put = (patch: Data) => alive && setData(d => ({ ...d, ...patch }));
+		// Browse seeds its feed from what the user listens to lately; My Music shows the chosen period.
 		library
-			.topTracks(period)
-			.then(r => put({ topTracks: r.tracks }))
-			.catch(() => {});
-		library
-			.topArtists(period)
+			.topArtists(browse ? "1month" : period)
 			.then(r => put({ topArtists: r.artists }))
 			.catch(() => {});
-		library
-			.topAlbums(period)
-			.then(r => put({ topAlbums: r.albums }))
-			.catch(() => {});
+		if (!browse) {
+			library
+				.topTracks(period)
+				.then(r => put({ topTracks: r.tracks }))
+				.catch(() => {});
+			library
+				.topAlbums(period)
+				.then(r => put({ topAlbums: r.albums }))
+				.catch(() => {});
+		}
 		return () => {
 			alive = false;
 		};
-	}, [username, period]);
+	}, [username, period, browse]);
+
+	// Browse feed seeds: followed artists first, then recent listening, then artists of saved music.
+	const seeds = browse ? pickSeeds([followed.map(a => ({ name: a.name, id: a.id })), (data.topArtists ?? []).slice(0, 6).map(a => ({ name: a.name })), savedAlbums.map(a => ({ name: a.artist, id: a.artistId })), savedTracks.map(t => ({ name: t.artist, id: t.artistId }))]) : [];
+	const seedKey = seeds.map(s => s.name.toLowerCase()).join("|");
+	useEffect(() => {
+		if (!browse || !seedKey) return;
+		let alive = true;
+		void loadBrowseFeed(seeds).then(f => alive && setFeed(f));
+		return () => {
+			alive = false;
+		};
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [browse, seedKey]);
 
 	const chip = (active: boolean) => `text-[11px] font-semibold px-2.5 py-1 rounded-full duration-150 ${active ? (dark ? "bg-white text-black" : "bg-black text-white") : dark ? "bg-[#ffffff1f] hover:bg-[#ffffff33]" : "bg-[#00000012] hover:bg-[#00000022]"}`;
 	const hover = dark ? "hover:bg-[#ffffff10]" : "hover:bg-[#00000008]";
@@ -245,52 +269,87 @@ export const YourLibrary = ({ dark, onPlayList, onOpenArtist, onOpenAlbum, onSon
 		</>
 	);
 
-	if (!username) {
+	const albumCard = (a: { id: string; title: string; artist: string; artwork: string; releaseDate?: string }) => (
+		<div key={a.id} className={`flex flex-col gap-1.5 w-32 shrink-0 p-1.5 rounded-lg cursor-pointer duration-150 ${hover}`} onClick={() => onOpenAlbumId(a.id)}>
+			{a.artwork ? <img src={a.artwork} alt="" className="w-full aspect-square rounded-md object-cover bg-(--tertiary)" loading="lazy" /> : <div className="w-full aspect-square rounded-md bg-(--tertiary)" />}
+			<div className="flex flex-col min-w-0 leading-tight">
+				<span title={cleanAlbumTitle(a.title)} className="text-xs font-semibold line-clamp-2">
+					{cleanAlbumTitle(a.title)}
+				</span>
+				<span className="text-[11px] text-(--text-tertiary) truncate">{a.artist}</span>
+				{a.releaseDate && <span className="text-[10px] text-(--text-tertiary)">{new Date(a.releaseDate).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}</span>}
+			</div>
+		</div>
+	);
+
+	if (browse) {
+		const forYou = data.recs?.artists?.length ? data.recs.artists : (feed?.similar ?? []);
+		const personal = !!(data.recent?.length || feed?.newReleases.length || feed?.picks.length || data.recs?.tracks.length || forYou.length);
 		return (
 			<div className="flex flex-col gap-4">
 				{connectCard}
-				{me && (savedTracks.length > 0 || savedAlbums.length > 0 || followed.length > 0) && (
-					<>
-						<h2 className="text-xl font-bold px-1">Your Library</h2>
-						{savedShelves}
-					</>
-				)}
+				{personal && <h2 className="text-xl font-bold px-1">For You</h2>}
+				<Shelf title="Jump Back In" dark={dark}>
+					{(data.recent ?? []).map((t, i, list) => (
+						<TrackTile key={`${t.id}-${i}`} track={t} list={list} index={i} meta={t.nowPlaying ? <span className="text-[#ff3b5c] font-semibold">● Scrobbling now</span> : t.playedAt ? timeAgo(t.playedAt) : undefined} />
+					))}
+				</Shelf>
+				<Shelf title="New Releases For You" dark={dark}>
+					{(feed?.newReleases ?? []).map(albumCard)}
+				</Shelf>
+				<Shelf title="Made For You" dark={dark}>
+					{(feed?.picks ?? []).map((t, i, list) => (
+						<TrackTile key={`${t.id}-${i}`} track={t} list={list} index={i} />
+					))}
+				</Shelf>
+				<Shelf title="Songs You Might Like" dark={dark}>
+					{(data.recs?.tracks ?? []).map((t, i, list) => (
+						<TrackTile key={`${t.id}-${i}`} track={t} list={list} index={i} />
+					))}
+				</Shelf>
+				<Shelf title="Artists For You" dark={dark} gridMin={112}>
+					{forYou.map(a => (
+						<ArtistTile key={a.name} artist={a} meta={a.because ? `Because you like ${a.because}` : undefined} />
+					))}
+				</Shelf>
+				{me && !personal && seeds.length === 0 && <p className="px-1 text-sm text-(--text-tertiary)">Follow artists and save songs or albums to fill Browse with music picked for you.</p>}
 			</div>
 		);
 	}
+
+	const periodChips = username ? (
+		<div className="flex items-center gap-1">
+			{PERIODS.map(p => (
+				<button
+					key={p.id}
+					className={chip(period === p.id)}
+					onClick={() => {
+						setPeriod(p.id);
+						localStorage.setItem("fracital:lastfm-period", p.id);
+					}}
+				>
+					{p.label}
+				</button>
+			))}
+		</div>
+	) : null;
 
 	return (
 		<div className="flex flex-col gap-4">
 			<div className="flex flex-wrap items-center justify-between gap-2 px-1">
 				<div className="flex items-center gap-2">
 					<h2 className="text-xl font-bold">Your Library</h2>
-					<span className="flex items-center gap-1 text-xs text-(--text-tertiary)">
-						<FontAwesomeIcon icon={faLastfm} className="size-3 text-[#d51007]" />@{username}
-					</span>
+					{username && (
+						<span className="flex items-center gap-1 text-xs text-(--text-tertiary)">
+							<FontAwesomeIcon icon={faLastfm} className="size-3 text-[#d51007]" />@{username}
+						</span>
+					)}
 				</div>
-				<div className="flex items-center gap-1">
-					{PERIODS.map(p => (
-						<button
-							key={p.id}
-							className={chip(period === p.id)}
-							onClick={() => {
-								setPeriod(p.id);
-								localStorage.setItem("fracital:lastfm-period", p.id);
-							}}
-						>
-							{p.label}
-						</button>
-					))}
-				</div>
+				{periodChips}
 			</div>
 
-			{savedShelves}
-
-			<Shelf title="Recently Played" dark={dark}>
-				{(data.recent ?? []).map((t, i, list) => (
-					<TrackTile key={`${t.id}-${i}`} track={t} list={list} index={i} meta={t.nowPlaying ? <span className="text-[#ff3b5c] font-semibold">● Scrobbling now</span> : t.playedAt ? timeAgo(t.playedAt) : undefined} />
-				))}
-			</Shelf>
+			{connectCard}
+			{me && savedShelves}
 
 			<Shelf title="Liked Songs" count={data.loved ? formatCount(data.loved.total) : undefined} dark={dark}>
 				{(data.loved?.tracks ?? []).map((t, i, list) => (
@@ -341,18 +400,6 @@ export const YourLibrary = ({ dark, onPlayList, onOpenArtist, onOpenAlbum, onSon
 
 			<Shelf title="Your Top Albums" dark={dark}>
 				{(data.topAlbums ?? []).map(a => albumTile(a, `${a.artist}|${a.title}`))}
-			</Shelf>
-
-			<Shelf title="Artists For You" dark={dark} gridMin={112}>
-				{(data.recs?.artists ?? []).map(a => (
-					<ArtistTile key={a.name} artist={a} meta={a.because ? `Because you like ${a.because}` : undefined} />
-				))}
-			</Shelf>
-
-			<Shelf title="Songs You Might Like" dark={dark}>
-				{(data.recs?.tracks ?? []).map((t, i, list) => (
-					<TrackTile key={`${t.id}-${i}`} track={t} list={list} index={i} />
-				))}
 			</Shelf>
 		</div>
 	);

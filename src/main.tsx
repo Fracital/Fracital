@@ -1,7 +1,7 @@
 import { lazy, StrictMode, Suspense } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
-import { Loader } from "./components/Loader";
+import { SsrLoader } from "./components/SsrLoader";
 import { getCloakShadowRoot } from "./libs/cloak";
 import "./index.css";
 
@@ -18,11 +18,13 @@ function mount() {
 	}
 	const app = (
 		<BrowserRouter>
-			<Suspense fallback={<Loader type="skeleton" />}>
+			<Suspense fallback={<SsrLoader />}>
 				<AppShell />
 			</Suspense>
 		</BrowserRouter>
 	);
+	// The server prerenders a static loader into #root so the first paint needs
+	// no JS; createRoot replaces it on the first commit (no hydration to match).
 	createRoot(el).render(<StrictMode>{app}</StrictMode>);
 }
 

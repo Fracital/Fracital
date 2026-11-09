@@ -28,8 +28,61 @@ export interface ArtistStats {
 }
 
 const TTL = 6 * 60 * 60_000;
-const playsCache = new Map<string, { at: number; value: TrackPlays | null }>();
-const artistCache = new Map<string, { at: number; value: ArtistStats | null }>();
+/** Unknown songs/artists are retried sooner than known counts are refreshed. */
+const MISS_TTL = 30 * 60_000;
+const MEMORY_MAX = 20_000;
+
+/** Persistent backing for the stat cache (Postgres, set by accounts.ts when a database is configured). */
+export interface StatStore {
+	get(key: string): Promise<{ value: unknown; at: number } | null>;
+	set(key: string, value: unknown): Promise<void>;
+}
+let store: StatStore | null = null;
+export const setStatStore = (s: StatStore) => {
+	store = s;
+};
+
+const memory = new Map<string, { at: number; value: unknown }>();
+const inflight = new Map<string, Promise<unknown>>();
+
+function remember(key: string, entry: { at: number; value: unknown }) {
+	memory.delete(key);
+	memory.set(key, entry);
+	if (memory.size > MEMORY_MAX) memory.delete(memory.keys().next().value!);
+}
+
+/**
+ * Memory → database → source, with stale-while-revalidate: an expired known count is
+ * returned right away while a single background lookup refreshes it.
+ */
+async function cachedStat<T>(key: string, load: () => Promise<T | null>): Promise<T | null> {
+	let hit = memory.get(key);
+	if (!hit && store) {
+		const row = await store.get(key).catch(() => null);
+		if (row) remember(key, (hit = row));
+	}
+	if (hit && Date.now() - hit.at < (hit.value == null ? MISS_TTL : TTL)) return hit.value as T | null;
+
+	let pending = inflight.get(key) as Promise<T | null> | undefined;
+	if (!pending) {
+		const stale = hit?.value as T | null | undefined;
+		pending = load()
+			.catch(() => null)
+			.then(value => {
+				// A failed lookup keeps the last known count instead of erasing it.
+				if (value == null && stale != null) {
+					remember(key, { at: Date.now(), value: stale });
+					return stale;
+				}
+				remember(key, { at: Date.now(), value });
+				void store?.set(key, value).catch(() => {});
+				return value;
+			})
+			.finally(() => inflight.delete(key));
+		inflight.set(key, pending);
+	}
+	return hit?.value != null ? (hit.value as T) : pending;
+}
 
 // ============================================================
 // Last.fm artist listeners
@@ -52,14 +105,11 @@ async function lastfm<T>(params: Record<string, string>, hasData: (data: T) => b
 /** Last.fm listener + scrobble totals for an artist; null when unconfigured or unknown. */
 export async function artistStats(name: string): Promise<ArtistStats | null> {
 	if (!lastfmKey() || !name) return null;
-	const key = name.toLowerCase().trim();
-	const cached = artistCache.get(key);
-	if (cached && Date.now() - cached.at < TTL) return cached.value;
-	const info = await lastfm<{ artist?: { stats?: { listeners?: string; playcount?: string } } }>({ method: "artist.getInfo", artist: name }, d => toCount(d.artist?.stats?.listeners) > 0);
-	const listeners = toCount(info?.artist?.stats?.listeners);
-	const value = listeners ? { listeners, plays: toCount(info?.artist?.stats?.playcount) } : null;
-	artistCache.set(key, { at: Date.now(), value });
-	return value;
+	return cachedStat(`artist:${name.toLowerCase().trim()}`, async () => {
+		const info = await lastfm<{ artist?: { stats?: { listeners?: string; playcount?: string } } }>({ method: "artist.getInfo", artist: name }, d => toCount(d.artist?.stats?.listeners) > 0);
+		const listeners = toCount(info?.artist?.stats?.listeners);
+		return listeners ? { listeners, plays: toCount(info?.artist?.stats?.playcount) } : null;
+	});
 }
 
 // ============================================================
@@ -138,23 +188,7 @@ async function youtubePlays(title: string, artist: string): Promise<TrackPlays |
 	return best > 0 ? { plays: best, source: "youtube", uploads: 1, official: false } : null;
 }
 
-const inflight = new Map<string, Promise<TrackPlays | null>>();
-
 /** A song's total YouTube streams across its official uploads (null when it can't be found). */
-export async function trackPlays(title: string, artist: string): Promise<TrackPlays | null> {
-	const key = `${artist}|${title}`.toLowerCase();
-	const cached = playsCache.get(key);
-	if (cached && Date.now() - cached.at < TTL) return cached.value;
-
-	// Many views can ask for the same song at once; share one lookup.
-	let pending = inflight.get(key);
-	if (!pending) {
-		pending = youtubePlays(title, artist).then(value => {
-			playsCache.set(key, { at: Date.now(), value });
-			return value;
-		});
-		pending.finally(() => inflight.delete(key)).catch(() => {});
-		inflight.set(key, pending);
-	}
-	return pending;
+export function trackPlays(title: string, artist: string): Promise<TrackPlays | null> {
+	return cachedStat(`plays:${artist}|${title}`.toLowerCase(), () => youtubePlays(title, artist));
 }

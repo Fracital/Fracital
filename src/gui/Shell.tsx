@@ -26,7 +26,7 @@ import {
 import { StarIcon as StarIconOutline } from "@heroicons/react/24/outline";
 import { Suspense, useEffect, useState, useRef } from "react";
 import { ShellButton } from "../components/ShellButton";
-import { useTabsStore, useSettingsStore } from "../store";
+import { useTabsStore, useSettingsStore, useTabLoadingStore } from "../store";
 import { createId } from "@paralleldrive/cuid2";
 import { Search } from "../components/Search";
 import { navigationEvent } from "../libs/eventBus";
@@ -277,6 +277,7 @@ const Shell = () => {
 	const tabs = useTabsStore(state => state.tabs);
 	const currentTab = tabs.find(tab => tab.current === true);
 	const updateTab = useTabsStore(state => state.updateTab);
+	const currentTabLoading = useTabLoadingStore(state => (currentTab ? Boolean(state.loading[currentTab.id]) : false));
 
 	const settings = useSettingsStore(state => state.settings);
 
@@ -423,7 +424,7 @@ const Shell = () => {
 								);
 							}}
 						>
-							<ArrowPathIcon className={"size-4.5 stroke-current stroke-1 text-(--text-tertiary) cursor-pointer group-hover:text-(--text-primary) group-hover:rotate-180 duration-300"} />
+							<ArrowPathIcon className={"size-4.5 stroke-current stroke-1 text-(--text-tertiary) cursor-pointer group-hover:text-(--text-primary) group-hover:rotate-180 duration-300" + (currentTabLoading ? " view-load-spin" : "")} />
 						</button>
 						<button
 							className={

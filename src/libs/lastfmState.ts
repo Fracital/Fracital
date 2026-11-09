@@ -9,9 +9,14 @@ import { library } from "./music-service";
 
 export const songKey = (title: string, artist: string) => `${artist}|${title}`.toLowerCase();
 
+/** Songs whose stats are being fetched, so overlapping views don't ask twice. */
+const loading = new Set<string>();
+
 interface LastfmState {
 	/** undefined until checked. */
 	username: string | null | undefined;
+	/** Last.fm access was revoked: reads still work, likes and scrobbles wait for a reconnect. */
+	needsReconnect: boolean;
 	loved: Record<string, boolean>;
 	userPlays: Record<string, number>;
 	refresh: () => Promise<void>;
@@ -23,23 +28,36 @@ interface LastfmState {
 
 export const useLastfmStore = create<LastfmState>((set, get) => ({
 	username: undefined,
+	needsReconnect: false,
 	loved: {},
 	userPlays: {},
 	refresh: async () => {
 		const me = await getMe();
-		set({ username: me?.lastfm?.username ?? null });
+		set({ username: me?.lastfm?.username ?? null, needsReconnect: !!me?.lastfm?.needsReconnect });
 	},
 	loadStats: async tracks => {
 		if (!get().username) return;
 		const { loved } = get();
-		const todo = tracks.map(t => ({ key: songKey(t.title, t.artist), title: t.title, artist: t.artist })).filter(t => !(t.key in loved));
-		for (let i = 0; i < todo.length; i += 25) {
-			const stats = await library.trackStats(todo.slice(i, i + 25)).catch(() => ({}) as Record<string, { userPlays: number; loved: boolean }>);
-			set(s => ({
-				loved: { ...s.loved, ...Object.fromEntries(Object.entries(stats).map(([k, v]) => [k, v.loved])) },
-				userPlays: { ...s.userPlays, ...Object.fromEntries(Object.entries(stats).map(([k, v]) => [k, v.userPlays])) },
-			}));
-		}
+		const todo = [...new Map(tracks.map(t => [songKey(t.title, t.artist), { key: songKey(t.title, t.artist), title: t.title, artist: t.artist }])).values()].filter(t => !(t.key in loved) && !loading.has(t.key));
+		if (!todo.length) return;
+		for (const t of todo) loading.add(t.key);
+		const batches: (typeof todo)[] = [];
+		for (let i = 0; i < todo.length; i += 50) batches.push(todo.slice(i, i + 50));
+		// A few batches in flight at once; each shows up as soon as it arrives.
+		let next = 0;
+		const worker = async () => {
+			while (next < batches.length) {
+				const batch = batches[next++];
+				const stats = await library.trackStats(batch).catch(() => null);
+				for (const t of batch) loading.delete(t.key);
+				if (!stats) continue;
+				set(s => ({
+					loved: { ...s.loved, ...Object.fromEntries(Object.entries(stats).map(([k, v]) => [k, v.loved])) },
+					userPlays: { ...s.userPlays, ...Object.fromEntries(Object.entries(stats).map(([k, v]) => [k, v.userPlays])) },
+				}));
+			}
+		};
+		await Promise.all([worker(), worker(), worker()]);
 	},
 	toggleLove: async (title, artist) => {
 		const key = songKey(title, artist);
@@ -47,8 +65,9 @@ export const useLastfmStore = create<LastfmState>((set, get) => ({
 		set(s => ({ loved: { ...s.loved, [key]: next } })); // optimistic
 		try {
 			await library.love(title, artist, next);
-		} catch {
+		} catch (err) {
 			set(s => ({ loved: { ...s.loved, [key]: !next } }));
+			if ((err as { data?: { revoked?: boolean } }).data?.revoked) set({ needsReconnect: true });
 		}
 	},
 	markLoved: keys => set(s => ({ loved: { ...s.loved, ...Object.fromEntries(keys.map(k => [k, true])) } })),
@@ -57,6 +76,7 @@ export const useLastfmStore = create<LastfmState>((set, get) => ({
 // Account changes (sign in/out, connect/disconnect Last.fm) reset what we know.
 if (typeof window !== "undefined") {
 	window.addEventListener("account-upd", () => {
+		loading.clear();
 		useLastfmStore.setState({ loved: {}, userPlays: {} });
 		void useLastfmStore.getState().refresh();
 	});

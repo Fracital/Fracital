@@ -8,6 +8,8 @@ import config from "dotenv";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { version } from "./package.json";
 import { server as wisp } from "@mercuryworkshop/wisp-js/server";
 import { create as createYoutubeDl } from "youtube-dl-exec";
@@ -22,6 +24,7 @@ import { artistExtras } from "./src/server/artist-extras";
 import { albumInfo, songCredits, songInfo } from "./src/server/song-info";
 import { findMusicVideo, findYoutubeMatch, isExplicitEdition, playbackHints } from "./src/server/youtube-match";
 import { upstreamRange } from "./src/server/stream-range";
+import { SsrLoader } from "./src/components/SsrLoader";
 
 export function fsrv() {
 	config.config();
@@ -464,7 +467,12 @@ export function fsrv() {
 	const appShellPath = path.join(__dirname, "dist", "index.html");
 	let appShell = "";
 	try {
-		appShell = injectClientConfig(fs.readFileSync(appShellPath, "utf8"));
+		const loaderMarkup = renderToStaticMarkup(createElement(SsrLoader));
+		const builtShell = fs.readFileSync(appShellPath, "utf8").replace(
+			/<div id="root"([^>]*)><\/div>/,
+			`<div id="root"$1>${loaderMarkup}</div>`,
+		);
+		appShell = injectClientConfig(builtShell);
 	} catch {
 		console.warn("dist/index.html not found at startup; run npm run build");
 	}

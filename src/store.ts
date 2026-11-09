@@ -17,6 +17,22 @@ export const usePanelsStore = create<{
 	setPanelsOpen: (open: boolean) => set({ panelsOpen: open }),
 }));
 
+// Kept apart from the tabs store so loading state is never persisted with saved tabs.
+export const useTabLoadingStore = create<{
+	loading: Record<string, true>;
+	setLoading: (id: string, loading: boolean) => void;
+}>()(set => ({
+	loading: {},
+	setLoading: (id, loading) =>
+		set(state => {
+			if (Boolean(state.loading[id]) === loading) return state;
+			const next = { ...state.loading };
+			if (loading) next[id] = true;
+			else delete next[id];
+			return { loading: next };
+		}),
+}));
+
 const baseId = createId();
 export const useTabsStore = create<{
 	tabs: TabProps[];
@@ -78,6 +94,7 @@ export const useTabsStore = create<{
 		}));
 	},
 	closeTab: (id: string) => {
+		useTabLoadingStore.getState().setLoading(id, false);
 		set(state => {
 			const filteredTabs = state.tabs.filter(tab => tab.id !== id);
 			const currentTab = state.tabs.find(tab => tab.current);
