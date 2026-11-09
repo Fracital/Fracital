@@ -74,7 +74,7 @@ const Home = ({ className }: HomeProps) => {
 					<HolyText text="© Fracital 2026" />
 				</Link>
 				<div className="flex gap-1.5 p-1.5">
-					<HolyLink href="https://discord.gg/unblock" target="_blank" className="flex items-center gap-1.5 text-(--text-quaternary) hover:text-(--text-tertiary) font-bold text-lg">
+					<HolyLink href="https://discord.gg/fracital" target="_blank" className="flex items-center gap-1.5 text-(--text-quaternary) hover:text-(--text-tertiary) font-bold text-lg">
 						<FontAwesomeIcon icon={faDiscord} className="text-current duration-150" />
 						<span className="text-current duration-150">
 							<HolyText text="Discord" />
