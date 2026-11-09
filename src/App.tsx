@@ -486,116 +486,116 @@ const App = () => {
 						<SideAd />
 						<div className={"relative flex-1 min-h-0 h-[calc(100%+2px)] bg-(--secondary) inset-shadow-(--inset-shadow-primary) rounded-2xl overflow-hidden"}>
 							<Suspense fallback={<SpinnerLoader />}>
-							{tabs.length > 0 ? (
-								tabs.map(item => {
-									if (item.url.includes("about:")) {
-										const pageName = getPageFromUrl(item.url);
-										const viewKey = `${item.id}-${item.refreshKey ?? 0}`;
+								{tabs.length > 0 ? (
+									tabs.map(item => {
+										if (item.url.includes("about:")) {
+											const pageName = getPageFromUrl(item.url);
+											const viewKey = `${item.id}-${item.refreshKey ?? 0}`;
 
-										if (!pageName || !aboutPages[pageName]) {
-											return (
-												<div key={item.id}>
-													{currentTab && (
-														<View key={viewKey} id={item.id}>
-															<Home
-																key={viewKey}
-																className={
-																	"absolute inset-0 duration-150" +
-																	" " +
-																	`
+											if (!pageName || !aboutPages[pageName]) {
+												return (
+													<div key={item.id}>
+														{currentTab && (
+															<View key={viewKey} id={item.id}>
+																<Home
+																	key={viewKey}
+																	className={
+																		"absolute inset-0 duration-150" +
+																		" " +
+																		`
 																${currentTab ? (currentTab.id !== item.id ? "opacity-0 translate-y-2 pointer-events-none" : "") : ""}
 															`
-																}
-															/>
-														</View>
-													)}
-												</div>
-											);
-										}
+																	}
+																/>
+															</View>
+														)}
+													</div>
+												);
+											}
 
-										const pageConfig = aboutPages[pageName];
-										const PageComponent = pageConfig.component;
+											const pageConfig = aboutPages[pageName];
+											const PageComponent = pageConfig.component;
 
-										const query = pageConfig.hasQuery ? getQueryFromUrl(item.url) : undefined;
+											const query = pageConfig.hasQuery ? getQueryFromUrl(item.url) : undefined;
 
-										if (pageName === "newtab") {
-											return (
-												<div key={item.id}>
-													{currentTab && (
-														<View key={viewKey} id={item.id}>
-															<PageComponent
-																key={viewKey}
-																className={
-																	"absolute inset-0 duration-150" +
-																	" " +
-																	`
+											if (pageName === "newtab") {
+												return (
+													<div key={item.id}>
+														{currentTab && (
+															<View key={viewKey} id={item.id}>
+																<PageComponent
+																	key={viewKey}
+																	className={
+																		"absolute inset-0 duration-150" +
+																		" " +
+																		`
 															${currentTab ? (currentTab.id !== item.id ? "opacity-0 translate-y-2 pointer-events-none" : "") : ""}
 														`
-																}
-																query={query}
-															/>
-														</View>
-													)}
-												</div>
-											);
-										}
+																	}
+																	query={query}
+																/>
+															</View>
+														)}
+													</div>
+												);
+											}
 
-										return (
-											<div key={item.id}>
-												<View key={viewKey} id={item.id}>
-													<PageComponent
-														key={viewKey}
-														query={query}
-														className={
-															"absolute inset-0 duration-150" +
-															" " +
-															`
+											return (
+												<div key={item.id}>
+													<View key={viewKey} id={item.id}>
+														<PageComponent
+															key={viewKey}
+															query={query}
+															className={
+																"absolute inset-0 duration-150" +
+																" " +
+																`
 														${currentTab ? (currentTab.id !== item.id ? "opacity-0 translate-y-2 pointer-events-none" : "") : ""}
 													`
-														}
-													/>
-												</View>
-											</div>
-										);
-									} else if (stompActive) {
-										// The engine's view waits for its own controller; no url gate needed.
-										return (
-											<StompSite
-												id={item.id}
-												current={currentTab?.id === item.id}
-												key={`st-${item.id}`}
-												url={item.url}
-												navNonce={item.navNonce}
-												className={
-													"absolute inset-0" +
-													" " +
-													`
+															}
+														/>
+													</View>
+												</div>
+											);
+										} else if (stompActive) {
+											// The engine's view waits for its own controller; no url gate needed.
+											return (
+												<StompSite
+													id={item.id}
+													current={currentTab?.id === item.id}
+													key={`st-${item.id}`}
+													url={item.url}
+													navNonce={item.navNonce}
+													className={
+														"absolute inset-0" +
+														" " +
+														`
 												${currentTab ? (currentTab.id !== item.id ? "opacity-0 pointer-events-none" : "") : ""}
                                             `
-												}
-											/>
-										);
-									} else {
-										return (
-											<ExternalSite
-												id={item.id}
-												current={currentTab?.id === item.id}
-												key={item.id}
-												url={proxyReady ? item.url : undefined}
-												className={
-													"absolute inset-0" +
-													" " +
-													`
+													}
+												/>
+											);
+										} else {
+											return (
+												<ExternalSite
+													id={item.id}
+													current={currentTab?.id === item.id}
+													key={item.id}
+													url={proxyReady ? item.url : undefined}
+													className={
+														"absolute inset-0" +
+														" " +
+														`
 												${currentTab ? (currentTab.id !== item.id ? "opacity-0 pointer-events-none" : "") : ""}
                                             `
-												}
-											/>
-										);
-									}
-								})
-							) : (
-								<Home />
-							)}
+													}
+												/>
+											);
+										}
+									})
+								) : (
+									<Home />
+								)}
 							</Suspense>
 						</div>
 						<div
