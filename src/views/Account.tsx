@@ -846,11 +846,7 @@ const CrossSiteRow = ({ busy, run }: { busy: string | null; run: Run }) => {
 		});
 
 	return (
-		<MethodRow
-			icon={<ArrowPathIcon className="size-5" />}
-			label="Stay signed in across sites"
-			detail={<HolyText text={linked === null ? "Unavailable in this browser." : "Our other sites sign this browser in automatically."} />}
-		>
+		<MethodRow icon={<ArrowPathIcon className="size-5" />} label="Stay signed in across sites" detail={<HolyText text={linked === null ? "Unavailable in this browser." : "Our other sites sign this browser in automatically."} />}>
 			{linked !== null && (
 				<button
 					ref={switchRef}

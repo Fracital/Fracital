@@ -70,7 +70,11 @@ async function ask(op: HubOp, data: Record<string, unknown> = {}): Promise<HubRe
 	});
 }
 
-const base64url = (bytes: Uint8Array) => btoa(String.fromCharCode(...bytes)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+const base64url = (bytes: Uint8Array) =>
+	btoa(String.fromCharCode(...bytes))
+		.replace(/\+/g, "-")
+		.replace(/\//g, "_")
+		.replace(/=+$/, "");
 
 async function pkcePair(): Promise<{ verifier: string; challenge: string }> {
 	const verifier = base64url(crypto.getRandomValues(new Uint8Array(32)));

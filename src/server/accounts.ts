@@ -56,12 +56,7 @@ const lastfmModeQuery = z.object({ mode: z.enum(["signin", "link"]).default("sig
  * Shared by the redirecting start route (the popup path) and the JSON route
  * (the proxied path, which opens the URL in a proxy tab instead).
  */
-async function beginLastfmAuth(ctx: {
-	query: { mode: "signin" | "link" };
-	headers?: Headers;
-	context: { secret: string; baseURL: string };
-	setSignedCookie: (name: string, value: string, secret: string, opts: Record<string, unknown>) => Promise<unknown>;
-}) {
+async function beginLastfmAuth(ctx: { query: { mode: "signin" | "link" }; headers?: Headers; context: { secret: string; baseURL: string }; setSignedCookie: (name: string, value: string, secret: string, opts: Record<string, unknown>) => Promise<unknown> }) {
 	const nonce = createHash("sha256").update(`${Math.random()}${Date.now()}`).digest("hex").slice(0, 24);
 	await ctx.setSignedCookie(STATE_COOKIE, JSON.stringify({ mode: ctx.query.mode, nonce }), ctx.context.secret, { maxAge: 600, httpOnly: true, sameSite: "lax", path: "/" });
 	// Last.fm takes any callback, so it returns to the site the user started on (any of our
