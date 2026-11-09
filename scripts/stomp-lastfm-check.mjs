@@ -127,7 +127,9 @@ await waitFor(() => page.evaluate(() => !!window.stompController), "the engine t
 
 // --- the Account page's Last.fm button ---
 await go("about:account");
-const button = page.getByRole("button", { name: /Continue with Last\.fm/ }).first();
+// Found by its Last.fm icon: the label is HolyText, which an automated browser
+// (navigator.webdriver) sees as dashes, so no accessible name matches it.
+const button = page.locator('button:has(svg[data-icon="lastfm"])').first();
 await button.waitFor({ timeout: 20000 });
 const tabsBefore = await tabCount();
 await button.click();
