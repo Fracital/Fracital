@@ -237,7 +237,7 @@ export const SignIn = ({ initialPage, resetToken, notice, onSignedIn, branding =
 
 				{credentialsPage && !terbium && (
 					<>
-						{/* Last.fm returns to whichever of our sites started it, so it works everywhere (unlike OAuth). */}
+						{/* Last.fm returns to whichever of our sites started it, so it runs right here on every site. */}
 						{options?.lastfm && <LastfmButton label={page === "login" ? "Continue with Last.fm" : "Sign up with Last.fm"} busy={busy === "lastfm"} onClick={() => run("lastfm", async () => (await connectLastfm("signin"), await finish()))} />}
 						{!!options?.social.length && oauthOk && (
 							<div className="grid gap-2 w-full" style={{ gridTemplateColumns: `repeat(${Math.min(options.social.length, 3)}, minmax(0, 1fr))` }}>
