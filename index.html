@@ -9,16 +9,20 @@
     <script src="/vendor/core.js"></script>
 		<script src="/vendor/ctl.js"></script>
     <script src="/vendor/flash/player.js"></script>
+    <script src="//js.rev.iq/fracit.al" defer></script>
   </head>
   <body>
     <div id="root" class="h-full bg-(--primary) text-(--text-primary) overflow-hidden"></div>
     <script type="module" src="/src/main.tsx"></script>
     <script src="/libs/filer.min.js"></script>
     <script>
-      const s = document.createElement("script");
-      s.src = "//js.rev.iq/" + location.hostname;
-      s.defer = true;
-      document.head.appendChild(s);
+      // fracit.al's tag is the static one in <head> (so RevIQ's crawler sees it); every other host loads its own here.
+      if (location.hostname !== "fracit.al") {
+        const s = document.createElement("script");
+        s.src = "//js.rev.iq/" + location.hostname;
+        s.defer = true;
+        document.head.appendChild(s);
+      }
     </script>
   </body>
 </html>
