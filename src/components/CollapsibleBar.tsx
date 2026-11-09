@@ -63,7 +63,11 @@ export interface CollapsibleBar {
 
 /** `key` names the bar in storage, e.g. "gamesBar" or "shellBar". */
 export const useCollapsibleBar = (key: string): CollapsibleBar => {
-	const [mode, setMode] = usePersisted<BarMode>(`${key}Mode`, raw => (raw === "button" ? "button" : "hover"), v => v);
+	const [mode, setMode] = usePersisted<BarMode>(
+		`${key}Mode`,
+		raw => (raw === "button" ? "button" : "hover"),
+		v => v,
+	);
 	const [threshold, setThreshold] = usePersisted<number>(
 		`${key}Threshold`,
 		raw => {
@@ -72,8 +76,16 @@ export const useCollapsibleBar = (key: string): CollapsibleBar => {
 		},
 		String,
 	);
-	const [pinned, setPinned] = usePersisted<boolean>(`${key}Pinned`, raw => raw !== "0", v => (v ? "1" : "0"));
-	const [open, setOpen] = usePersisted<boolean>(`${key}Open`, raw => raw !== "0", v => (v ? "1" : "0"));
+	const [pinned, setPinned] = usePersisted<boolean>(
+		`${key}Pinned`,
+		raw => raw !== "0",
+		v => (v ? "1" : "0"),
+	);
+	const [open, setOpen] = usePersisted<boolean>(
+		`${key}Open`,
+		raw => raw !== "0",
+		v => (v ? "1" : "0"),
+	);
 	const [revealed, setRevealed] = useState(false);
 	const [held, setHeld] = useState(false);
 	const autoHide = mode === "hover" && !pinned;
@@ -226,12 +238,7 @@ export const BarSettingsMenu = ({ bar, dark, title, trigger }: { bar: Collapsibl
 export const BarOpenHandle = ({ dark, onOpen, className = "" }: { dark: boolean; onOpen: () => void; className?: string }) => {
 	const { ref, placeholder } = useHolyAttr({ title: "Open the bar", "aria-label": "Open the bar" });
 	return (
-		<button
-			ref={ref}
-			{...placeholder}
-			onClick={onOpen}
-			className={`absolute left-1/2 top-0 z-40 -translate-x-1/2 flex items-center justify-center px-4 py-0.5 rounded-b-lg opacity-50 hover:opacity-100 cursor-pointer duration-150 ${dark ? "bg-[#000000a0] text-white" : "bg-[#ffffffc0] text-black"} ${className}`}
-		>
+		<button ref={ref} {...placeholder} onClick={onOpen} className={`absolute left-1/2 top-0 z-40 -translate-x-1/2 flex items-center justify-center px-4 py-0.5 rounded-b-lg opacity-50 hover:opacity-100 cursor-pointer duration-150 ${dark ? "bg-[#000000a0] text-white" : "bg-[#ffffffc0] text-black"} ${className}`}>
 			<ChevronDownIcon className="size-4" />
 		</button>
 	);

@@ -507,11 +507,7 @@ export const QuickPlayer = ({ panelsOpen, className, onOpenPanels }: QuickPlayer
 					{playerView === "tracks" || !currentTrack ? (
 						<>
 							<div className={"relative flex w-full flex-1 min-h-0 overflow-auto gap-2 p-2 px-3 flex-col duration-200"}>
-								{failed && currentTrack && (
-									<span className="ml-1.5 mt-1 text-xs font-semibold text-[#ff6b6b]">
-										Couldn't play this song{queue.length ? " — skipping" : ""}
-									</span>
-								)}
+								{failed && currentTrack && <span className="ml-1.5 mt-1 text-xs font-semibold text-[#ff6b6b]">Couldn't play this song{queue.length ? " — skipping" : ""}</span>}
 								<div className="flex flex-col items-start w-full mt-1.5">
 									<QueueList dark={brightness === "dark"} variant="compact" />
 								</div>
@@ -744,9 +740,7 @@ export const QuickPlayer = ({ panelsOpen, className, onOpenPanels }: QuickPlayer
 											<AudvisVisualizer analyser={analyser} isPlaying={isPlaying} width={140} height={30} color={brightness === "dark" ? "#FFFFFF" : "#000000"} opacity={visualizerOpacity} scale={visualizerScale} />
 										</div>
 									)}
-									{loadingSong && (
-										<div aria-hidden className="absolute size-12 rounded-full border-4 border-white border-t-transparent animate-spin drop-shadow-[0_0_10px_#000] pointer-events-none group-hover:opacity-0 duration-150" />
-									)}
+									{loadingSong && <div aria-hidden className="absolute size-12 rounded-full border-4 border-white border-t-transparent animate-spin drop-shadow-[0_0_10px_#000] pointer-events-none group-hover:opacity-0 duration-150" />}
 									<div className="absolute group flex gap-3 opacity-0 group-hover:opacity-100 duration-150 z-10">
 										<button
 											className="opacity-80 hover:opacity-100 cursor-pointer duration-150"

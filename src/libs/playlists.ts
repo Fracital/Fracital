@@ -156,7 +156,6 @@ export function toggleDislike(input: MusicTrack): void {
 	}
 }
 
-
 export async function createPlaylist(name: string, first?: MusicTrack): Promise<PlaylistSummary | null> {
 	if (!requireSignIn()) return null;
 	const { playlist } = await library.createPlaylist(name);

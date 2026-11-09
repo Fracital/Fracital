@@ -520,12 +520,7 @@ const Shell = () => {
 					bar.mode === "hover"
 						? { title: <HolyText text={bar.pinned ? "Auto-hide the top bar" : "Keep the top bar open"} />, icon: bar.pinned ? <LockOpenIcon className="size-4" /> : <LockClosedIcon className="size-4" />, onClick: () => bar.setPinned(!bar.pinned) }
 						: { title: <HolyText text="Hide the top bar" />, icon: <EyeSlashIcon className="size-4" />, onClick: () => bar.setOpen(false) },
-					...(bar.mode === "hover"
-						? [
-								{ isHeader: true, title: <HolyText text="Hover zone" />, icon: null, onClick: () => undefined },
-								...HOVER_PRESETS.map(px => ({ title: `${px}px`, icon: check(bar.threshold === px), onClick: () => bar.setThreshold(px) })),
-							]
-						: []),
+					...(bar.mode === "hover" ? [{ isHeader: true, title: <HolyText text="Hover zone" />, icon: null, onClick: () => undefined }, ...HOVER_PRESETS.map(px => ({ title: `${px}px`, icon: check(bar.threshold === px), onClick: () => bar.setThreshold(px) }))] : []),
 				],
 			},
 			{ title: <HolyText text="Settings" />, icon: <Cog6ToothIcon className="size-5" />, onClick: () => openPage("about:settings", "Settings", <Cog6ToothIcon className="size-5" />) },
@@ -723,232 +718,232 @@ const Shell = () => {
 				{compact ? (
 					compactTrigger
 				) : (
-				<>
-				<div
-					className={
-						"group relative flex justify-center items-center min-h-5 p-2 px-3 gap-1 rounded-full bg-(--secondary) cursor-pointer duration-200" +
-						" " +
-						`
+					<>
+						<div
+							className={
+								"group relative flex justify-center items-center min-h-5 p-2 px-3 gap-1 rounded-full bg-(--secondary) cursor-pointer duration-200" +
+								" " +
+								`
                     inset-shadow-(--inset-shadow-secondary)
                     hover:inset-shadow-[0_0_0_2px_var(--accent)]
                 `
-					}
-					onMouseDown={() => {
-						window.dispatchEvent(
-							new CustomEvent("proxy-change", {
-								detail: {
-									proxy: engines[(engines.indexOf(shownProxy) + 1) % engines.length],
-								},
-							}),
-						);
-					}}
-				>
-					<div className="flex items-center overflow-hidden h-5">
-						<div
-							className={
-								"flex flex-col items-start gap-2 h-4.5 duration-150" +
-								" " +
-								`
-                            ${shownProxy === "uv" ? "" : "-translate-y-6.5 pointer-events-none"}
-                        `
 							}
+							onMouseDown={() => {
+								window.dispatchEvent(
+									new CustomEvent("proxy-change", {
+										detail: {
+											proxy: engines[(engines.indexOf(shownProxy) + 1) % engines.length],
+										},
+									}),
+								);
+							}}
 						>
-							<div className={"flex items-center justify-center gap-2 duration-150"}>
-								<span className="text-(--text-secondary) group-hover:text-(--text-primary) font-bold text-lg duration-150">UV</span>
-								<span className="text-(--text-tertiary) group-hover:text-(--text-primary) font-semibold duration-150">{uvVersion}</span>
-							</div>
-							<div
-								className={
-									"flex items-center justify-center gap-2 duration-150" +
-									" " +
-									`
-                                ${shownProxy === "sj" ? "" : "absolute opacity-0 pointer-events-none"}
-                            `
-								}
-							>
-								<span className="text-(--text-secondary) group-hover:text-(--text-primary) font-bold text-lg duration-150">Scramjet</span>
-								<span className="text-(--text-tertiary) group-hover:text-(--text-primary) font-semibold duration-150">{sjVersion}</span>
-							</div>
-							{experimentalProxies && (
+							<div className="flex items-center overflow-hidden h-5">
 								<div
 									className={
-										"flex items-center justify-center gap-2 duration-150" +
+										"flex flex-col items-start gap-2 h-4.5 duration-150" +
 										" " +
 										`
+                            ${shownProxy === "uv" ? "" : "-translate-y-6.5 pointer-events-none"}
+                        `
+									}
+								>
+									<div className={"flex items-center justify-center gap-2 duration-150"}>
+										<span className="text-(--text-secondary) group-hover:text-(--text-primary) font-bold text-lg duration-150">UV</span>
+										<span className="text-(--text-tertiary) group-hover:text-(--text-primary) font-semibold duration-150">{uvVersion}</span>
+									</div>
+									<div
+										className={
+											"flex items-center justify-center gap-2 duration-150" +
+											" " +
+											`
+                                ${shownProxy === "sj" ? "" : "absolute opacity-0 pointer-events-none"}
+                            `
+										}
+									>
+										<span className="text-(--text-secondary) group-hover:text-(--text-primary) font-bold text-lg duration-150">Scramjet</span>
+										<span className="text-(--text-tertiary) group-hover:text-(--text-primary) font-semibold duration-150">{sjVersion}</span>
+									</div>
+									{experimentalProxies && (
+										<div
+											className={
+												"flex items-center justify-center gap-2 duration-150" +
+												" " +
+												`
                                 ${shownProxy === "st" ? "" : "absolute opacity-0 pointer-events-none"}
                             `
+											}
+										>
+											<HolyText as="span" className="text-(--text-secondary) group-hover:text-(--text-primary) font-bold text-lg duration-150" text="Stomp" />
+											<span className="text-(--text-tertiary) group-hover:text-(--text-primary) font-semibold duration-150">{stompBuild}</span>
+											{stompState && <HolyText as="span" className="text-(--text-tertiary) group-hover:text-(--text-primary) font-medium text-sm duration-150" text={stompState} />}
+										</div>
+									)}
+								</div>
+							</div>
+							<ChevronUpDownIcon className="size-5 text-(--text-tertiary) group-hover:text-(--text-secondary) stroke-current stroke-1 cursor-pointer duration-150" />
+						</div>
+						<ShellButton
+							title={isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen"}
+							onClick={() => {
+								if (document.fullscreenElement) {
+									document.exitFullscreen();
+								} else {
+									if (document.body) {
+										document.body.requestFullscreen().catch(err => {
+											console.error("Error attempting to enable full-screen mode:", err);
+										});
 									}
-								>
-									<HolyText as="span" className="text-(--text-secondary) group-hover:text-(--text-primary) font-bold text-lg duration-150" text="Stomp" />
-									<span className="text-(--text-tertiary) group-hover:text-(--text-primary) font-semibold duration-150">{stompBuild}</span>
-									{stompState && <HolyText as="span" className="text-(--text-tertiary) group-hover:text-(--text-primary) font-medium text-sm duration-150" text={stompState} />}
+								}
+							}}
+						>
+							{isFullscreen ? <ArrowsPointingInIcon className="p-0.5 size-5 text-current stroke-current stroke-1" /> : <ArrowsPointingOutIcon className="p-0.5 size-5 text-current stroke-current stroke-1" />}
+						</ShellButton>
+						<BarSettingsMenu
+							bar={bar}
+							dark={dark}
+							title="Top bar"
+							trigger={(toggle, open) => (
+								<div className={`flex items-center rounded-full bg-(--secondary) text-(--text-secondary) duration-200 inset-shadow-(--inset-shadow-secondary) hover:inset-shadow-(--inset-shadow-accent) ${open ? "inset-shadow-(--inset-shadow-accent)" : ""}`}>
+									{bar.mode === "hover" ? (
+										<button
+											ref={pinRef}
+											{...pinAttrs}
+											aria-pressed={bar.pinned}
+											className="flex items-center justify-center p-2 pr-1 rounded-l-full hover:text-(--text-primary) cursor-pointer duration-200"
+											onClick={() => bar.setPinned(!bar.pinned)}
+											onContextMenu={e => {
+												e.preventDefault();
+												toggle();
+											}}
+										>
+											{bar.pinned ? <LockClosedIcon className="size-5" /> : <LockOpenIcon className="size-5" />}
+										</button>
+									) : (
+										<button
+											ref={closeBarRef}
+											{...closeBarAttrs}
+											className="flex items-center justify-center p-2 pr-1 rounded-l-full hover:text-(--text-primary) cursor-pointer duration-200"
+											onClick={() => bar.setOpen(false)}
+											onContextMenu={e => {
+												e.preventDefault();
+												toggle();
+											}}
+										>
+											<EyeSlashIcon className="size-5" />
+										</button>
+									)}
+									<button ref={barSettingsRef} {...barSettingsAttrs} aria-haspopup="dialog" aria-expanded={open} className="flex items-center justify-center p-2 pl-0.5 rounded-r-full hover:text-(--text-primary) cursor-pointer duration-200" onClick={toggle}>
+										<ChevronDownIcon className={`size-4 stroke-current stroke-1 duration-200 ${open ? "rotate-180" : ""}`} />
+									</button>
 								</div>
 							)}
-						</div>
-					</div>
-					<ChevronUpDownIcon className="size-5 text-(--text-tertiary) group-hover:text-(--text-secondary) stroke-current stroke-1 cursor-pointer duration-150" />
-				</div>
-				<ShellButton
-					title={isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen"}
-					onClick={() => {
-						if (document.fullscreenElement) {
-							document.exitFullscreen();
-						} else {
-							if (document.body) {
-								document.body.requestFullscreen().catch(err => {
-									console.error("Error attempting to enable full-screen mode:", err);
-								});
+						/>
+						<ShellButton
+							title="Settings"
+							onClick={() =>
+								newTab({
+									id: createId(),
+									title: "Settings",
+									url: "about:settings",
+									icon: <Cog6ToothIcon className="size-5" />,
+									displayUrl: "about:settings",
+								})
 							}
-						}
-					}}
-				>
-					{isFullscreen ? <ArrowsPointingInIcon className="p-0.5 size-5 text-current stroke-current stroke-1" /> : <ArrowsPointingOutIcon className="p-0.5 size-5 text-current stroke-current stroke-1" />}
-				</ShellButton>
-				<BarSettingsMenu
-					bar={bar}
-					dark={dark}
-					title="Top bar"
-					trigger={(toggle, open) => (
-						<div className={`flex items-center rounded-full bg-(--secondary) text-(--text-secondary) duration-200 inset-shadow-(--inset-shadow-secondary) hover:inset-shadow-(--inset-shadow-accent) ${open ? "inset-shadow-(--inset-shadow-accent)" : ""}`}>
-							{bar.mode === "hover" ? (
-								<button
-									ref={pinRef}
-									{...pinAttrs}
-									aria-pressed={bar.pinned}
-									className="flex items-center justify-center p-2 pr-1 rounded-l-full hover:text-(--text-primary) cursor-pointer duration-200"
-									onClick={() => bar.setPinned(!bar.pinned)}
-									onContextMenu={e => {
-										e.preventDefault();
-										toggle();
-									}}
-								>
-									{bar.pinned ? <LockClosedIcon className="size-5" /> : <LockOpenIcon className="size-5" />}
-								</button>
-							) : (
-								<button
-									ref={closeBarRef}
-									{...closeBarAttrs}
-									className="flex items-center justify-center p-2 pr-1 rounded-l-full hover:text-(--text-primary) cursor-pointer duration-200"
-									onClick={() => bar.setOpen(false)}
-									onContextMenu={e => {
-										e.preventDefault();
-										toggle();
-									}}
-								>
-									<EyeSlashIcon className="size-5" />
-								</button>
-							)}
-							<button ref={barSettingsRef} {...barSettingsAttrs} aria-haspopup="dialog" aria-expanded={open} className="flex items-center justify-center p-2 pl-0.5 rounded-r-full hover:text-(--text-primary) cursor-pointer duration-200" onClick={toggle}>
-								<ChevronDownIcon className={`size-4 stroke-current stroke-1 duration-200 ${open ? "rotate-180" : ""}`} />
-							</button>
-						</div>
-					)}
-				/>
-				<ShellButton
-					title="Settings"
-					onClick={() =>
-						newTab({
-							id: createId(),
-							title: "Settings",
-							url: "about:settings",
-							icon: <Cog6ToothIcon className="size-5" />,
-							displayUrl: "about:settings",
-						})
-					}
-				>
-					<Cog6ToothIcon className="size-5" />
-				</ShellButton>
-				<ShellButton
-					title="Page selector"
-					onClick={(e: React.MouseEvent) => {
-						const items: MenuItem[] = [
-							{
-								title: "File Manager",
-								onClick: () => {
-									newTab({
-										id: createId(),
+						>
+							<Cog6ToothIcon className="size-5" />
+						</ShellButton>
+						<ShellButton
+							title="Page selector"
+							onClick={(e: React.MouseEvent) => {
+								const items: MenuItem[] = [
+									{
 										title: "File Manager",
-										url: "about:files",
+										onClick: () => {
+											newTab({
+												id: createId(),
+												title: "File Manager",
+												url: "about:files",
+												icon: <FolderIcon className="size-4.5" />,
+												displayUrl: "about:files",
+											});
+										},
 										icon: <FolderIcon className="size-4.5" />,
-										displayUrl: "about:files",
-									});
-								},
-								icon: <FolderIcon className="size-4.5" />,
-							},
-							{
-								title: "Games",
-								onClick: () => {
-									newTab({
-										id: createId(),
+									},
+									{
 										title: "Games",
-										url: "about:games",
+										onClick: () => {
+											newTab({
+												id: createId(),
+												title: "Games",
+												url: "about:games",
+												icon: <PlayIcon className="size-4.5" />,
+												displayUrl: "about:games",
+											});
+										},
 										icon: <PlayIcon className="size-4.5" />,
-										displayUrl: "about:games",
-									});
-								},
-								icon: <PlayIcon className="size-4.5" />,
-							},
-							{
-								title: "Music",
-								onClick: () => openLibraryPage(""),
-								icon: <MusicalNoteIcon className="size-4.5" />,
-							},
-						];
+									},
+									{
+										title: "Music",
+										onClick: () => openLibraryPage(""),
+										icon: <MusicalNoteIcon className="size-4.5" />,
+									},
+								];
 
-						const rect = e.currentTarget.getBoundingClientRect();
-						setContextMenu({ x: rect.right, y: rect.bottom + 8, visible: true, items, align: "end" });
-					}}
-				>
-					<Bars3Icon className="size-4.5 stroke-1 stroke-current" />
-				</ShellButton>
-				{accountinfo ? (
-					<UserCard
-						avatar={
-							accountinfo.avatar ? (
-								typeof accountinfo.avatar === "string" ? (
-									<img src={accountinfo.avatar} alt={`${accountinfo.display}'s avatar`} className="size-7 rounded-full pointer-events-none select-none" />
-								) : (
-									accountinfo.avatar
-								)
-							) : (
-								<UserCircleIcon
-									className={
-										"size-7" +
-										" " +
-										`
+								const rect = e.currentTarget.getBoundingClientRect();
+								setContextMenu({ x: rect.right, y: rect.bottom + 8, visible: true, items, align: "end" });
+							}}
+						>
+							<Bars3Icon className="size-4.5 stroke-1 stroke-current" />
+						</ShellButton>
+						{accountinfo ? (
+							<UserCard
+								avatar={
+									accountinfo.avatar ? (
+										typeof accountinfo.avatar === "string" ? (
+											<img src={accountinfo.avatar} alt={`${accountinfo.display}'s avatar`} className="size-7 rounded-full pointer-events-none select-none" />
+										) : (
+											accountinfo.avatar
+										)
+									) : (
+										<UserCircleIcon
+											className={
+												"size-7" +
+												" " +
+												`
 								${settings.brightness === "light" ? "text-(--text-secondary)" : "text-(--text-primary)"}
 							`
-									}
-								/>
-							)
-						}
-						id={accountinfo.id}
-						display={accountinfo.display}
-						handle={accountinfo.handle}
-					/>
-				) : (
-					<UserCircleIcon
-						className={
-							"size-8" +
-							" " +
-							"cursor-pointer" +
-							`
+											}
+										/>
+									)
+								}
+								id={accountinfo.id}
+								display={accountinfo.display}
+								handle={accountinfo.handle}
+							/>
+						) : (
+							<UserCircleIcon
+								className={
+									"size-8" +
+									" " +
+									"cursor-pointer" +
+									`
                         ${settings.brightness === "light" ? "text-(--text-secondary)" : "text-(--text-primary)"}
                     `
-						}
-						onClick={() => {
-							newTab({
-								id: createId(),
-								url: "about:account",
-								displayUrl: "about:account",
-								title: "Fracital Account",
-								icon: null,
-								current: true,
-							});
-						}}
-					/>
-				)}
-				</>
+								}
+								onClick={() => {
+									newTab({
+										id: createId(),
+										url: "about:account",
+										displayUrl: "about:account",
+										title: "Fracital Account",
+										icon: null,
+										current: true,
+									});
+								}}
+							/>
+						)}
+					</>
 				)}
 			</div>
 			{contextMenu?.visible && <ContextMenu items={contextMenu.items} position={{ x: contextMenu.x, y: contextMenu.y }} align={contextMenu.align} onClose={() => setContextMenu(null)} />}

@@ -233,13 +233,7 @@ const authOptions = (pool: Pool) => ({
 	},
 	advanced: { ipAddress: { ipAddressHeaders: ["x-forwarded-for"], trustedProxies: CLOUDFLARE_PROXIES } },
 	session: { expiresIn: 60 * 60 * 24 * 30 },
-	plugins: [
-		lastfmPlugin(),
-		passkeyPlugin(),
-		terbiumPlugin(userId => invalidateUser(userId)),
-		handoffPlugin(),
-		...(process.env.BETTER_AUTH_API_KEY?.trim() ? [dash()] : []),
-	],
+	plugins: [lastfmPlugin(), passkeyPlugin(), terbiumPlugin(userId => invalidateUser(userId)), handoffPlugin(), ...(process.env.BETTER_AUTH_API_KEY?.trim() ? [dash()] : [])],
 	hooks: {
 		// Removing the last passkey from an account with no other sign-in method would lock it out.
 		before: createAuthMiddleware(async ctx => {
@@ -1342,7 +1336,6 @@ else setTimeout(() => location.replace("/"), 1500);
 		const res = await removeUser(c.get("auth"), pool, target, c.req.raw.headers, true);
 		return c.json({ ok: true, ...res });
 	});
-
 
 	app.get("/api/me/discord/activity", async c => {
 		if (!discordBotToken()) return c.json({ available: false });

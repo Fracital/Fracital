@@ -206,14 +206,7 @@ export const ContextMenu = ({ items, position, onClose, align = "start" }: MenuP
 														{child.title}
 													</div>
 												) : (
-													<div
-														key={ci}
-														role="button"
-														tabIndex={0}
-														className={`flex items-center justify-between gap-5 leading-none pl-3 p-2.5 text-sm rounded-md cursor-pointer duration-150 ${rowHover}`}
-														onClick={e => runChild(e, child)}
-														onKeyDown={e => runChildKey(e, child)}
-													>
+													<div key={ci} role="button" tabIndex={0} className={`flex items-center justify-between gap-5 leading-none pl-3 p-2.5 text-sm rounded-md cursor-pointer duration-150 ${rowHover}`} onClick={e => runChild(e, child)} onKeyDown={e => runChildKey(e, child)}>
 														<div className="min-w-0 truncate font-medium">{child.title}</div>
 														{renderIcon(child)}
 													</div>

@@ -1,6 +1,23 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useShallow } from "zustand/react/shallow";
-import { AdjustmentsHorizontalIcon, ArrowPathRoundedSquareIcon, ArrowsPointingInIcon, BackwardIcon, ChatBubbleBottomCenterTextIcon, ChevronUpIcon, FilmIcon, ForwardIcon, InformationCircleIcon, MusicalNoteIcon, PauseIcon, PhotoIcon, PlayIcon, QueueListIcon, SpeakerWaveIcon, SpeakerXMarkIcon } from "@heroicons/react/24/solid";
+import {
+	AdjustmentsHorizontalIcon,
+	ArrowPathRoundedSquareIcon,
+	ArrowsPointingInIcon,
+	BackwardIcon,
+	ChatBubbleBottomCenterTextIcon,
+	ChevronUpIcon,
+	FilmIcon,
+	ForwardIcon,
+	InformationCircleIcon,
+	MusicalNoteIcon,
+	PauseIcon,
+	PhotoIcon,
+	PlayIcon,
+	QueueListIcon,
+	SpeakerWaveIcon,
+	SpeakerXMarkIcon,
+} from "@heroicons/react/24/solid";
 import { useMusicStore, usePlaybackStore, useSettingsStore, useTabsStore } from "../../store";
 import type { Track } from "../../types";
 import { AudvisVisualizer } from "../../components/AudvisVisualizer";
@@ -416,7 +433,7 @@ const InfoPanel = ({ track }: { track: Track }) => {
 	const trackData = trackResult?.key === key ? trackResult.data : null;
 	const albumData = albumResult?.key === key ? albumResult.data : null;
 	const bio = trackData?.bio ?? albumData?.bio ?? null;
-	const sourceUrl = bio ? (trackData?.bio ? trackData.sourceUrl ?? trackData.bio.url : albumData?.bio?.url) : trackData?.sourceUrl;
+	const sourceUrl = bio ? (trackData?.bio ? (trackData.sourceUrl ?? trackData.bio.url) : albumData?.bio?.url) : trackData?.sourceUrl;
 
 	useEffect(() => {
 		let alive = true;
@@ -501,8 +518,7 @@ const InfoPanel = ({ track }: { track: Track }) => {
 				)}
 				{!bio && sourceUrl && (
 					<p className="mt-2 text-sm text-(--text-tertiary)">
-						<HolyText text="Source:" />{" "}
-						<HolyLink href={sourceUrl} target="_blank" text="Last.fm" className="underline underline-offset-2 hover:text-(--text-primary)" />
+						<HolyText text="Source:" /> <HolyLink href={sourceUrl} target="_blank" text="Last.fm" className="underline underline-offset-2 hover:text-(--text-primary)" />
 					</p>
 				)}
 			</section>
@@ -532,11 +548,7 @@ const InfoPanel = ({ track }: { track: Track }) => {
 								<span>{row.value}</span>
 							</div>
 						))}
-						{rows.length === 0 && (
-							<p className="col-span-2 text-sm text-(--text-secondary)">
-								{loading ? <HolyText text="Loading release details…" /> : <HolyText text="No release details are available." />}
-							</p>
-						)}
+						{rows.length === 0 && <p className="col-span-2 text-sm text-(--text-secondary)">{loading ? <HolyText text="Loading release details…" /> : <HolyText text="No release details are available." />}</p>}
 					</div>
 				)}
 			</section>
@@ -1105,7 +1117,11 @@ export const MusicPlayer = ({ query, className, onClose }: MusicPlayerProps) => 
 												<span aria-hidden className="block size-11 @lg:size-13 p-1.5">
 													<span className="block size-full rounded-full border-4 border-current border-t-transparent animate-spin" />
 												</span>
-											) : isPlaying ? <PauseIcon className="size-11 @lg:size-13 overflow-visible stroke-current stroke-3 [stroke-linejoin:round] [&_path]:[vector-effect:non-scaling-stroke] duration-150" /> : <PlayIcon className="size-11 @lg:size-13 translate-x-0.5" />}
+											) : isPlaying ? (
+												<PauseIcon className="size-11 @lg:size-13 overflow-visible stroke-current stroke-3 [stroke-linejoin:round] [&_path]:[vector-effect:non-scaling-stroke] duration-150" />
+											) : (
+												<PlayIcon className="size-11 @lg:size-13 translate-x-0.5" />
+											)}
 										</button>
 										<button title="Next" className={transportButton} onClick={next}>
 											<ForwardIcon className="size-8 @lg:size-10" />

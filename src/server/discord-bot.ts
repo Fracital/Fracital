@@ -84,7 +84,6 @@ export interface DiscordPresence {
 	voice: { guild: string; channel: string; video: boolean; stream: boolean; muted: boolean; deafened: boolean } | null;
 }
 
-
 const presences = new Map<string, { status: string; activities: RawActivity[] }>();
 /** The servers each user is a member of (offline members have no presence but are still members). */
 const memberGuilds = new Map<string, Set<string>>();
@@ -177,7 +176,6 @@ export function discordPresenceFor(userId: string): DiscordPresence | null {
 			: null,
 	};
 }
-
 
 type State = "off" | "connecting" | "ready" | "failed";
 let state: State = "off";

@@ -753,29 +753,29 @@ const Games = ({ query, className }: GamesProps) => {
 									</>
 								}
 							>
-									{!savesReady ? (
-										<div className="absolute inset-0 flex items-center justify-center bg-(--primary)">
-											<div className="flex flex-col items-center gap-3">
-												<div className="size-12 border-4 border-(--accent) border-t-transparent rounded-full animate-spin"></div>
-												<HolyText className="text-lg font-semibold text-(--text-secondary)" text="Loading saves..." />
-											</div>
+								{!savesReady ? (
+									<div className="absolute inset-0 flex items-center justify-center bg-(--primary)">
+										<div className="flex flex-col items-center gap-3">
+											<div className="size-12 border-4 border-(--accent) border-t-transparent rounded-full animate-spin"></div>
+											<HolyText className="text-lg font-semibold text-(--text-secondary)" text="Loading saves..." />
 										</div>
-									) : selectedGame.type === "flash" ? (
-										<RufflePlayer
-											data={selectedGame.data}
-											className="w-full h-full"
-											autoplay={true}
-											quality="high"
-											scale="showAll"
-											backgroundColor="#000000"
-											volume={isMuted ? 0 : 1}
-											onPlayerReady={player => {
-												rufflePlayerRef.current = player;
-											}}
-										/>
-									) : (
-										<HTMLPlayer folderPath={selectedGame.folderPath} gameFile="index.html" className="w-full h-full" />
-									)}
+									</div>
+								) : selectedGame.type === "flash" ? (
+									<RufflePlayer
+										data={selectedGame.data}
+										className="w-full h-full"
+										autoplay={true}
+										quality="high"
+										scale="showAll"
+										backgroundColor="#000000"
+										volume={isMuted ? 0 : 1}
+										onPlayerReady={player => {
+											rufflePlayerRef.current = player;
+										}}
+									/>
+								) : (
+									<HTMLPlayer folderPath={selectedGame.folderPath} gameFile="index.html" className="w-full h-full" />
+								)}
 							</GameStage>
 							<div className={`flex items-center justify-between gap-4 p-4 rounded-xl ${settings.brightness === "dark" ? "bg-[#ffffff10]" : "bg-[#00000010]"}`}>
 								<div className="flex items-center gap-3">

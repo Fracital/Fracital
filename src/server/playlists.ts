@@ -125,7 +125,6 @@ export function registerPlaylistRoutes(app: Hono<Env>) {
 		return c.json({ ok: true });
 	});
 
-
 	app.get("/api/me/feedback", async c => {
 		const { rows } = await c.get("pool").query<{ song_key: string; score: number; data: unknown }>("select song_key, score, data from fracital_track_feedback where user_id = $1 order by updated_at desc", [c.get("user").id]);
 		return c.json({
