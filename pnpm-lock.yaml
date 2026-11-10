@@ -47,9 +47,6 @@ importers:
       '@mercuryworkshop/scramjet-controller':
         specifier: ^0.0.14
         version: 0.0.14(@mercuryworkshop/scramjet@2.0.67-alpha.2)
-      '@mercuryworkshop/wisp-js':
-        specifier: ^0.5.2
-        version: 0.5.2
       '@monaco-editor/react':
         specifier: ^4.7.0
         version: 4.7.0(monaco-editor@0.56.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
@@ -77,6 +74,9 @@ importers:
       dotenv:
         specifier: ^18.0.9
         version: 18.0.9
+      holywisp:
+        specifier: 0.1.0-nightly.202611101942.g9f75cc4
+        version: 0.1.0-nightly.202611101942.g9f75cc4
       hono:
         specifier: ^4.13.16
         version: 4.13.16
@@ -770,10 +770,6 @@ packages:
   '@mercuryworkshop/scramjet@2.0.67-alpha.2':
     resolution: {integrity: sha512-E/vmwQTqIoYmPLDb76t8Nv7O9kUdv8C6mRejdsT8APk5vBUYyIMI6CO0gyUVRX77Fc/NyoopfZNSaJ4qufJEww==}
 
-  '@mercuryworkshop/wisp-js@0.5.2':
-    resolution: {integrity: sha512-3HeXCc4qb0iDwYdU9u1fZ2lRUtwM0hzkCrs+yLqGD2Dvr0A4jahLJ5X8CvqEdILpCF21wHIfa54t4r5x7Q1JpQ==}
-    hasBin: true
-
   '@monaco-editor/loader@1.7.0':
     resolution: {integrity: sha512-gIwR1HrJrrx+vfyOhYmCZ0/JcWqG5kbfG7+d3f/C1LXk2EvzAbHSg3MQ5lO2sMlo9izoAZ04shohfKLVT6crVA==}
 
@@ -1437,10 +1433,6 @@ packages:
     engines: {node: ^6 || ^7 || ^8 || ^9 || ^10 || ^11 || ^12 || >=13.7}
     hasBin: true
 
-  bufferutil@4.1.0:
-    resolution: {integrity: sha512-ZMANVnAixE6AWWnPzlW2KpUrxhm9woycYvPOo67jWHyFowASTEd9s+QN1EIMsSDtwhIxN4sWE1jotpuDUIgyIw==}
-    engines: {node: '>=6.14.2'}
-
   cacheable@2.5.0:
     resolution: {integrity: sha512-60cyAOytib/OzBw1JNSoSV/boK1AtHryDIjvVBk7XbN4ugfkM3+Sry7fEjNgPMGgOjuaZPAp8ruZ0Cxafwyq9g==}
 
@@ -1461,10 +1453,6 @@ packages:
   clone-regexp@3.0.0:
     resolution: {integrity: sha512-ujdnoq2Kxb8s3ItNBtnYeXdm07FcU0u8ARAT1lQ2YdMwQC+cdiXX8KoqMVuglztILivceTtp4ivqGSmEmhBUJw==}
     engines: {node: '>=12'}
-
-  commander@15.0.0:
-    resolution: {integrity: sha512-z67u4ZhzCL/Tydu1lJARtEZYWbWaN7oYLHbsuzocr6y4N6WZAagG3RQ4FW61V1/0+jImpj293XfrcYnd1qxtPg==}
-    engines: {node: '>=22.12.0'}
 
   compressorjs@1.4.0:
     resolution: {integrity: sha512-cfBWoYc4EkIgsbphT7R0SwSHHY+zGSMBaBK0e0T+iPJejKpsIyco3OoQUdH6ghTVrH2bysXjhlO5zTDPJWzSmQ==}
@@ -1762,6 +1750,10 @@ packages:
   hermes-parser@0.25.1:
     resolution: {integrity: sha512-6pEjquH3rqaI6cYAXYPcz9MS4rY6R4ngRgrgfDshRptUZIc3lw0MCIJIGDj9++mfySOuPTHB4nrSW99BCvOPIA==}
 
+  holywisp@0.1.0-nightly.202611101942.g9f75cc4:
+    resolution: {integrity: sha512-5pLlCBvd/aGPcwKxGQ/u1VqncY7STcZ4xrlzafloiTal89zZ4jB1hfdgBV59vUvkEAmajElLKLmt7rkAPcM3JA==}
+    engines: {node: '>=20'}
+
   hono@4.13.16:
     resolution: {integrity: sha512-AOLOEhvrV+iH92xXCnFr/5+3KjPKcI3xP63XJtX5spAnkznPdHijlIsUTpi7/9EhWqrTCekw5c5zh1K+YsVw7A==}
     engines: {node: '>=16.9.0'}
@@ -1813,10 +1805,6 @@ packages:
   ip-regex@5.0.0:
     resolution: {integrity: sha512-fOCG6lhoKKakwv+C6KdsOnGvgXnmgfmp0myi3bcNwj3qfwPAxRKWEuFhvEFF7ceYIz6+1jRZ+yguLFAmUNPEfw==}
     engines: {node: ^12.20.0 || ^14.13.1 || >=16.0.0}
-
-  ipaddr.js@2.5.0:
-    resolution: {integrity: sha512-aq+t5NAc+cS6rZQQVWC2x98CPqGtKKTMDd4Gaodv0wShnItdKg/51djkGJ1hqH+Oy0ivDftCbSLCQob8zso01w==}
-    engines: {node: '>= 10'}
 
   is-binary-path@2.1.0:
     resolution: {integrity: sha512-ZMERYes6pDydyuGidse7OsHxtbI7WVeUEozgR/g7rd0xUimYNlvZRE/K2MgZTjWy725IfelLeVcEM97mmtRGXw==}
@@ -2066,10 +2054,6 @@ packages:
 
   node-fzf@0.14.0:
     resolution: {integrity: sha512-VZU+nuj8zzEEtGzeYGGzKdSmj7W9oHm9xK2A1g1kEPmlyK3726T1iT1e9FCxWiaKKjEn3oqR+p3So7EjU94JaA==}
-    hasBin: true
-
-  node-gyp-build@4.8.4:
-    resolution: {integrity: sha512-LA4ZjwlnUblHVgq0oBF3Jl/6h/Nvs5fzBLwdEF4nuxnFdsfajde4WfxtJr3CaiH+F6ewcIB/q4jQ4UzPyid+CQ==}
     hasBin: true
 
   node-releases@2.0.63:
@@ -2548,18 +2532,6 @@ packages:
   word-wrap@1.2.5:
     resolution: {integrity: sha512-BN22B5eaMMI9UMtjrGd5g5eCYPpCPDUy0FJXbYsaT5zYxjFOckS53SQDE3pWkVoWpHXVb3BrYcEN4Twa55B5cA==}
     engines: {node: '>=0.10.0'}
-
-  ws@8.22.1:
-    resolution: {integrity: sha512-oyL6OPYme/CmiFvNuGzeoxCJ4nOrZE2O1FwM9MWM1AsGri6nLXB2pg+lNA8aLeXMSav0J6eIVS1j6vUPzUtK9g==}
-    engines: {node: '>=10.0.0'}
-    peerDependencies:
-      bufferutil: ^4.0.1
-      utf-8-validate: '>=5.0.2'
-    peerDependenciesMeta:
-      bufferutil:
-        optional: true
-      utf-8-validate:
-        optional: true
 
   xtend@4.0.2:
     resolution: {integrity: sha512-LKYU1iAXJXUgAXn9URjiu+MWhyUXHsvfp7mcuYm9dSUKK0/CjtrUwFAxD82/mCWbtLsGjFIad0wIsod4zrTAEQ==}
@@ -3069,15 +3041,6 @@ snapshots:
       htmlparser2: 12.0.0
       idb: 8.0.4
       parse-domain: 8.4.0
-
-  '@mercuryworkshop/wisp-js@0.5.2':
-    dependencies:
-      bufferutil: 4.1.0
-      commander: 15.0.0
-      ipaddr.js: 2.5.0
-      ws: 8.22.1(bufferutil@4.1.0)
-    transitivePeerDependencies:
-      - utf-8-validate
 
   '@monaco-editor/loader@1.7.0':
     dependencies:
@@ -3695,10 +3658,6 @@ snapshots:
       node-releases: 2.0.63
       update-browserslist-db: 1.3.4(browserslist@4.29.5)
 
-  bufferutil@4.1.0:
-    dependencies:
-      node-gyp-build: 4.8.4
-
   cacheable@2.5.0:
     dependencies:
       '@cacheable/memory': 2.2.0
@@ -3747,8 +3706,6 @@ snapshots:
   clone-regexp@3.0.0:
     dependencies:
       is-regexp: 3.1.0
-
-  commander@15.0.0: {}
 
   compressorjs@1.4.0:
     dependencies:
@@ -4064,6 +4021,8 @@ snapshots:
     dependencies:
       hermes-estree: 0.25.1
 
+  holywisp@0.1.0-nightly.202611101942.g9f75cc4: {}
+
   hono@4.13.16: {}
 
   hookified@1.15.1: {}
@@ -4105,8 +4064,6 @@ snapshots:
   inherits@2.0.4: {}
 
   ip-regex@5.0.0: {}
-
-  ipaddr.js@2.5.0: {}
 
   is-binary-path@2.1.0:
     dependencies:
@@ -4314,8 +4271,6 @@ snapshots:
       restore-cursor: 3.1.0
       string-width: 2.1.1
       ttys: 0.0.3
-
-  node-gyp-build@4.8.4: {}
 
   node-releases@2.0.63: {}
 
@@ -4725,10 +4680,6 @@ snapshots:
   win-guid@0.2.1: {}
 
   word-wrap@1.2.5: {}
-
-  ws@8.22.1(bufferutil@4.1.0):
-    optionalDependencies:
-      bufferutil: 4.1.0
 
   xtend@4.0.2: {}
 

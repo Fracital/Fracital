@@ -1,8 +1,9 @@
 minimumReleaseAgeExclude:
     # our own package: every nightly is minutes old when a pin bump installs it
     - "@sysce/stomp"
+    # holyWisp (the relay), same reason: its nightlies are minutes old too
+    - holywisp
 onlyBuiltDependencies:
     - "@mercuryworkshop/scramjet"
     - "@swc/core"
-    - bufferutil
     - esbuild

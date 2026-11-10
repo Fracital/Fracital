@@ -11,12 +11,12 @@ import { fileURLToPath } from "node:url";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { version } from "./package.json";
-import { server as wisp } from "@mercuryworkshop/wisp-js/server";
+import { holywisp } from "holywisp";
 import { create as createYoutubeDl } from "youtube-dl-exec";
 import { cloakMiddleware, isDecoyHost } from "./src/server/cloak-routing";
 import { injectAdTag } from "./src/server/ad-tag";
 import { type LegalPage, renderLegalPage } from "./src/server/legal";
-import { acceptedRelayPath, injectClientConfig, relayPath } from "./src/server/relay-gate";
+import { acceptedRelayPath, injectClientConfig, RELAY_OPTIONS, relayPath } from "./src/server/relay-gate";
 import { ensureSeedCookie, sealApiResponses } from "./src/server/api-crypto";
 import { rankAlbums, rankArtists, rankTracks } from "./src/server/music-rank";
 import { artistBanner, artistBio, artistTopTracks, buildRadio, findDeezerArtist, relatedArtists } from "./src/server/music-radio";
@@ -511,9 +511,10 @@ export function fsrv() {
 			root: path.join(__dirname, "dist"),
 		}),
 	);
-	wisp.options.dns_method = "resolve";
-	wisp.options.dns_servers = ["1.1.1.3", "1.0.0.3"];
-	wisp.options.dns_result_order = "ipv4first";
+	// The relay runs as a child process (holyWisp). It does not outlive this
+	// one: the wrapper kills it on exit and on SIGINT/SIGTERM/SIGHUP, and if
+	// this process is SIGKILLed the server sees its stdin pipe close and stops.
+	const wisp = new holywisp(RELAY_OPTIONS);
 	const server = createServer(
 		getRequestListener(app.fetch, {
 			errorHandler: err => {
@@ -529,15 +530,24 @@ export function fsrv() {
 	if (!relayPath()) console.warn("WISP_GATE_KEY is not set; relay is on the legacy path");
 	server.on("upgrade", (req: IncomingMessage, socket: any, head: Buffer) => {
 		if (req.url === relay) {
-			wisp.routeRequest(req as any, socket as any, head as any);
+			wisp.route(req, socket, head);
 		} else {
 			socket.destroy();
 		}
 	});
 
-	server.listen(port, () => {
-		console.log(`\x1b[38;2;251;116;254mFracital v${version} is running on port ${port}\x1b[0m`);
-	});
+	// Listen only once the relay answers. A relay that will not start fails the
+	// process, so a deploy's health check fails and rolls back.
+	wisp.start(1).then(
+		() =>
+			server.listen(port, () => {
+				console.log(`\x1b[38;2;251;116;254mFracital v${version} is running on port ${port}\x1b[0m`);
+			}),
+		err => {
+			console.error(err);
+			process.exit(1);
+		},
+	);
 
 	process.on("SIGINT", () => {
 		console.log("\x1b[0m");

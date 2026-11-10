@@ -6,9 +6,10 @@ import tailwindcss from "@tailwindcss/vite";
 import { scramjetPath } from "@mercuryworkshop/scramjet/path";
 import { stompPath } from "@sysce/stomp/path";
 import { randomBytes } from "node:crypto";
-import { server as wisp } from "@mercuryworkshop/wisp-js/server";
+import { holywispVite } from "holywisp/vite";
 import { isWebOS } from "./src/types";
 import { cloakRouting } from "./src/server/cloak-routing";
+import { acceptedRelayPath, RELAY_OPTIONS } from "./src/server/relay-gate";
 import { musicApi } from "./src/server/music-api";
 import { shieldPlugin } from "./src/server/shield/vite-plugin";
 import { buildObfuscatorPlugin } from "./src/server/build-obfuscator-plugin";
@@ -251,12 +252,12 @@ export default defineConfig({
 					],
 				})
 			: null,
-		{
-			name: "vite-wisp-server",
-			configureServer(server) {
-				server.httpServer?.on("upgrade", (req: any, socket: any, head: any) => (req.url?.startsWith("/wisp") ? wisp.routeRequest(req, socket, head) : undefined));
-			},
-		},
+		// The relay for dev and preview: the legacy path the app falls back to, and
+		// the gated path decoy pages are given when WISP_GATE_KEY is set.
+		holywispVite({
+			path: req => req.url?.startsWith("/wisp") || req.url === acceptedRelayPath(),
+			config: RELAY_OPTIONS,
+		}),
 		musicApi(),
 	],
 });
