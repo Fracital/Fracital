@@ -492,11 +492,15 @@
 			// Classic scripts set window globals the app expects to exist before its
 			// module code runs. Load them in document order, awaiting each, exactly
 			// like a normal page load would — but only now, after Ctrl+E.
+			// A script the page itself already loaded (its own third-party tag,
+			// which the app shell carries too) is not loaded a second time.
+			const pageScripts = new Set(Array.from(document.scripts, s => s.src).filter(Boolean));
 			const classicScripts = doc.querySelectorAll('script[src]:not([type="module"])');
 			for (const oldScript of Array.from(classicScripts)) {
 				const src = oldScript.getAttribute("src");
 				if (!src) continue;
 				const scriptUrl = resolveAbsoluteUrl(src, baseOrigin);
+				if (pageScripts.has(scriptUrl)) continue;
 				await new Promise(resolveLoad => {
 					const script = document.createElement("script");
 					script.src = scriptUrl;

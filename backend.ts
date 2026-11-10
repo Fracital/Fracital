@@ -14,6 +14,7 @@ import { version } from "./package.json";
 import { server as wisp } from "@mercuryworkshop/wisp-js/server";
 import { create as createYoutubeDl } from "youtube-dl-exec";
 import { cloakMiddleware, isDecoyHost } from "./src/server/cloak-routing";
+import { injectAdTag } from "./src/server/ad-tag";
 import { type LegalPage, renderLegalPage } from "./src/server/legal";
 import { acceptedRelayPath, injectClientConfig, relayPath } from "./src/server/relay-gate";
 import { ensureSeedCookie, sealApiResponses } from "./src/server/api-crypto";
@@ -485,7 +486,8 @@ export function fsrv() {
 		if (!appShell) return c.text("Not built", 503);
 		ensureSeedCookie(c);
 		c.header("Cache-Control", "no-store");
-		return c.html(appShell);
+		// The ad tag in the shell is keyed by the hostname this request came in on.
+		return c.html(injectAdTag(appShell, c.req.header("x-forwarded-host") || c.req.header("host") || ""));
 	});
 
 	// Static caching policy: content-hashed bundles (/assets/[hash].js) are

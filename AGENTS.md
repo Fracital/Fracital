@@ -102,6 +102,13 @@ regression, even if the site still works.
   restart.
 - `CLOAK_DIRECT_HOSTS` always serves the real app; never put a decoy domain in
   it.
+- The ad partner's tag is written server-side per request hostname
+  (`src/server/ad-tag.ts`): `//js.rev.iq/<hostname>` in the app shell on every
+  host and in every decoy page, keyed by that page's own hostname (no `www.`).
+  The static tag in `index.html` is only the fallback for a request with no
+  usable hostname. A decoy page must never request another site's tag, and
+  the decoy loader skips a script the page already loaded, so opening the app
+  does not load the tag twice.
 
 ## Verification before you hand work off
 

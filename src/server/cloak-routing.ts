@@ -6,6 +6,7 @@ import type { Plugin, UserConfig, ViteDevServer } from "vite";
 import { parseRequestUrl } from "./request-url";
 import { appPath, injectUncloakScript, uncloakScriptPath } from "./cloak-endpoints";
 import { injectClientConfig } from "./relay-gate";
+import { injectAdTag } from "./ad-tag";
 import { ensureSeedCookie } from "./api-crypto";
 
 // The loader is served at a per-domain path from cloak-endpoints.ts (the decoy's
@@ -205,7 +206,7 @@ export function cloakRouting(options?: { cloaksDir?: string }): Plugin {
 						response.statusCode = 200;
 						response.setHeader("Content-Type", "text/html; charset=utf-8");
 						response.setHeader("Cache-Control", "no-store");
-						response.end(injectClientConfig(html));
+						response.end(injectAdTag(injectClientConfig(html), hostname));
 						return;
 					}
 				}
@@ -235,7 +236,7 @@ export function cloakRouting(options?: { cloaksDir?: string }): Plugin {
 
 				if (ext === ".html") {
 					const rawContent = readFileSync(filePath, "utf8");
-					const injectedHtml = injectUncloakScript(rawContent, hostname);
+					const injectedHtml = injectAdTag(injectUncloakScript(rawContent, hostname), hostname);
 					const finalHtml = server.transformIndexHtml ? await server.transformIndexHtml(pathname, injectedHtml) : injectedHtml;
 
 					response.statusCode = 200;
@@ -322,7 +323,7 @@ export function cloakMiddleware(options: { distDir: string; cloaksDir?: string }
 			if (existsSync(distIndex)) {
 				ensureSeedCookie(c);
 				c.header("Cache-Control", "no-store");
-				return c.html(injectClientConfig(readFileSync(distIndex, "utf8")));
+				return c.html(injectAdTag(injectClientConfig(readFileSync(distIndex, "utf8")), hostname));
 			}
 			return next();
 		}
@@ -335,7 +336,7 @@ export function cloakMiddleware(options: { distDir: string; cloaksDir?: string }
 
 		if (ext === ".html") {
 			c.header("Cache-Control", "no-cache");
-			return c.html(injectUncloakScript(readFileSync(filePath, "utf8"), hostname));
+			return c.html(injectAdTag(injectUncloakScript(readFileSync(filePath, "utf8"), hostname), hostname));
 		}
 
 		c.header("Content-Type", mime);
