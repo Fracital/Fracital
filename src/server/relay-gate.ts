@@ -12,7 +12,7 @@
  * The relay itself is holyWisp, a child process the backend (and the vite dev
  * server) starts and hands upgrades to; RELAY_OPTIONS is its config for both.
  */
-import type { holywispOptions } from "holywisp";
+import type { holyWispOptions } from "holywisp";
 
 const RELAY_SEGMENT = "pipe";
 const LEGACY_PATH = "/wisp/";
@@ -45,7 +45,7 @@ export function injectClientConfig(html: string): string {
  * numbers (abulxt roles/edge_wisp), which carry this site's relay traffic in
  * production; anything not set here keeps holyWisp's default.
  */
-export const RELAY_OPTIONS: holywispOptions = {
+export const RELAY_OPTIONS: holyWispOptions = {
 	// A loopback port of its own, picked at start; route() is the only way in.
 	host: "127.0.0.1",
 	port: 0,

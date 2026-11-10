@@ -11,7 +11,7 @@ import { fileURLToPath } from "node:url";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { version } from "./package.json";
-import { holywisp } from "holywisp";
+import { holyWisp } from "holywisp";
 import { create as createYoutubeDl } from "youtube-dl-exec";
 import { cloakMiddleware, isDecoyHost } from "./src/server/cloak-routing";
 import { injectAdTag } from "./src/server/ad-tag";
@@ -514,7 +514,7 @@ export function fsrv() {
 	// The relay runs as a child process (holyWisp). It does not outlive this
 	// one: the wrapper kills it on exit and on SIGINT/SIGTERM/SIGHUP, and if
 	// this process is SIGKILLed the server sees its stdin pipe close and stops.
-	const wisp = new holywisp(RELAY_OPTIONS);
+	const wisp = new holyWisp(RELAY_OPTIONS);
 	const server = createServer(
 		getRequestListener(app.fetch, {
 			errorHandler: err => {

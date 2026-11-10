@@ -6,7 +6,7 @@ import tailwindcss from "@tailwindcss/vite";
 import { scramjetPath } from "@mercuryworkshop/scramjet/path";
 import { stompPath } from "@sysce/stomp/path";
 import { randomBytes } from "node:crypto";
-import { holywispVite } from "holywisp/vite";
+import { holyWispVite } from "holywisp/vite";
 import { isWebOS } from "./src/types";
 import { cloakRouting } from "./src/server/cloak-routing";
 import { acceptedRelayPath, RELAY_OPTIONS } from "./src/server/relay-gate";
@@ -254,7 +254,7 @@ export default defineConfig({
 			: null,
 		// The relay for dev and preview: the legacy path the app falls back to, and
 		// the gated path decoy pages are given when WISP_GATE_KEY is set.
-		holywispVite({
+		holyWispVite({
 			path: req => req.url?.startsWith("/wisp") || req.url === acceptedRelayPath(),
 			config: RELAY_OPTIONS,
 		}),

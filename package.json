@@ -37,7 +37,7 @@
 		"browser-id3-writer": "^6.4.0",
 		"compressorjs": "^1.4.0",
 		"dotenv": "^18.0.9",
-		"holywisp": "0.1.0-nightly.202611101942.g9f75cc4",
+		"holywisp": "0.1.0-nightly.202611102058.g92fb98d",
 		"hono": "^4.13.16",
 		"is-valid-domain": "^0.1.6",
 		"jszip": "^3.10.2",
