@@ -13,7 +13,7 @@
  */
 import { create } from "zustand";
 import { createId } from "@paralleldrive/cuid2";
-import type { Assets, Frame, HelperNames, NavigateInfo, RequestEvent, RequestRule, StaleInfo, StompController } from "stomp-rewrite";
+import type { Assets, Frame, HelperNames, NavigateInfo, RequestEvent, RequestRule, StaleInfo, StompController } from "@sysce/stomp";
 import { useTabsStore } from "../store";
 import { wispURL } from "../types";
 
@@ -42,12 +42,14 @@ const STOMP_ASSETS: Assets = {
 const CONTROLLER_MODULE = `${STOMP_DIRECTORY}api.mjs`;
 /** The epoxy transport module (Fracital build), imported by stomp's transport worker, never by a page. */
 const TRANSPORT_MODULE = `${STOMP_DIRECTORY}link.mjs`;
+/** stomp-h3 (HTTP/3 over the relay's UDP streams), loaded by the transport worker once an origin offers h3; copied by vite under a neutral name. */
+const H3_MODULE = `${STOMP_DIRECTORY}q3.mjs`;
 /** Shown by the service worker for a document it failed to produce (src/stomp/error.html, copied by vite). */
 const ERROR_PAGE = `${STOMP_DIRECTORY}err.html`;
 /** The controller id for this browser tab; one per tab, kept across reloads. */
 const ID_KEY = "fracital:st-controller";
 
-type StompModule = typeof import("stomp-rewrite");
+type StompModule = typeof import("@sysce/stomp");
 
 export type StompStatus = "idle" | "booting" | "ready" | "failed";
 
@@ -146,7 +148,7 @@ export const bootStomp = (): Promise<StompController> => {
 				// A descriptor: the controller imports and constructs the transport
 				// in its own worker, off this thread, which is what lets a proxied
 				// page's synchronous XHR complete.
-				transport: { module: TRANSPORT_MODULE, options: [{ wisp: wispURL }] },
+				transport: { module: TRANSPORT_MODULE, options: [{ wisp: wispURL }], http3: { module: H3_MODULE } },
 				directory: STOMP_DIRECTORY,
 				assets: STOMP_ASSETS,
 				id: controllerId(),

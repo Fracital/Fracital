@@ -1,3 +1,6 @@
+minimumReleaseAgeExclude:
+    # our own package: every nightly is minutes old when a pin bump installs it
+    - "@sysce/stomp"
 onlyBuiltDependencies:
     - "@mercuryworkshop/scramjet"
     - "@swc/core"

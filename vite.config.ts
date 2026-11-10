@@ -4,7 +4,7 @@ import { viteStaticCopy } from "vite-plugin-static-copy";
 import react from "@vitejs/plugin-react-swc";
 import tailwindcss from "@tailwindcss/vite";
 import { scramjetPath } from "@mercuryworkshop/scramjet/path";
-import { stompPath } from "stomp-rewrite/path";
+import { stompPath } from "@sysce/stomp/path";
 import { randomBytes } from "node:crypto";
 import { server as wisp } from "@mercuryworkshop/wisp-js/server";
 import { isWebOS } from "./src/types";
@@ -193,6 +193,27 @@ export default defineConfig({
 							src: "node_modules/@mercuryworkshop/epoxy-transport/dist/index.mjs",
 							dest: STOMP_DIR,
 							rename: { stripBase: true, name: "link.mjs" },
+							overwrite: true,
+						},
+						// HTTP/3 for origins that offer it (stomp docs/http3.md): stomp-h3,
+						// which the transport worker imports only once an origin advertises
+						// h3. Neutral names; the module names its wasm, so that name is
+						// rewritten to match.
+						{
+							src: "node_modules/@mercuryworkshop/epoxy-transport/dist/h3/stomp_h3.js",
+							dest: STOMP_DIR,
+							rename: { stripBase: true, name: "q3.mjs" },
+							overwrite: true,
+							transform: (content: string | Buffer) => {
+								const text = content.toString();
+								if (!text.includes("stomp_h3_bg.wasm")) throw new Error("stomp-h3 no longer names stomp_h3_bg.wasm (epoxy build changed shape)");
+								return text.split("stomp_h3_bg.wasm").join("q3.wasm");
+							},
+						},
+						{
+							src: "node_modules/@mercuryworkshop/epoxy-transport/dist/h3/stomp_h3_bg.wasm",
+							dest: STOMP_DIR,
+							rename: { stripBase: true, name: "q3.wasm" },
 							overwrite: true,
 						},
 						// Transport engine wasm, self-hosted (never a CDN: filters
