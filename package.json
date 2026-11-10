@@ -31,7 +31,7 @@
 		"@mercuryworkshop/wisp-js": "^0.5.2",
 		"@monaco-editor/react": "^4.7.0",
 		"@paralleldrive/cuid2": "^3.3.0",
-		"@sysce/stomp": "4.2.0-nightly.202611100816.g6cc5692",
+		"@sysce/stomp": "4.2.0-nightly.202611101458.g70c72a0",
 		"@tailwindcss/vite": "^4.3.4",
 		"audvis": "^0.2.4",
 		"better-auth": "^1.7.18",

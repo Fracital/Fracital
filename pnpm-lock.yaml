@@ -57,8 +57,8 @@ importers:
         specifier: ^3.3.0
         version: 3.3.0
       '@sysce/stomp':
-        specifier: 4.2.0-nightly.202611100816.g6cc5692
-        version: 4.2.0-nightly.202611100816.g6cc5692
+        specifier: 4.2.0-nightly.202611101458.g70c72a0
+        version: 4.2.0-nightly.202611101458.g70c72a0
       '@tailwindcss/vite':
         specifier: ^4.3.4
         version: 4.3.4(vite@8.3.6(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15))
@@ -1055,8 +1055,8 @@ packages:
   '@swc/types@0.1.28':
     resolution: {integrity: sha512-V6Mnml8v09QALx6K0elJ7o9K/MkVDtW3t6L+7Ou/JcWtb3xwId2AH4FeOceySd2JaO87IMw4+6vSZxLm34LPbw==}
 
-  '@sysce/stomp@4.2.0-nightly.202611100816.g6cc5692':
-    resolution: {integrity: sha512-CwpghvVlizyAf2Bq72aDTQ1WtZr1RXN8Sq42zW2QXMv32u/Y+e7kH+lYvKYUMSdHEkSq+w/baq1HGMR+nLQeDg==}
+  '@sysce/stomp@4.2.0-nightly.202611101458.g70c72a0':
+    resolution: {integrity: sha512-2FS6q+yYNGkRR+apYMlgwMPzTiT8mGTUxHtJ92s74kWCQpc0IJ8v1zXPtcX5PsIxLcpH9mjDyIlAxI6MdGTvTg==}
     engines: {node: '>=22'}
 
   '@tailwindcss/node@4.3.4':
@@ -1284,10 +1284,6 @@ packages:
   asn1js@3.1.0:
     resolution: {integrity: sha512-HWYi1THkOqguCiO+vwj09ZkQFD2kKEsejYHAYCtX0D80WVdoDnvRc9IukXX/jeb0T9NRWJnRtqwdbHltnFjwXA==}
     engines: {node: '>=12.0.0'}
-
-  ast-types@0.16.3:
-    resolution: {integrity: sha512-FvWoWYfSCM6kRxCSH+MGLHIKKGRL6A6AW7Zek2O32REPQRdg131428uRTKMBYAeRd3XXAaHDS60Wpri7CdKDrA==}
-    engines: {node: '>=4'}
 
   async.parallellimit@0.5.2:
     resolution: {integrity: sha512-4Di2nFsb3jL7aUIICvRSvtw/oynpMIx0JrwYn5hqJI661Dd+mYBi2ElOukOQgRHihU1SCTapb86Vx/Snva5M1w==}
@@ -3330,11 +3326,10 @@ snapshots:
     dependencies:
       '@swc/counter': 0.1.3
 
-  '@sysce/stomp@4.2.0-nightly.202611100816.g6cc5692':
+  '@sysce/stomp@4.2.0-nightly.202611101458.g70c72a0':
     dependencies:
       '@javascript-obfuscator/escodegen': 2.4.2
       '@mercuryworkshop/proxy-transports': 1.0.2
-      ast-types: 0.16.3
       crypto-js: 4.2.0
       css-tree: 3.2.1
       entities: 9.0.0
@@ -3581,10 +3576,6 @@ snapshots:
     dependencies:
       pvtsutils: 1.3.6
       pvutils: 1.2.0
-      tslib: 2.9.1
-
-  ast-types@0.16.3:
-    dependencies:
       tslib: 2.9.1
 
   async.parallellimit@0.5.2:
