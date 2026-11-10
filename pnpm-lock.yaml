@@ -75,8 +75,8 @@ importers:
         specifier: ^18.0.9
         version: 18.0.9
       holywisp:
-        specifier: 0.1.0-nightly.202611102058.g92fb98d
-        version: 0.1.0-nightly.202611102058.g92fb98d
+        specifier: 0.5.2
+        version: 0.5.2
       hono:
         specifier: ^4.13.16
         version: 4.13.16
@@ -1750,8 +1750,8 @@ packages:
   hermes-parser@0.25.1:
     resolution: {integrity: sha512-6pEjquH3rqaI6cYAXYPcz9MS4rY6R4ngRgrgfDshRptUZIc3lw0MCIJIGDj9++mfySOuPTHB4nrSW99BCvOPIA==}
 
-  holywisp@0.1.0-nightly.202611102058.g92fb98d:
-    resolution: {integrity: sha512-J29qeH65dT+1S0se6QNZ4WGkGivs/sSY/sPW4o9X/s8yGGuXFKGAktMlT0L/zmDo3NmvhcHqx9VrTdK9H7jPRg==}
+  holywisp@0.5.2:
+    resolution: {integrity: sha512-mJ0hRpSDh9JJ16+0ERXg9/DOFPJbPKKw+14cmUYP16XLQ/9+u6I2qdIgpxHHrRRohtulsP3NwepZmVvJsVl2WQ==}
     engines: {node: '>=20'}
 
   hono@4.13.16:
@@ -4021,7 +4021,7 @@ snapshots:
     dependencies:
       hermes-estree: 0.25.1
 
-  holywisp@0.1.0-nightly.202611102058.g92fb98d: {}
+  holywisp@0.5.2: {}
 
   hono@4.13.16: {}
 
