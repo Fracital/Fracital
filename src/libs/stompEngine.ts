@@ -135,6 +135,32 @@ export const hostOf = (url: string): string => {
 
 let bootPromise: Promise<StompController> | undefined;
 
+/** How long the first visit after a deploy waits for this build's worker before going on with the one there is. */
+const NEW_WORKER_WAIT_MS = 10000;
+/**
+ * On the first visit after a deploy, register() resolves while this build's
+ * worker is still installing and the build before's is active, and the
+ * controller would shake hands with the active one. When the handshake came
+ * first, it woke the worker of the build before (which speaks another
+ * dialect: the proxy transform renames per build), this build's worker stayed
+ * waiting behind it, and the engine did not start for minutes. Wait for this
+ * build's worker first: while the old one is idle it activates at once.
+ */
+const thisBuildsWorker = (registration: ServiceWorkerRegistration) => {
+	const incoming = registration.installing ?? registration.waiting;
+	if (!incoming) return Promise.resolve();
+	return new Promise<void>(resolve => {
+		const done = () => {
+			if (incoming.state !== "activated" && incoming.state !== "redundant") return;
+			incoming.removeEventListener("statechange", done);
+			resolve();
+		};
+		incoming.addEventListener("statechange", done);
+		setTimeout(resolve, NEW_WORKER_WAIT_MS);
+		done();
+	});
+};
+
 /**
  * Boot the engine once (idempotent; a failed boot can be retried by the next
  * call). Resolves with the controller once the service worker has a server
@@ -152,6 +178,7 @@ export const bootStomp = (): Promise<StompController> => {
 			const { default: StompController } = (await import(/* @vite-ignore */ CONTROLLER_MODULE)) as StompModule;
 			// Scope: the directory; resolves once the worker is activated (30 s cap).
 			const registration = await StompController.register(STOMP_DIRECTORY, { assets: STOMP_ASSETS });
+			await thisBuildsWorker(registration);
 			const controller = new StompController({
 				serviceworker: registration,
 				// A descriptor: the controller imports and constructs the transport
