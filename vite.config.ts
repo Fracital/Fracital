@@ -123,7 +123,10 @@ export default defineConfig({
 					// native (nativeVendorChunks). Left to the bundler, React, the router
 					// and the rest land in the app chunks and run inside the VM, which
 					// makes every render several times slower on low-end hardware.
-					const pkg = id.split("node_modules/").pop()?.match(/^(@[^/]+\/[^/]+|[^/]+)/)?.[1];
+					const pkg = id
+						.split("node_modules/")
+						.pop()
+						?.match(/^(@[^/]+\/[^/]+|[^/]+)/)?.[1];
 					return pkg ? `v-${pkg}` : undefined;
 				},
 			},
