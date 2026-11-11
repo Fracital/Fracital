@@ -17,6 +17,7 @@ import { cloakMiddleware, isDecoyHost } from "./src/server/cloak-routing";
 import { injectAdTag } from "./src/server/ad-tag";
 import { type LegalPage, renderLegalPage } from "./src/server/legal";
 import { acceptedRelayPath, injectClientConfig, RELAY_OPTIONS, relayPath } from "./src/server/relay-gate";
+import { chatPath, chatUpgrade, proxyChat } from "./src/server/chat-relay";
 import { ensureSeedCookie, sealApiResponses } from "./src/server/api-crypto";
 import { rankAlbums, rankArtists, rankTracks } from "./src/server/music-rank";
 import { artistBanner, artistBio, artistTopTracks, buildRadio, findDeezerArtist, relatedArtists } from "./src/server/music-radio";
@@ -453,6 +454,11 @@ export function fsrv() {
 
 	// ============================================================
 
+	// The community chat (about:chat, chat-relay.ts): holt's chatbox under the keyed chat path, on every
+	// host. Ahead of the cloak routing, so a decoy host reaches it too once the app is open there.
+	const chatBase = chatPath();
+	if (chatBase) app.all(`${chatBase}*`, proxyChat);
+
 	// Cloak routing: hosts with a folder in ../cloaks-fracital get their decoy
 	// site with the uncloak script injected. The real app only becomes
 	// reachable through /1.html after Ctrl+E — nothing client-side loads on a
@@ -536,12 +542,15 @@ export function fsrv() {
 	);
 
 	// Relay upgrades only on the gated path (legacy /wisp/ when no key is set,
-	// e.g. local dev). Anything else is destroyed without a response.
+	// e.g. local dev), and the chat's socket under the chat path. Anything else
+	// is destroyed without a response.
 	const relay = acceptedRelayPath();
 	if (!relayPath()) console.warn("WISP_GATE_KEY is not set; relay is on the legacy path");
 	server.on("upgrade", (req: IncomingMessage, socket: any, head: Buffer) => {
 		if (req.url === relay) {
 			wisp.route(req, socket, head);
+		} else if (chatUpgrade(req, socket, head)) {
+			// The chat's realtime socket, passed through to holt.
 		} else {
 			socket.destroy();
 		}

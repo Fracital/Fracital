@@ -13,6 +13,7 @@
  * server) starts and hands upgrades to; RELAY_OPTIONS is its config for both.
  */
 import type { holyWispOptions } from "holywisp";
+import { chatPath } from "./chat-relay";
 
 const RELAY_SEGMENT = "pipe";
 const LEGACY_PATH = "/wisp/";
@@ -35,7 +36,9 @@ export function acceptedRelayPath(): string {
 /** Neutral client config injected into the app shell. */
 export function injectClientConfig(html: string): string {
 	if (html.includes("__FRX_CFG__")) return html;
-	const tag = `<script>window.__FRX_CFG__=${JSON.stringify({ relay: acceptedRelayPath() })};</script>`;
+	// `talk`: the community chat's path (chat-relay.ts), present only when the chat is on.
+	const talk = chatPath();
+	const tag = `<script>window.__FRX_CFG__=${JSON.stringify({ relay: acceptedRelayPath(), ...(talk ? { talk } : {}) })};</script>`;
 	if (/<\/head>/i.test(html)) return html.replace(/<\/head>/i, `${tag}</head>`);
 	return tag + html;
 }

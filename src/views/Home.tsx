@@ -5,7 +5,8 @@ import { isColorBright } from "../libs/colorBright";
 import { quickLinks } from "../libs/init";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faDiscord } from "@fortawesome/free-brands-svg-icons";
-import { MagnifyingGlassIcon } from "@heroicons/react/24/solid";
+import { ChatBubbleLeftRightIcon, MagnifyingGlassIcon } from "@heroicons/react/24/solid";
+import { createId } from "@paralleldrive/cuid2";
 import { useSettingsStore, useTabsStore } from "../store";
 import { navigationEvent } from "../libs/eventBus";
 import { useHolyAttr } from "../libs/holy-attr";
@@ -50,6 +51,15 @@ const Home = ({ className, active }: HomeProps) => {
 		navigationEvent({ url: urlFromInput(text), icon: null, title: "New Tab", displayUrl: text, id: tab.id });
 	};
 
+	/** The community chat (about:chat): the open chat tab, or a new one. Offered only when the server runs it. */
+	const chatOn = typeof window !== "undefined" && !!window.__FRX_CFG__?.talk;
+	const openChat = () => {
+		const { tabs, setCurrentTab, newTab } = useTabsStore.getState();
+		const existing = tabs.find(t => t.url === "about:chat");
+		if (existing) setCurrentTab(existing.id);
+		else newTab({ id: createId(), url: "about:chat", displayUrl: "about:chat", title: "Chat", icon: <ChatBubbleLeftRightIcon className="size-4.5" />, current: true });
+	};
+
 	useEffect(() => {
 		const handleLinksUpdate = () => {
 			setLinks(getLinks());
@@ -80,6 +90,12 @@ const Home = ({ className, active }: HomeProps) => {
 					<MagnifyingGlassIcon className="size-5 shrink-0 text-(--text-tertiary)" />
 					<input ref={searchRef} {...searchAttrs} name="q" type="text" autoComplete="off" spellCheck={false} className="w-full min-w-0 py-3 bg-transparent outline-none text-(--text-primary) font-semibold placeholder:text-(--text-tertiary)" />
 				</form>
+				{chatOn && (
+					<button type="button" onClick={openChat} className="flex items-center gap-2 px-4 py-2 rounded-full bg-(--secondary) inset-shadow-(--inset-shadow-secondary) hover:inset-shadow-(--inset-shadow-accent) text-(--text-secondary) hover:text-(--text-primary) font-semibold duration-200">
+						<ChatBubbleLeftRightIcon className="size-5 shrink-0 text-accent" />
+						<HolyText text="Chat with the community" />
+					</button>
+				)}
 				<div className="grid w-full max-w-3xl grid-cols-2 @lg:grid-cols-3 gap-3 @lg:gap-4">{links.length > 0 && links.map((link, index) => <LinkCard key={index} title={link.title} icon={link.icon} color={link.color} href={link.href} edit={false} brightness={isColorBright(link.color)} />)}</div>
 				{active && <RevSlot name="video" className="w-full max-w-xl" fallback={AD_UNITS.box} />}
 			</div>

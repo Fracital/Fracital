@@ -708,6 +708,20 @@ else setTimeout(() => location.replace("/"), 1500);
 		});
 	});
 
+	// Who is signed in, for the community chat (chat-relay.ts). holt calls this server to server with the
+	// visitor's forwarded session cookie and shows `username` as their chat name; signed out or banned
+	// answers 401/403 (requireUser), which holt treats as a guest. Only the handle, never the account's
+	// real name or email: other chat users and Discord see it.
+	app.get("/api/me/chat", async c => {
+		const user = c.get("user") as Env["Variables"]["user"] & { emailVerified?: boolean };
+		const { username } = await userMeta(c.get("pool"), user);
+		const placeholderEmail = user.email.endsWith("@lastfm.invalid");
+		// holt fetches and checks the avatar itself before showing it; only an https image is worth offering.
+		const avatar = typeof user.image === "string" && user.image.startsWith("https://") ? user.image : null;
+		c.header("Cache-Control", "private, no-store");
+		return c.json({ id: user.id, username: username || user.name, email_verified: !placeholderEmail && !!user.emailVerified, avatar });
+	});
+
 	/** Re-reads the Last.fm profile now instead of waiting out the cache. */
 	app.post("/api/me/lastfm/refresh", async c => {
 		const { link } = await lastfmLink(c);

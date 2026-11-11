@@ -5,7 +5,7 @@ declare global {
 		Filer: FilerType;
 		loadLock: boolean;
 		/** Server-injected client config (see src/server/relay-gate.ts). */
-		__FRX_CFG__?: { relay?: string };
+		__FRX_CFG__?: { relay?: string; talk?: string };
 	}
 }
 

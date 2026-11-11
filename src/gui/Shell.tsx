@@ -27,6 +27,7 @@ import {
 	LockClosedIcon,
 	LockOpenIcon,
 	CheckIcon,
+	ChatBubbleLeftRightIcon,
 } from "@heroicons/react/24/solid";
 import { BarOpenHandle, BarSettingsMenu, useCollapsibleBar, useHoverReveal } from "../components/CollapsibleBar";
 import { useHolyAttr } from "../libs/holy-attr";
@@ -544,6 +545,7 @@ const Shell = () => {
 			{ title: <HolyText text="File Manager" />, icon: <FolderIcon className="size-5" />, onClick: () => openPage("about:files", "File Manager", <FolderIcon className="size-4.5" />) },
 			{ title: <HolyText text="Games" />, icon: <PlayIcon className="size-5" />, onClick: () => openPage("about:games", "Games", <PlayIcon className="size-4.5" />) },
 			{ title: <HolyText text="Music" />, icon: <MusicalNoteIcon className="size-5" />, onClick: () => openLibraryPage("") },
+			{ title: <HolyText text="Chat" />, icon: <ChatBubbleLeftRightIcon className="size-5" />, onClick: () => openPage("about:chat", "Chat", <ChatBubbleLeftRightIcon className="size-4.5" />) },
 		);
 		if (accountinfo) {
 			items.push(
@@ -921,6 +923,11 @@ const Shell = () => {
 										title: "Music",
 										onClick: () => openLibraryPage(""),
 										icon: <MusicalNoteIcon className="size-4.5" />,
+									},
+									{
+										title: "Chat",
+										onClick: () => openPage("about:chat", "Chat", <ChatBubbleLeftRightIcon className="size-4.5" />),
+										icon: <ChatBubbleLeftRightIcon className="size-4.5" />,
 									},
 								];
 

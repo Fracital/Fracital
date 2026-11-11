@@ -2,7 +2,7 @@ import { type ReactNode } from "react";
 import { createId } from "@paralleldrive/cuid2";
 import { useMusicStore, useTabsStore } from "../store";
 import { nowPlayingTitle } from "./playback";
-import { Cog6ToothIcon, MusicalNoteIcon, FolderIcon, UserCircleIcon, PlayIcon, PlayCircleIcon, GlobeAltIcon, DocumentIcon, SignalIcon, CheckBadgeIcon, ShieldCheckIcon } from "@heroicons/react/24/solid";
+import { Cog6ToothIcon, MusicalNoteIcon, FolderIcon, UserCircleIcon, PlayIcon, PlayCircleIcon, GlobeAltIcon, DocumentIcon, SignalIcon, CheckBadgeIcon, ShieldCheckIcon, ChatBubbleLeftRightIcon } from "@heroicons/react/24/solid";
 
 import Home from "../views/Home";
 import Settings from "../views/Settings";
@@ -15,6 +15,7 @@ import { AdminDashboard } from "../views/AdminDashboard";
 import Games from "../views/Games";
 import { TextEditor } from "../views/TextEditor";
 import { DigitalLibrary } from "../views/DigitalLibrary";
+import Chat from "../views/Chat";
 
 export interface AboutPage {
 	name: string;
@@ -100,6 +101,12 @@ export const aboutPages: Record<string, AboutPage> = {
 		icon: <PlayIcon className="size-5" />,
 		title: "Games",
 		hasQuery: true,
+	},
+	chat: {
+		name: "chat",
+		component: Chat,
+		icon: <ChatBubbleLeftRightIcon className="size-5" />,
+		title: "Chat",
 	},
 	account: {
 		name: "account",
