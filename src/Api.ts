@@ -8,6 +8,7 @@ import { getLogin, SettingsPath, ThemePath, wispURL, type COM } from "./types";
 import { libcurl } from "libcurl.js";
 
 declare const fr: COM;
+declare const __BUILD_STAMP__: string;
 declare global {
 	interface Window {
 		fr: COM;
@@ -85,7 +86,8 @@ export const Api = async () => {
 
 	if (!window.loadLock) {
 		window.loadLock = true;
-		void libcurl.load_wasm("/vendor/net.wasm").catch(error => console.error("Failed to load libcurl WASM:", error));
+		// The name carries the build's stamp, like every vendored file the build rewrites (vite.config.ts buildStamp).
+		void libcurl.load_wasm(`/vendor/net.${__BUILD_STAMP__}.wasm`).catch(error => console.error("Failed to load libcurl WASM:", error));
 
 		startScrobbler();
 		startDiscordPresence();

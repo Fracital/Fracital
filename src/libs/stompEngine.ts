@@ -19,6 +19,8 @@ import { wispURL } from "../types";
 
 // Minted per build in vite.config.ts (define); `error` is also written into err.html there.
 declare const __STOMP_NAMES__: HelperNames;
+// This build's stamp, part of every engine file's name (vite.config.ts buildStamp).
+declare const __BUILD_STAMP__: string;
 
 declare global {
 	interface Window {
@@ -31,21 +33,28 @@ declare global {
 
 /** Where the bundle is served from and the service worker's scope (vite.config.ts STOMP_DIR). */
 export const STOMP_DIRECTORY = "/vendor/rt/";
+/**
+ * A vendored file's name: the build's stamp before the extension, as vite
+ * copies it (vite.config.ts `stamped`). The app shell is never cached, so the
+ * names it asks for are always its own build's, and no cache can hand it a
+ * file of the build before.
+ */
+const stamped = (name: string) => name.replace(/\.(?=[^.]+$)/, `.${__BUILD_STAMP__}.`);
 /** The vendored file names (vite.config.ts STOMP_FILES). */
 const STOMP_ASSETS: Assets = {
-	serviceWorker: "sw.js",
-	injectDocument: "doc.js",
-	injectWorker: "wk.js",
-	transportWorker: "tw.js",
-	rewriteWorker: "rw.js",
+	serviceWorker: stamped("sw.js"),
+	injectDocument: stamped("doc.js"),
+	injectWorker: stamped("wk.js"),
+	transportWorker: stamped("tw.js"),
+	rewriteWorker: stamped("rw.js"),
 };
-const CONTROLLER_MODULE = `${STOMP_DIRECTORY}api.mjs`;
+const CONTROLLER_MODULE = `${STOMP_DIRECTORY}${stamped("api.mjs")}`;
 /** The epoxy transport module (Fracital build), imported by stomp's transport worker, never by a page. */
-const TRANSPORT_MODULE = `${STOMP_DIRECTORY}link.mjs`;
+const TRANSPORT_MODULE = `${STOMP_DIRECTORY}${stamped("link.mjs")}`;
 /** stomp-h3 (HTTP/3 over the relay's UDP streams), loaded by the transport worker once an origin offers h3; copied by vite under a neutral name. */
-const H3_MODULE = `${STOMP_DIRECTORY}q3.mjs`;
+const H3_MODULE = `${STOMP_DIRECTORY}${stamped("q3.mjs")}`;
 /** Shown by the service worker for a document it failed to produce (src/stomp/error.html, copied by vite). */
-const ERROR_PAGE = `${STOMP_DIRECTORY}err.html`;
+const ERROR_PAGE = `${STOMP_DIRECTORY}${stamped("err.html")}`;
 /** The controller id for this browser tab; one per tab, kept across reloads. */
 const ID_KEY = "fracital:st-controller";
 

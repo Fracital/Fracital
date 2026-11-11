@@ -124,6 +124,12 @@ regression, even if the site still works.
 - If you touched the client bundle shape: run `node scripts/boot-check.mjs
   http://localhost:<port>/` against a production build served by the backend.
   It must render (rootBytes > 2000) with zero shield errors.
+- If you touched how the vendored engine files are named, served or cached,
+  or an engine's version: run
+  `node scripts/deploy-check.mjs` (it builds twice and replaces `dist/`). It
+  serves one build after the other to one browser profile and fails when a
+  visit after the swap loads a file of the build before or when an engine
+  does not start.
 
 ## Obfuscation and security (mandatory for all changes)
 
@@ -164,6 +170,12 @@ in any user-facing copy.
   `/controller/`, or similar fingerprint path, and never ship `.map`/`.d.ts`
   artifacts (`scripts/prune-dist.mjs` removes them; if it removed something,
   find out what shipped them).
+- Every vendored file the transform rewrites carries the build's stamp in its
+  name (`ctl.<stamp>.js`, `rt/sw.<stamp>.js`; `buildStamp` in vite.config.ts,
+  `__BUILD_STAMP__` in the app) and is served immutable. The files of two
+  builds do not work together, so never load one under a fixed name; the one
+  exception is `vendor/ctl.sw.js`, which `/sw.js` imports and which shares no
+  renamed name with the rest.
 - Do not hand-edit anything under `dist/`; it is generated.
 
 **Every new user-visible string is wrapped.** Follow

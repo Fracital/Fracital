@@ -491,15 +491,23 @@ export function fsrv() {
 	});
 
 	// Static caching policy: content-hashed bundles (/assets/[hash].js) are
-	// immutable forever; everything else (vendor/, sw.js, libs/, icons — fixed
-	// names that change across deploys) revalidates after 5 minutes so a deploy
-	// never sits behind a stale edge cache (Cloudflare held a 4h-old ctl.js once).
+	// immutable forever, and so are the engines' files whose names carry their
+	// build's stamp (/vendor/ctl.<stamp>.js, /vendor/rt/sw.<stamp>.js;
+	// vite.config.ts buildStamp): a deploy asks for new names, so no cache can
+	// pair a file of the last build with the new ones. Everything else (the
+	// rest of vendor/, sw.js, libs/, icons — fixed names that change across
+	// deploys) revalidates after 5 minutes so a deploy never sits behind a
+	// stale edge cache (Cloudflare held a 4h-old ctl.js once).
 	app.use("*", async (c, next) => {
 		await next();
 		if (c.res.headers.has("Cache-Control")) return; // routes that set their own win
 		const p = new URL(c.req.url).pathname;
 		if (p.startsWith("/assets/")) {
 			c.header("Cache-Control", "public, max-age=31536000, immutable");
+		} else if (/^\/vendor\/(?:rt\/)?[^/]+\.[0-9a-f]{8}\.[a-z0-9]+$/.test(p)) {
+			// Only a file that is there: a name of a build that is gone answers
+			// 404, which must not be kept.
+			c.header("Cache-Control", c.res.status === 200 ? "public, max-age=31536000, immutable" : "no-store");
 		} else if (/^\/(?:vendor|libs)\//.test(p) || p === "/sw.js" || p.endsWith(".svg")) {
 			c.header("Cache-Control", "public, max-age=300, must-revalidate");
 		}

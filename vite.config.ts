@@ -19,13 +19,34 @@ import { buildObfuscatorPlugin } from "./src/server/build-obfuscator-plugin";
 // boot (`assets`), so no served URL carries the package name. Keep this map in
 // step with STOMP_DIRECTORY / STOMP_ASSETS in src/libs/stompEngine.ts.
 const STOMP_DIR = "vendor/rt";
+// Every file of the engine carries this build's stamp in its name (sw.js is
+// served as sw.<stamp>.js), and the app is told the stamp (__BUILD_STAMP__).
+// The files of two builds do not work together: the proxy transform gives
+// each build its own message names (scripts/obfuscate-build.mjs), and the
+// error page reads a global minted per build. Under fixed names a browser or
+// an edge cache that still held one file of the last build, within its
+// max-age, ran it against the new service worker, and the engine did not
+// start until the entry expired. A stamped name is a new URL with every
+// build, so what the app loads is of its own build whatever a cache holds,
+// and the files can be cached for good (backend.ts).
+//
+// Scramjet's page files are stamped the same way (core.js, core.wasm, ctl.js,
+// ctl.frame.js): the transform renames the classes they share per build, and
+// the app shell, which is never cached, names them. So is the transport's
+// wasm (net.wasm), which the transform also rewrites per build. Scramjet's
+// worker file keeps a fixed name: /sw.js imports it, and it shares no renamed
+// name with the rest.
+const buildStamp = randomBytes(4).toString("hex");
+const stamped = (name: string) => name.replace(/\.(?=[^.]+$)/, `.${buildStamp}.`);
+// The two engine scripts the app shell (index.html) loads.
+const SHELL_SCRIPTS = ["/vendor/core.js", "/vendor/ctl.js"];
 const STOMP_FILES: [string, string][] = [
-	["serviceWorker.js", "sw.js"],
-	["injectDocument.js", "doc.js"],
-	["injectWorker.js", "wk.js"],
-	["transportWorker.js", "tw.js"],
-	["rewriteWorker.js", "rw.js"],
-	["controller.mjs", "api.mjs"],
+	["serviceWorker.js", stamped("sw.js")],
+	["injectDocument.js", stamped("doc.js")],
+	["injectWorker.js", stamped("wk.js")],
+	["transportWorker.js", stamped("tw.js")],
+	["rewriteWorker.js", stamped("rw.js")],
+	["controller.mjs", stamped("api.mjs")],
 ];
 // Source maps are pruned from dist; drop the pointer so nothing references a
 // file that is not there.
@@ -52,6 +73,7 @@ const stompNames = mintHelperNames();
 export default defineConfig({
 	define: {
 		__STOMP_NAMES__: JSON.stringify(stompNames),
+		__BUILD_STAMP__: JSON.stringify(buildStamp),
 	},
 	optimizeDeps: {
 		include: ["music-metadata"],
@@ -107,6 +129,16 @@ export default defineConfig({
 		// the HolyText family reveals into shadow DOM at runtime. Runs during
 		// generateBundle; the shield's writeBundle rewrite composes after it.
 		buildObfuscatorPlugin(),
+		!isWebOS && {
+			name: "stamp-shell-scripts",
+			transformIndexHtml(html: string) {
+				for (const src of SHELL_SCRIPTS) {
+					if (!html.includes(`"${src}"`)) throw new Error(`index.html no longer loads ${src}`);
+					html = html.split(`"${src}"`).join(`"${stamped(src)}"`);
+				}
+				return html;
+			},
+		},
 		!isWebOS
 			? viteStaticCopy({
 					targets: [
@@ -116,7 +148,7 @@ export default defineConfig({
 						{
 							src: `${scramjetPath}/scramjet.js`.replace(/\\/g, "/"),
 							dest: "vendor",
-							rename: { stripBase: true, name: "core.js" },
+							rename: { stripBase: true, name: stamped("core.js") },
 							overwrite: true,
 							// On pages with content outside <html> (Google sign-in etc.) the engine prepends its
 							// scripts ahead of <!doctype>, which drops the page into quirks mode and breaks layout.
@@ -131,20 +163,20 @@ export default defineConfig({
 						{
 							src: `${scramjetPath}/scramjet.wasm`.replace(/\\/g, "/"),
 							dest: "vendor",
-							rename: { stripBase: true, name: "core.wasm" },
+							rename: { stripBase: true, name: stamped("core.wasm") },
 							overwrite: true,
 						},
 						{
 							src: "node_modules/@mercuryworkshop/scramjet-controller/dist/controller.api.js",
 							dest: "vendor",
-							rename: { stripBase: true, name: "ctl.js" },
+							rename: { stripBase: true, name: stamped("ctl.js") },
 							overwrite: true,
 							transform: (content: string | Buffer) => {
 								const text = content.toString();
 								const pairs: [string, string][] = [
-									["/scramjet/scramjet.js", "/vendor/core.js"],
-									["/scramjet/scramjet.wasm", "/vendor/core.wasm"],
-									["/controller/controller.inject.js", "/vendor/ctl.frame.js"],
+									["/scramjet/scramjet.js", stamped("/vendor/core.js")],
+									["/scramjet/scramjet.wasm", stamped("/vendor/core.wasm")],
+									["/controller/controller.inject.js", stamped("/vendor/ctl.frame.js")],
 								];
 								let out = text;
 								for (const [from, to] of pairs) {
@@ -163,7 +195,7 @@ export default defineConfig({
 						{
 							src: "node_modules/@mercuryworkshop/scramjet-controller/dist/controller.inject.js",
 							dest: "vendor",
-							rename: { stripBase: true, name: "ctl.frame.js" },
+							rename: { stripBase: true, name: stamped("ctl.frame.js") },
 							overwrite: true,
 						},
 						// The stomp engine: the service worker, the two inject bundles, the
@@ -180,7 +212,7 @@ export default defineConfig({
 						{
 							src: "src/stomp/error.html",
 							dest: STOMP_DIR,
-							rename: { stripBase: true, name: "err.html" },
+							rename: { stripBase: true, name: stamped("err.html") },
 							overwrite: true,
 							transform: (content: string | Buffer) => {
 								const text = content.toString();
@@ -193,7 +225,7 @@ export default defineConfig({
 						{
 							src: "node_modules/@mercuryworkshop/epoxy-transport/dist/index.mjs",
 							dest: STOMP_DIR,
-							rename: { stripBase: true, name: "link.mjs" },
+							rename: { stripBase: true, name: stamped("link.mjs") },
 							overwrite: true,
 						},
 						// HTTP/3 for origins that offer it (stomp docs/http3.md): stomp-h3,
@@ -203,18 +235,18 @@ export default defineConfig({
 						{
 							src: "node_modules/@mercuryworkshop/epoxy-transport/dist/h3/stomp_h3.js",
 							dest: STOMP_DIR,
-							rename: { stripBase: true, name: "q3.mjs" },
+							rename: { stripBase: true, name: stamped("q3.mjs") },
 							overwrite: true,
 							transform: (content: string | Buffer) => {
 								const text = content.toString();
 								if (!text.includes("stomp_h3_bg.wasm")) throw new Error("stomp-h3 no longer names stomp_h3_bg.wasm (epoxy build changed shape)");
-								return text.split("stomp_h3_bg.wasm").join("q3.wasm");
+								return text.split("stomp_h3_bg.wasm").join(stamped("q3.wasm"));
 							},
 						},
 						{
 							src: "node_modules/@mercuryworkshop/epoxy-transport/dist/h3/stomp_h3_bg.wasm",
 							dest: STOMP_DIR,
-							rename: { stripBase: true, name: "q3.wasm" },
+							rename: { stripBase: true, name: stamped("q3.wasm") },
 							overwrite: true,
 						},
 						// Transport engine wasm, self-hosted (never a CDN: filters
@@ -222,7 +254,7 @@ export default defineConfig({
 						{
 							src: "node_modules/libcurl.js/libcurl.wasm",
 							dest: "vendor",
-							rename: { stripBase: true, name: "net.wasm" },
+							rename: { stripBase: true, name: stamped("net.wasm") },
 							overwrite: true,
 						},
 						// Flash emulator, self-hosted for the same reason. Companion

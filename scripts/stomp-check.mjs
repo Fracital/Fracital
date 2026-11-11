@@ -138,7 +138,8 @@ const go = async url => {
 };
 // The engine's frame for the current tab: the newest iframe routed under the engine directory.
 const engineFrame = async () => {
-	const frames = page.frames().filter(f => f.url().includes(ENGINE_DIR) && !f.url().endsWith("err.html"));
+	// Not the error page (err.<build stamp>.html).
+	const frames = page.frames().filter(f => f.url().includes(ENGINE_DIR) && !/\/err\.[0-9a-f]+\.html$/.test(f.url()));
 	return frames[frames.length - 1] ?? null;
 };
 const frameInfo = async () => {
