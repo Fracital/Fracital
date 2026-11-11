@@ -14,7 +14,7 @@ import assert from "node:assert/strict";
 import vm from "node:vm";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { obfuscateJs, decoderSource, obfuscateSvg, wrapCdata, shouldProcessJs, obfuscateProxyJs, mapProxyText, mapWasmBytes, isProxyVendor, hasProxyName } from "./obfuscate-build.mjs";
+import { obfuscateJs, decoderSource, obfuscateSvg, wrapCdata, shouldProcessJs, obfuscateProxyJs, mapProxyText, mapWasmBytes, isProxyVendor, hasProxyName, STORE_NAMES, mapStoreName } from "./obfuscate-build.mjs";
 
 function evalScript(code) {
 	const sandbox = { atob, TextDecoder, Uint8Array, Uint32Array, String, Math, Object, Array, JSON, Date, result: undefined };
@@ -367,6 +367,30 @@ test("proxy: renamed identifiers, keys and template code still agree at runtime"
 	assert.equal(out.changed, true);
 	assert.equal(PROXY_RE.test(out.code), false, "no proxy token survives in plaintext");
 	assert.deepEqual(JSON.parse(JSON.stringify(evalWith(src).result)), JSON.parse(JSON.stringify(evalWith(out.code).result)));
+});
+
+test("proxy: the engines' store names keep one name in every build, never the package's", () => {
+	const src = `
+    globalThis.result = ["stompCookies", "__scramjet_controller", "stomp-http-cache", "stompMessage"];
+  `;
+	const out = obfuscateProxyJs(src, "script", "t");
+	const [cookies, jar, cache, message] = evalWith(out.code).result;
+	// Fixed letters (production's names since 2026-11-10), so a deploy finds what a browser holds.
+	assert.equal(cookies, "gdosxCookies");
+	assert.equal(jar, "__ebshkqee_controller");
+	assert.equal(cache, "gdosx-http-cache");
+	// Every other proxy name is still renamed per build.
+	assert.equal(message, mapProxyText("stompMessage"));
+	for (const name of STORE_NAMES) assert.equal(hasProxyName(mapStoreName(name)), false, name);
+	assert.equal(/stomp|scramjet/i.test(out.code), false, "no proxy token survives in plaintext");
+});
+
+test("proxy: a database opened under an unlisted proxy name fails the build", () => {
+	assert.throws(() => obfuscateProxyJs(`indexedDB.open("stompNew", 1);`, "script", "t"), /STORE_NAMES/);
+	assert.throws(() => obfuscateProxyJs(`self.indexedDB.open("__scramjet_other");`, "script", "t"), /STORE_NAMES/);
+	// idb's openDB, whatever the minifier named it
+	assert.throws(() => obfuscateProxyJs(`Tt("stompNew", 1, { upgrade: e => e.createObjectStore("x") });`, "script", "t"), /STORE_NAMES/);
+	assert.equal(obfuscateProxyJs(`Tt("stompCookies", 2, { upgrade: e => e.createObjectStore("x") });`, "script", "t").changed, true);
 });
 
 test("proxy: app-shared names are written as encrypted keys; the plaintext name is absent", () => {

@@ -527,6 +527,61 @@ function proxyReplacement(match) {
 export function mapProxyText(s) {
 	return s.replace(PROXY_RE_G, proxyReplacement);
 }
+
+// The engines' persistent stores: the IndexedDB databases and caches in which
+// a browser keeps a proxied site's cookies, storage and service workers.
+// Renamed per build like every other proxy name, each deploy opened them
+// empty under new names, and every cookie and every stored value a browser
+// held was gone. They get a fixed substitution instead: never the package's
+// names, and the same in every build. The letters are the ones production's
+// build of 2026-11-10 22:02 UTC gave them (gdosxCookies, __ebshkqee_controller),
+// so the first deploy with fixed names opens what browsers already hold.
+// Changing a letter or a name empties that store in every browser, once.
+const STORE_TOKENS = new Map([
+	["stomp", "gdosx"],
+	["scramjet", "ebshkqee"],
+]);
+export const STORE_NAMES = new Set([
+	// stomp's service worker: IndexedDB
+	"stompCookies",
+	"stompStorage",
+	"stompConfig",
+	"stompServiceWorkers",
+	"stompClientOrigins",
+	// stomp's service worker: CacheStorage
+	"stomp-http-cache",
+	"stomp-rewrite-cache",
+	// Scramjet's controller: the cookie jar (IndexedDB)
+	"__scramjet_controller",
+]);
+for (const [token, letters] of STORE_TOKENS) {
+	if (letters.length !== token.length || !/^[a-z]+$/.test(letters) || hasProxyName(letters) || spellsCanary(letters, LETTER_CANARIES)) {
+		throw new Error(`STORE_TOKENS: ${token} -> ${letters} must be ${token.length} lower-case letters, no proxy name or canary`);
+	}
+}
+export function mapStoreName(s) {
+	return s.replace(PROXY_RE_G, match => {
+		const letters = STORE_TOKENS.get(match.toLowerCase());
+		if (!letters) throw new Error(`no fixed substitution for ${match} in store name ${s} (STORE_TOKENS)`);
+		return [...letters].map((ch, i) => (match[i] >= "A" && match[i] <= "Z" ? ch.toUpperCase() : ch)).join("");
+	});
+}
+// Which listed names the build met, so a name an engine no longer uses fails
+// the build instead of leaving its store renamed per build again.
+const storeNamesSeen = new Set();
+let proxyFilesTransformed = 0;
+// A database the engine opens under a proxy name that is not listed: an
+// `indexedDB.open("…")`, or idb's `openDB("…", <version>, { upgrade })`
+// whatever the minifier called it.
+function unlistedStoreOpen(node) {
+	if (node.type !== "CallExpression") return null;
+	const [first, second, third] = node.arguments;
+	if (!first || first.type !== "Literal" || typeof first.value !== "string" || !hasProxyName(first.value) || STORE_NAMES.has(first.value)) return null;
+	const callee = node.callee;
+	const indexedDBOpen = callee.type === "MemberExpression" && !callee.computed && callee.property.name === "open" && ((callee.object.type === "Identifier" && callee.object.name === "indexedDB") || (callee.object.type === "MemberExpression" && callee.object.property?.name === "indexedDB"));
+	const idbOpen = second?.type === "Literal" && typeof second.value === "number" && third?.type === "ObjectExpression" && third.properties.some(p => p.type === "Property" && !p.computed && (p.key.name ?? p.key.value) === "upgrade");
+	return indexedDBOpen || idbOpen ? first.value : null;
+}
 export function isProxyVendor(full) {
 	const p = full.split(sep).join("/");
 	// The vendored engine + controller ship renamed under dist/vendor/ (see
@@ -730,6 +785,8 @@ function collectProxyEdits(ast, comments, source, name, crypto, nameHint) {
 	}
 
 	walk(ast, null, null, (node, parent, key) => {
+		const unlisted = unlistedStoreOpen(node);
+		if (unlisted !== null) throw new Error(`${nameHint} opens a database named ${unlisted}: list it in STORE_NAMES so it keeps its name across builds`);
 		if (node.type === "Identifier" || node.type === "PrivateIdentifier") {
 			if (!hasProxyName(node.name)) return;
 			const pieces = APP_SHARED_NAMES.get(node.name);
@@ -811,6 +868,11 @@ function collectProxyEdits(ast, comments, source, name, crypto, nameHint) {
 				return;
 			}
 			if (!hasProxyName(v)) return;
+			if (STORE_NAMES.has(v)) {
+				storeNamesSeen.add(v);
+				edits.push({ start: node.start, end: node.end, text: JSON.stringify(mapStoreName(v)) });
+				return;
+			}
 			if (LEGAL_RE.test(v) || APP_SHARED.has(v) || containsSharedName(v)) {
 				// Legal/prose/app-shared values keep their text; any non-shared proxy
 				// tokens inside are still renamed (mapSharedProtected), matching the
@@ -860,6 +922,7 @@ function collectProxyEdits(ast, comments, source, name, crypto, nameHint) {
 // Proxy-set transform for one JS file. Same output contract as obfuscateJs.
 export function obfuscateProxyJs(source, sourceType = "module", nameHint = "") {
 	if (source.includes(MARKER)) return { code: source, changed: false, count: 0 };
+	proxyFilesTransformed++;
 	const comments = [];
 	const ast = parse(source, sourceType, comments);
 	const name = "__frx$" + randomBytes(3).toString("hex");
@@ -1182,6 +1245,11 @@ function run(dirs) {
 				if (leak.length) throw new Error(`canary in CSS ${relative(REPO_ROOT, full)}: ${leak.join(", ")} (manual handling needed)`);
 			}
 		}
+	}
+	// Only when this run transformed the engines (a re-run skips marked files).
+	const unseen = [...STORE_NAMES].filter(n => !storeNamesSeen.has(n));
+	if (proxyFilesTransformed > 0 && unseen.length) {
+		throw new Error(`the engines no longer name these stores: ${unseen.join(", ")}. Find the name each one has now and list it in STORE_NAMES (scripts/obfuscate-build.mjs), or browsers lose what they keep there on every deploy`);
 	}
 	console.log(`obfuscation done: ${jsChanged} JS, ${htmlChanged} HTML, ${svgChanged} SVG changed (scanned ${totalFiles} candidate files)`);
 }

@@ -14,6 +14,16 @@
  * against the new service worker, and the stomp engine did not start for
  * minutes: that is what this check fails on.
  *
+ * Before the deploy, the first visit also sets a cookie and a localStorage
+ * value on the proxied site through each engine, and every later visit reads
+ * them back: a second visit to the first build (without a deploy, so a miss
+ * there is the check's, not the deploy's), the three after the swap, and a
+ * last one with the HTTP cache emptied first, as a browser returns once its
+ * entries expired (the files of the build before, from that cache, opened the
+ * stores of the build before). The engines keep them in stores the proxy
+ * transform names; a name that changed with the build opened them empty, and
+ * that is what this check fails on too.
+ *
  *   node scripts/deploy-check.mjs                       builds twice (npm run build), leaves the second in dist
  *   node scripts/deploy-check.mjs --builds <a> <b>      two builds made earlier (copies of dist)
  *   --port <n>                                          the backend's port (default 5199)
@@ -22,7 +32,7 @@
  * CHROME=<binary>) and a network the relay can reach example.com on.
  */
 import { spawn, spawnSync } from "node:child_process";
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -105,7 +115,17 @@ const serve = async dir => {
 
 // --- one visit ---
 const profile = join(scratch, "profile");
-const visit = async (label, dir) => {
+/** What the first visit stores on the proxied site, as a cookie and in localStorage. */
+const token = `dc${randomBytes(4).toString("hex")}`;
+/** In the proxied site's realm: store the token, or say whether it is still there. */
+const siteStorage = (write, value) => (write ? `document.cookie = "deploycheck=${value}; max-age=86400; path=/"; localStorage.setItem("deploycheck", "${value}"); null` : `[document.cookie.split("; ").includes("deploycheck=${value}"), localStorage.getItem("deploycheck") === "${value}"]`);
+/** How long an engine may take to keep what a page stored (it writes to its stores asynchronously). */
+const PERSIST_MS = 2000;
+const storageChecks = (label, engine, kept) => {
+	check(`${label}: the cookie set through ${engine} before is there`, kept?.[0] === true, kept ? "" : "the page did not load");
+	check(`${label}: the localStorage value set through ${engine} before is there`, kept?.[1] === true, kept ? "" : "the page did not load");
+};
+const visit = async (label, dir, write, emptyHttpCache = false) => {
 	// Third-party hosts do not resolve: the app's own pages and the relay are on localhost.
 	const context = await chromium.launchPersistentContext(profile, {
 		executablePath: process.env.CHROME || "/usr/bin/google-chrome",
@@ -118,6 +138,8 @@ const visit = async (label, dir) => {
 	const loads = [];
 	const pending = new Map();
 	await cdp.send("Network.enable");
+	// The HTTP cache only: cookies, storage and service workers stay.
+	if (emptyHttpCache) await cdp.send("Network.clearBrowserCache");
 	cdp.on("Network.responseReceived", e => {
 		const url = new URL(e.response.url);
 		if (url.origin !== new URL(base).origin || !VENDORED.test(url.pathname) || e.response.fromServiceWorker) return;
@@ -153,26 +175,35 @@ const visit = async (label, dir) => {
 	await page.goto(base, { waitUntil: "load", timeout: 30000 });
 	await appReady();
 	// Scramjet boots with the app whichever engine is selected (scripts/proxy-check.mjs).
-	const scramjet = await page
-		.evaluate(async () => {
-			const within = (promise, ms, what) => Promise.race([promise, new Promise((_, reject) => setTimeout(() => reject(new Error(`${what}: not within ${ms / 1000} s`)), ms))]);
-			try {
-				await within(window.scramjetReady, 20000, "the engine starts");
-				const iframe = document.createElement("iframe");
-				iframe.style.cssText = "position:fixed;inset:0;opacity:0;pointer-events:none";
-				document.body.appendChild(iframe);
-				const loaded = new Promise(resolve => iframe.addEventListener("load", resolve, { once: true }));
-				window.scramjetController.createFrame(iframe).go("https://example.com/");
-				await within(loaded, 30000, "the page loads");
-				const title = iframe.contentDocument?.title;
-				iframe.remove();
-				return title === "Example Domain" ? "" : `the page's title is ${JSON.stringify(title)}`;
-			} catch (error) {
-				return String(error?.message ?? error);
-			}
-		})
-		.catch(error => String(error));
-	check(`${label}: a page loads through Scramjet`, scramjet === "", scramjet);
+	const scramjetLoad = (code, persistMs = 0) =>
+		page
+			.evaluate(
+				async ([code, persistMs]) => {
+					const within = (promise, ms, what) => Promise.race([promise, new Promise((_, reject) => setTimeout(() => reject(new Error(`${what}: not within ${ms / 1000} s`)), ms))]);
+					try {
+						await within(window.scramjetReady, 20000, "the engine starts");
+						const iframe = document.createElement("iframe");
+						iframe.style.cssText = "position:fixed;inset:0;opacity:0;pointer-events:none";
+						document.body.appendChild(iframe);
+						const loaded = new Promise(resolve => iframe.addEventListener("load", resolve, { once: true }));
+						window.scramjetController.createFrame(iframe).go("https://example.com/");
+						await within(loaded, 30000, "the page loads");
+						const title = iframe.contentDocument?.title;
+						// The site's own realm, so the engine's cookie and storage hooks answer.
+						const kept = iframe.contentWindow.eval(code);
+						if (persistMs) await new Promise(resolve => setTimeout(resolve, persistMs));
+						iframe.remove();
+						return { error: title === "Example Domain" ? "" : `the page's title is ${JSON.stringify(title)}`, kept };
+					} catch (error) {
+						return { error: String(error?.message ?? error), kept: null };
+					}
+				},
+				[code, persistMs],
+			)
+			.catch(error => ({ error: String(error), kept: null }));
+	const scramjet = await scramjetLoad(siteStorage(write, token), write ? PERSIST_MS : 0);
+	check(`${label}: a page loads through Scramjet`, scramjet.error === "", scramjet.error);
+	if (!write) storageChecks(label, "Scramjet", scramjet.kept);
 	// Opt in to the experimental engines and select stomp (scripts/stomp-check.mjs selectStomp).
 	const selected = () =>
 		page.evaluate(async () => {
@@ -217,6 +248,9 @@ const visit = async (label, dir) => {
 		}, 45000);
 	}
 	check(`${label}: a page loads through the stomp engine`, !!frame);
+	const kept = frame ? await frame.evaluate(code => window.eval(code), siteStorage(write, token)).catch(() => null) : null;
+	if (write) await sleep(PERSIST_MS);
+	else storageChecks(label, "the stomp engine", kept);
 	// Stay as long as a visit does: a service worker the browser found changed
 	// is installed and takes over in the seconds after the page asked for it.
 	await sleep(4000);
@@ -241,10 +275,12 @@ const visit = async (label, dir) => {
 let failure = null;
 try {
 	await serve(builds[0]);
-	await visit("build A", builds[0]);
+	await visit("build A", builds[0], true);
+	await visit("build A, second visit", builds[0], false);
 	await serve(builds[1]);
 	// The first visit seconds after the deploy, then two more inside any cache's lifetime.
-	for (const label of ["first visit after the deploy", "second visit after the deploy", "third visit after the deploy"]) await visit(label, builds[1]);
+	for (const label of ["first visit after the deploy", "second visit after the deploy", "third visit after the deploy"]) await visit(label, builds[1], false);
+	await visit("a visit once the HTTP cache expired", builds[1], false, true);
 } catch (error) {
 	failure = error;
 } finally {

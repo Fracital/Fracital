@@ -176,6 +176,13 @@ in any user-facing copy.
   builds do not work together, so never load one under a fixed name; the one
   exception is `vendor/ctl.sw.js`, which `/sw.js` imports and which shares no
   renamed name with the rest.
+- The engines' persistent stores (the IndexedDB databases and caches that
+  hold a proxied site's cookies and storage) keep one name in every build:
+  `STORE_NAMES` and `STORE_TOKENS` in `scripts/obfuscate-build.mjs` give them a
+  fixed substitution instead of the per-build one. A store renamed per build
+  opens empty after every deploy. Changing a letter or a name there empties
+  that store in every browser once, and the build fails when an engine opens
+  a database under a proxy name that is not listed.
 - Do not hand-edit anything under `dist/`; it is generated.
 
 **Every new user-visible string is wrapped.** Follow
