@@ -79,6 +79,8 @@ export const useTabsStore = create<{
 	getHistoryIndex: (id: string) => number;
 	setHistoryIndex: (id: string, index: number) => void;
 	pushHistory: (id: string, entry: { url: string; title: string; icon?: string; displayUrl?: string }) => void;
+	/** Rewrites the current entry in place: the page replaced its URL (history.replaceState) or changed its title. */
+	replaceHistory: (id: string, entry: { url: string; title: string; icon?: string; displayUrl?: string }) => void;
 	newGroup: (id: string | null, name: string, icon?: string) => void;
 	addTabToGroup: (groupId: string, tab: TabProps) => void;
 	moveTabRelative: (draggedId: string, targetId: string, placeBefore: boolean) => void;
@@ -192,6 +194,18 @@ export const useTabsStore = create<{
 
 		set(state => ({
 			tabs: state.tabs.map(t => (t.id === id ? ({ ...t, history: newHistory, historyIndex: newIndex } as unknown as TabProps) : t)),
+		}));
+	},
+	replaceHistory: (id: string, entry: { url: string; title: string; icon?: string; displayUrl?: string }) => {
+		const tab = get().tabs.find(t => t.id === id);
+		if (!tab) return;
+		const currentHistory = (tab as any)?.history ?? [];
+		const currentIndex = (tab as any)?.historyIndex ?? 0;
+		if (!currentHistory[currentIndex]) return get().pushHistory(id, entry);
+		entry = { ...entry, url: normalizeAboutUrl(entry.url), displayUrl: normalizeAboutUrl(entry.displayUrl) };
+		const newHistory = currentHistory.map((e: unknown, i: number) => (i === currentIndex ? entry : e));
+		set(state => ({
+			tabs: state.tabs.map(t => (t.id === id ? ({ ...t, history: newHistory } as unknown as TabProps) : t)),
 		}));
 	},
 	moveTabRelative: (draggedId: string, targetId: string, placeBefore: boolean) =>

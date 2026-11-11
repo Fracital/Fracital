@@ -15,7 +15,19 @@ declare global {
 	}
 }
 
+/** filer.min.js loads async (index.html) so it doesn't hold up the app's first paint; it's needed from here on. */
+const filerReady = () =>
+	typeof Filer !== "undefined"
+		? Promise.resolve()
+		: new Promise<void>((resolve, reject) => {
+				const script = document.querySelector<HTMLScriptElement>('script[src$="/filer.min.js"]');
+				if (!script) return reject(new Error("Filer script is missing"));
+				script.addEventListener("load", () => resolve(), { once: true });
+				script.addEventListener("error", () => reject(new Error("Filer failed to load")), { once: true });
+			});
+
 export const Api = async () => {
+	await filerReady();
 	const { getSettings, setSettings } = useSettingsStore.getState();
 	if (!window.loadLock) window.loadLock = false;
 	window.fr = {

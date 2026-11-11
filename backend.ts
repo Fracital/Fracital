@@ -75,6 +75,9 @@ export function fsrv() {
 	// iTunes marks singles and EPs with a title suffix.
 	const albumType = (title: string | undefined): "album" | "single" | "ep" => (/ - single$/i.test(title || "") ? "single" : / - ep$/i.test(title || "") ? "ep" : "album");
 
+	// The GPT rewarded ad unit for "watch an ad for an hour without music ad breaks"; none offered when unset.
+	app.get("/api/ads/config", c => c.json({ rewarded: process.env.REWARDED_AD_UNIT?.trim() || null }));
+
 	// Social links + gallery photos for the artist page hero (loaded after the page).
 	app.get("/api/music/artist-extras", async c => {
 		const name = c.req.query("name")?.trim();

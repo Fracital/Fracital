@@ -7,6 +7,7 @@ import { useNavigate } from "react-router-dom";
 import { createId } from "@paralleldrive/cuid2";
 import XOR from "../libs/XOR";
 import { appRoot } from "../libs/cloak";
+import { isSearchQuery, searchUrl, urlFromInput } from "../libs/searchEngines";
 
 /**
  * Large screens: the bar fits its URL, between 22rem and half the screen, leaving room for the rest of the
@@ -32,20 +33,6 @@ export const Search = ({ tab }: SearchProps) => {
 
 	const searchHandler = (query: string) => {
 		if (query.length > 0) {
-			const isSearch = (q: string) => {
-				if (q.includes(" ")) return true;
-				if (/^[a-zA-Z][a-zA-Z0-9+\-.]*:\/\//.test(q)) return false;
-				if (q.startsWith("www.") || q.includes(".") || q.includes(":")) return false;
-				return true;
-			};
-			const makeUrl = (q: string) => {
-				if (/^[a-zA-Z][a-zA-Z0-9+\-.]*:\/\//.test(q)) return q;
-				if (q.includes("about:")) return q;
-				if (q.startsWith("www.")) return `https://${q}`;
-				if (q.includes(".") || q.includes(":")) return `https://${q}`;
-				return q;
-			};
-
 			const getAboutPageInfo = (url: string): { title: string; icon: React.ReactNode | null } => {
 				const page = url.replace("about:", "").split("?")[0];
 				switch (page) {
@@ -71,11 +58,11 @@ export const Search = ({ tab }: SearchProps) => {
 			let pageTitle = "New Tab";
 			let pageIcon: React.ReactNode | null = null;
 
-			if (isSearch(query)) {
-				finalUrl = `https://duckduckgo.com/?q=${encodeURIComponent(query)}`;
+			if (isSearchQuery(query)) {
+				finalUrl = searchUrl(query);
 				displayUrl = query;
 			} else {
-				finalUrl = makeUrl(query);
+				finalUrl = urlFromInput(query);
 				displayUrl = query;
 
 				if (finalUrl.includes("about:")) {

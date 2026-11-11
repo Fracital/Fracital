@@ -416,7 +416,9 @@ export function obfuscateJs(source, sourceType = "module", nameHint = "") {
 // The per-build key is random, so the substitution is not reproducible outside
 // the build; it is cost-raising like the rest of this file, not secrecy.
 // ---------------------------------------------------------------------------
-const PROXY_SRC = "scramjet|stomp|bare[-_]?mux|wispurr|epoxy|libcurl";
+// UV's names: its globals (Ultraviolet, UVServiceWorker, UVClient), the __uv
+// prefix of everything it hangs on a page, and its publisher's name.
+const PROXY_SRC = "scramjet|stomp|bare[-_]?mux|wispurr|epoxy|libcurl|ultraviolet|titaniumnetwork|uvserviceworker|uvclient|__uv";
 const PROXY_RE = new RegExp(PROXY_SRC, "i");
 const PROXY_RE_G = new RegExp(PROXY_SRC, "gi");
 const PROXY_KEY = randomBytes(32);
@@ -426,7 +428,10 @@ const LEGAL_RE = /@license|@preserve|licen[sc]|copyright|^!/i;
 // Read from src so the list cannot drift: any string literal in app source
 // that carries a proxy name is one the vendor must not rename.
 function loadAppSharedStrings() {
-	const out = new Set(["bare-mux-path", "bare-mux-worker"]);
+	// bare-mux's names that its in-app client (src/libs/uvEngine.ts) and its
+	// vendored shared worker exchange: the path key, the worker name, the remote
+	// transport marker and the refresh channel.
+	const out = new Set(["bare-mux-path", "bare-mux-worker", "bare-mux-remote", "bare-mux"]);
 	const root = join(REPO_ROOT, "src");
 	const visit = dir => {
 		let entries;

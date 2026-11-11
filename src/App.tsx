@@ -1,5 +1,6 @@
 import { createId } from "@paralleldrive/cuid2";
-import { AD_UNITS, AdBanner, useShowAds } from "./components/AdBanner";
+import { AD_UNITS, AdBanner, RevSlot, TabsAd, useShowAds } from "./components/AdBanner";
+import { MusicAdBreak } from "./components/MusicAdBreak";
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { RectangleStackIcon, PlusIcon, Cog6ToothIcon, ChevronLeftIcon, ChevronRightIcon, XMarkIcon } from "@heroicons/react/24/solid";
 import type { detailProps } from "./libs/eventBus";
@@ -90,6 +91,21 @@ const waitForServiceWorker = async (scope: string, scriptURL: string): Promise<S
 	const expectedScript = new URL(scriptURL, location.href).href;
 
 	const isExpectedController = () => navigator.serviceWorker.controller?.scriptURL === expectedScript;
+
+	// An active worker that doesn't control this page yet (first visit, hard reload) is asked to claim it,
+	// which takes a moment instead of a second page load. Reloading stays the fallback.
+	if (!isExpectedController()) {
+		await new Promise<void>(resolve => {
+			const done = () => {
+				window.clearTimeout(timeout);
+				navigator.serviceWorker.removeEventListener("controllerchange", done);
+				resolve();
+			};
+			const timeout = window.setTimeout(done, 2000);
+			navigator.serviceWorker.addEventListener("controllerchange", done);
+			(registration.active ?? worker)?.postMessage("claim");
+		});
+	}
 
 	if (!isExpectedController()) {
 		const reloadKey = "fracital-sw-controller-reload";
@@ -275,6 +291,15 @@ const App = () => {
 	// stomp is opt-in (the experimental proxies setting) and boots only once it
 	// is the selected engine; Scramjet keeps booting at startup as before.
 	const stompActive = proxy === "st" && settings[EXPERIMENTAL_PROXIES_SETTING] === true;
+	// UV boots its transport the first time it's chosen; its tabs wait for that.
+	const [uvReady, setUvReady] = useState(false);
+	useEffect(() => {
+		if (proxy !== "uv" || uvReady) return;
+		void import("./libs/uvEngine")
+			.then(({ bootUv }) => bootUv())
+			.then(() => setUvReady(true))
+			.catch(error => console.error("UV failed to start:", error));
+	}, [proxy, uvReady]);
 	// Cross-site sign-in (libs/crossSite.ts), once per load: a signed-out site signs in from the
 	// hub when this browser is linked; a signed-in one links it, unless it was turned off here.
 	useEffect(() => {
@@ -575,6 +600,7 @@ const App = () => {
 														`
 																	}
 																	query={query}
+																	active={currentTab?.id === item.id}
 																/>
 															</View>
 														)}
@@ -622,8 +648,9 @@ const App = () => {
 												<ExternalSite
 													id={item.id}
 													current={currentTab?.id === item.id}
-													key={item.id}
-													url={proxyReady ? item.url : undefined}
+													key={proxy === "uv" ? `uv-${item.id}` : item.id}
+													engine={proxy === "uv" ? "uv" : "sj"}
+													url={proxyReady && (proxy !== "uv" || uvReady) ? item.url : undefined}
 													className={
 														"absolute inset-0" +
 														" " +
@@ -797,6 +824,7 @@ const App = () => {
 
 										return ungrouped.length > 0 ? ungrouped.map(item => <Tab title={item.title} url={item.url} id={item.id} icon={item.icon} displayUrl={item.url} key={item.id} />) : null;
 									})()}
+									<TabsAd enabled={panelsOpen} />
 								</div>
 								<div
 									className={
@@ -848,6 +876,7 @@ const App = () => {
 								panelsOpen={panelsOpen}
 								onOpenPanels={() => panelClickOpen !== "off" && setPanelsOpen(true)}
 							/>
+							<MusicAdBreak />
 						</div>
 					</div>
 				</div>
@@ -896,7 +925,7 @@ function SideAd() {
 				</button>
 			</div>
 			<div className="flex flex-col items-center gap-2 px-2 pb-2">
-				<div data-ad="left-rail-2" />
+				<RevSlot name="left-rail-2" fallback={AD_UNITS.side} />
 				{Array.from({ length: slots }, (_, i) => (
 					<AdBanner key={i} unit={AD_UNITS.side} refreshMinutes={[5, 10]} className="rounded-lg" />
 				))}

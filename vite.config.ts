@@ -52,6 +52,22 @@ const STOMP_FILES: [string, string][] = [
 // file that is not there.
 const stripSourceMap = (content: string | Buffer) => content.toString().replace(/\n\/\/# sourceMappingURL=\S+\s*$/, "\n");
 
+// UV: the bundle, its service worker, and the client and handler a proxied
+// page loads, under neutral stamped names (pages load them, so two builds'
+// files must never meet). UV_PREFIX and the shared worker's name are also in
+// src/libs/uvEngine.ts.
+const UV_DIR = "node_modules/@titaniumnetwork-dev/ultraviolet/dist";
+const UV_PREFIX = "/~/v/";
+const UV_FILES: [string, string][] = [
+	["uv.bundle.js", stamped("pk.js")],
+	["uv.sw.js", stamped("pw.js")],
+	["uv.client.js", stamped("pc.js")],
+	["uv.handler.js", stamped("ph.js")],
+];
+const UV_CONFIG = stamped("pf.js");
+const vendorPath = (name: string) => `/vendor/${name}`;
+const uvConfig = `self.__uv$config = ${JSON.stringify({ prefix: UV_PREFIX, handler: vendorPath(UV_FILES[3][1]), client: vendorPath(UV_FILES[2][1]), bundle: vendorPath(UV_FILES[0][1]), config: vendorPath(UV_CONFIG), sw: vendorPath(UV_FILES[1][1]) }).replace(/}$/, ",encodeUrl:Ultraviolet.codec.xor.encode,decodeUrl:Ultraviolet.codec.xor.decode}")};\n`;
+
 // The five helper globals stomp's rewriter, inject bundles and error page
 // rendezvous on, minted once per build (and per dev server start) so a
 // deployment never carries the package defaults. Each is an identifier no
@@ -87,6 +103,10 @@ export default defineConfig({
 				chunkFileNames: "assets/[hash].js",
 				assetFileNames: "assets/[hash][extname]",
 				manualChunks(id: string) {
+					// Bundler helpers (commonjs interop, preload) are shared by vendor and
+					// app code: kept with the vendor chunks so no native chunk imports a VM
+					// one, which would demote the app out of the shield frontier.
+					if (id.startsWith("\0")) return "rt";
 					if (!id.includes("node_modules")) return undefined;
 					// @fortawesome/react-fontawesome uses a tagged template
 					// (String.raw) the shield VM does not support. Splitting it into a
@@ -99,7 +119,12 @@ export default defineConfig({
 					// shared core chunk, which the app also uses — a native→VM edge
 					// that demotes the whole app out of the shield frontier.
 					if (/music-metadata|strtok3|token-types|file-type|uint8array-extras|@tokenizer|content-type|media-typer/.test(id)) return "mmeta";
-					return undefined;
+					// Every other package gets its own third-party-only chunk, which ships
+					// native (nativeVendorChunks). Left to the bundler, React, the router
+					// and the rest land in the app chunks and run inside the VM, which
+					// makes every render several times slower on low-end hardware.
+					const pkg = id.split("node_modules/").pop()?.match(/^(@[^/]+\/[^/]+|[^/]+)/)?.[1];
+					return pkg ? `v-${pkg}` : undefined;
 				},
 			},
 		},
@@ -227,6 +252,39 @@ export default defineConfig({
 							dest: STOMP_DIR,
 							rename: { stripBase: true, name: stamped("link.mjs") },
 							overwrite: true,
+						},
+						// UV's files, its config, and the loader the service worker imports
+						// (fixed name, as sw.js names it; it changes with every build, which
+						// is what updates the worker).
+						...UV_FILES.map(([from, to]) => ({
+							src: `${UV_DIR}/${from}`,
+							dest: "vendor",
+							rename: { stripBase: true as const, name: to },
+							overwrite: true,
+							transform: stripSourceMap,
+						})),
+						{
+							src: `${UV_DIR}/uv.config.js`,
+							dest: "vendor",
+							rename: { stripBase: true, name: UV_CONFIG },
+							overwrite: true,
+							transform: () => uvConfig,
+						},
+						{
+							src: `${UV_DIR}/sw.js`,
+							dest: "vendor",
+							rename: { stripBase: true, name: "pl.js" },
+							overwrite: true,
+							transform: () => `importScripts(${[UV_FILES[0][1], UV_CONFIG, UV_FILES[1][1]].map(n => JSON.stringify(vendorPath(n))).join(", ")});\n`,
+						},
+						// bare-mux's shared worker: UV pages and the service worker reach
+						// the app page's relay transport through it (uvEngine.ts).
+						{
+							src: "node_modules/@mercuryworkshop/bare-mux/dist/worker.js",
+							dest: "vendor",
+							rename: { stripBase: true, name: stamped("mx.js") },
+							overwrite: true,
+							transform: stripSourceMap,
 						},
 						// HTTP/3 for origins that offer it (stomp docs/http3.md): stomp-h3,
 						// which the transport worker imports only once an origin advertises

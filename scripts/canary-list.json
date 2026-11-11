@@ -88,6 +88,14 @@
 		{
 			"value": "__uv$config",
 			"reason": "P1: ultraviolet storage fingerprint — future-proofing."
+		},
+		{
+			"value": "Ultraviolet",
+			"reason": "P1: third proxy engine name (UV's global and bundle). Renamed by the proxy transform."
+		},
+		{
+			"value": "titaniumnetwork",
+			"reason": "P1: UV's publisher (package scope, error page link). Renamed by the proxy transform."
 		}
 	]
 }

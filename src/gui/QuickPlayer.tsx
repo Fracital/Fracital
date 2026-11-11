@@ -6,6 +6,8 @@ import { useMusicStore, usePlaybackStore, useSettingsStore } from "../store";
 import { ContextMenu, type MenuItem } from "../components/ContextMenu";
 import { AudvisVisualizer } from "../components/AudvisVisualizer";
 import { openMusicPlayer, previous, registerAudio, seek, togglePlay } from "../libs/playback";
+import { adBreakDue, useMusicAds, watchForAdFree } from "../libs/music-ads";
+import { useRewardedAd } from "../libs/rewarded-ad";
 import { isLinkable, openTrackAlbum, openTrackArtist, trackArtists } from "../libs/trackLinks";
 import { PlayCount } from "../components/PlayCount";
 import { SongFeedback } from "../components/SongFeedback";
@@ -14,7 +16,7 @@ import { usePlaylistMenu } from "../components/PlaylistMenu";
 import { trackFromPlayer } from "../libs/playlists";
 import { ensureSavedLoaded, libraryTrackFromPlayer, useSavedStore } from "../libs/savedLibrary";
 import { CheckCircleIcon, PlusCircleIcon } from "@heroicons/react/24/outline";
-import { BarsArrowUpIcon, RadioIcon, UserIcon } from "@heroicons/react/24/solid";
+import { BarsArrowUpIcon, GiftIcon, RadioIcon, UserIcon } from "@heroicons/react/24/solid";
 import { HolyText } from "../components/common/HolyText";
 import { useHolyAttr } from "../libs/holy-attr";
 import { startRadio } from "../libs/radio";
@@ -61,6 +63,11 @@ export const QuickPlayer = ({ panelsOpen, className, onOpenPanels }: QuickPlayer
 			{ title: <HolyText text="Add to queue" />, icon: <PlusIcon className="size-5" />, onClick: () => music.addTrack(track) },
 			{ title: <HolyText text="Restart song" />, icon: <ArrowUturnLeftIcon className="size-5" />, onClick: () => seek(0) },
 		];
+		const { ready } = useRewardedAd.getState();
+		if (ready && useMusicAds.getState().adFreeUntil <= Date.now()) {
+			const label = useMusicAds.getState().rewardAds > 0 ? "Watch one more ad for 1 hour without ad breaks" : "Watch an ad for 1 hour without ad breaks";
+			items.push({ title: <HolyText text={label} />, icon: <GiftIcon className="size-5" />, onClick: () => void watchForAdFree() });
+		}
 		if (music.queue.some(t => t.id === track.id)) items.push({ title: <HolyText text="Remove copies from queue" />, icon: <MinusIcon className="size-5" />, onClick: () => removeTrack(track.id) });
 		items.push(playlistMenu(trackFromPlayer(track)));
 		if (isLinkable(track)) {
@@ -184,6 +191,8 @@ export const QuickPlayer = ({ panelsOpen, className, onOpenPanels }: QuickPlayer
 		if (currentTrack && !currentTrack.src) usePlaybackStore.setState({ failedTrackId: currentTrack.id, isPlaying: false });
 		if (currentTrack?.src && audioRef.current) {
 			audioRef.current.src = currentTrack.src;
+			// An ad break is due: the song waits, and the break plays it when it ends.
+			if (adBreakDue()) return;
 			if (audioContextRef.current?.state === "suspended") {
 				audioContextRef.current.resume().then(() => {
 					const playPromise = audioRef.current?.play();

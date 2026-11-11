@@ -1,4 +1,8 @@
 importScripts("/vendor/ctl.sw.js");
+// UV: its bundle, config and worker under this build's names (vite.config.ts UV_FILES).
+importScripts("/vendor/pl.js");
+
+const uv = new UVServiceWorker();
 
 // Buffer request bodies before handing them to the routing layer, which otherwise transfers `request.body` to the page:
 // - Firefox doesn't implement Request.body, so every POST would be forwarded with an empty body.
@@ -39,8 +43,15 @@ const controllerFor = async e => {
 };
 const route = e => withBufferedBody(e).then(event => $scramjetController.route(event));
 
+// The page asks for this when it loaded without the worker (first visit, hard reload), so it doesn't have to reload.
+self.addEventListener("message", e => {
+	if (e.data === "claim") e.waitUntil(self.clients.claim());
+});
+
 self.addEventListener("fetch", e => {
-	if ($scramjetController.shouldRoute(e)) {
+	if (uv.route(e)) {
+		e.respondWith(uv.fetch(e));
+	} else if ($scramjetController.shouldRoute(e)) {
 		e.respondWith(route(e));
 	} else if (new URL(e.request.url).pathname.startsWith(ENGINE_PREFIX)) {
 		// No controller within the wait: the page that made the URL is gone, and the server answers as it did.

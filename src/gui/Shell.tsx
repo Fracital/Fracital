@@ -46,7 +46,7 @@ import { Modal } from "../components/Modal/Modal";
 import { changeProxy, EXPERIMENTAL_PROXIES_SETTING, getLogin, getProxy, isProxyEngine, type ProxyEngine } from "../types";
 import { useStompStore } from "../libs/stompEngine";
 import { getMe, signOut } from "../libs/auth";
-import { runtimeGlobal } from "../libs/proxyGlobals";
+import { useEngineVersions } from "../libs/proxyEngines";
 import { HolyText } from "../components/common/HolyText";
 import { ShieldCheckIcon } from "@heroicons/react/24/solid";
 import { ContextMenu, type MenuItem } from "../components/ContextMenu";
@@ -75,7 +75,30 @@ export const UserCard = ({ id, display, handle, avatar }: UserProps) => {
 
 	const accountRef = useRef<HTMLDivElement>(null);
 	const menuRef = useRef<HTMLDivElement>(null);
+	const wrapperRef = useRef<HTMLDivElement>(null);
 	const newTab = useTabsStore(state => state.newTab);
+
+	// Closes on a click anywhere else, on a click into a site (its frame takes focus, so the window blurs), or on Escape.
+	useEffect(() => {
+		if (!contextOpen) return;
+		const root = appRoot();
+		const close = () => setContextOpen(false);
+		const onPointerDown = (e: Event) => {
+			// The path, not the target: inside a cloaked page's closed shadow root the target is retargeted.
+			if (wrapperRef.current && !e.composedPath().includes(wrapperRef.current)) close();
+		};
+		const onKey = (e: Event) => {
+			if ((e as KeyboardEvent).key === "Escape") close();
+		};
+		root.addEventListener("pointerdown", onPointerDown, true);
+		root.addEventListener("keydown", onKey);
+		window.addEventListener("blur", close);
+		return () => {
+			root.removeEventListener("pointerdown", onPointerDown, true);
+			root.removeEventListener("keydown", onKey);
+			window.removeEventListener("blur", close);
+		};
+	}, [contextOpen]);
 	const [isAdmin, setIsAdmin] = useState(false);
 	useEffect(() => {
 		const load = () => void getMe().then(m => setIsAdmin(!!m?.isAdmin));
@@ -88,6 +111,7 @@ export const UserCard = ({ id, display, handle, avatar }: UserProps) => {
 	return (
 		<>
 			<div
+				ref={wrapperRef}
 				className="relative flex flex-col gap-2.5 h-7"
 				onClick={() => {
 					contextOpen === true ? setContextOpen(false) : setContextOpen(true);
@@ -329,9 +353,8 @@ const Shell = () => {
 	const { ref: pinRef, placeholder: pinAttrs } = useHolyAttr({ title: bar.pinned ? "Auto-hide the top bar" : "Keep the top bar open", "aria-label": bar.pinned ? "Auto-hide the top bar" : "Keep the top bar open" });
 	const { ref: closeBarRef, placeholder: closeBarAttrs } = useHolyAttr({ title: "Hide the top bar", "aria-label": "Hide the top bar" });
 
-	const [uvVersion] = useState("v3.2.10");
-	const runtime = runtimeGlobal();
-	const sjVersion = runtime?.versionInfo?.version ? `v${runtime.versionInfo.version}` : "";
+	const versions = useEngineVersions();
+	const { uv: uvVersion, sj: sjVersion } = versions;
 	// The engines on offer: stomp only behind the experimental proxies setting.
 	const experimentalProxies = settings[EXPERIMENTAL_PROXIES_SETTING] === true;
 	const engines: ProxyEngine[] = experimentalProxies ? ["sj", "uv", "st"] : ["sj", "uv"];
@@ -470,23 +493,20 @@ const Shell = () => {
 
 	const engineName = (engine: ProxyEngine) => (engine === "st" ? <HolyText text="Stomp" /> : engine === "uv" ? "UV" : "Scramjet");
 	const check = (on: boolean) => (on ? <CheckIcon className="size-4" /> : null);
+	// An engine as a menu row: its name and version (a data value).
+	const engineItem = (engine: ProxyEngine): MenuItem => ({
+		title: (
+			<span className="flex items-center gap-2">
+				{engineName(engine)}
+				{versions[engine] && <span className="text-xs font-medium text-(--text-tertiary)">{versions[engine]}</span>}
+			</span>
+		),
+		icon: check(engine === shownProxy),
+		onClick: () => setEngine(engine),
+	});
 
 	const compactMenu = (): MenuItem[] => {
 		const items: MenuItem[] = [];
-		if (accountinfo) {
-			items.push({
-				isHeader: true,
-				icon: null,
-				onClick: () => undefined,
-				title: (
-					// The account's own name and handle: data values.
-					<div className="flex flex-col gap-1 leading-none">
-						<span>{accountinfo.display}</span>
-						<span className="text-xs font-medium text-(--text-tertiary)">@{accountinfo.handle}</span>
-					</div>
-				),
-			});
-		}
 		if (tiny) {
 			items.push({
 				title: <HolyText text={isFavorited ? "Remove from favorites" : "Add to favorites"} />,
@@ -503,7 +523,7 @@ const Shell = () => {
 				),
 				icon: <ChevronUpDownIcon className="size-5" />,
 				onClick: () => undefined,
-				children: engines.map(engine => ({ title: engineName(engine), icon: check(engine === shownProxy), onClick: () => setEngine(engine) })),
+				children: engines.map(engineItem),
 			},
 			{
 				title: <HolyText text={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"} />,
@@ -517,9 +537,6 @@ const Shell = () => {
 				children: [
 					{ title: <HolyText text="Show on hover" />, icon: check(bar.mode === "hover"), onClick: () => bar.setMode("hover") },
 					{ title: <HolyText text="Open/close button" />, icon: check(bar.mode === "button"), onClick: () => bar.setMode("button") },
-					bar.mode === "hover"
-						? { title: <HolyText text={bar.pinned ? "Auto-hide the top bar" : "Keep the top bar open"} />, icon: bar.pinned ? <LockOpenIcon className="size-4" /> : <LockClosedIcon className="size-4" />, onClick: () => bar.setPinned(!bar.pinned) }
-						: { title: <HolyText text="Hide the top bar" />, icon: <EyeSlashIcon className="size-4" />, onClick: () => bar.setOpen(false) },
 					...(bar.mode === "hover" ? [{ isHeader: true, title: <HolyText text="Hover zone" />, icon: null, onClick: () => undefined }, ...HOVER_PRESETS.map(px => ({ title: `${px}px`, icon: check(bar.threshold === px), onClick: () => bar.setThreshold(px) }))] : []),
 				],
 			},
@@ -543,8 +560,38 @@ const Shell = () => {
 		} else {
 			items.push({ title: <HolyText text="Sign in" />, icon: <UserCircleIcon className="size-5" />, onClick: () => openPage("about:account", "Fracital Account") });
 		}
+		// The account card sits at the bottom, as in the account dropdown.
+		if (accountinfo) {
+			items.push({
+				isHeader: true,
+				icon: null,
+				onClick: () => undefined,
+				title: (
+					// The account's own name and handle: data values.
+					<div className="flex items-center gap-2.5 -mx-1.5 p-1.5 rounded-lg bg-(--tertiary) leading-none">
+						{typeof accountinfo.avatar === "string" && accountinfo.avatar ? <img src={accountinfo.avatar} alt="" className="size-7 rounded-full pointer-events-none select-none" /> : <UserCircleIcon className="size-7 text-(--text-secondary)" />}
+						<div className="flex flex-col gap-1">
+							<span>{accountinfo.display}</span>
+							<span className="text-xs font-medium text-(--text-tertiary)">@{accountinfo.handle}</span>
+						</div>
+					</div>
+				),
+			});
+		}
 		return items;
 	};
+
+	/** Pins or hides the bar. Never inside a menu, so it's one click away at every width. */
+	const barToggle = (className: string, onContextMenu?: React.MouseEventHandler) =>
+		bar.mode === "hover" ? (
+			<button ref={pinRef} {...pinAttrs} aria-pressed={bar.pinned} className={className} onClick={() => bar.setPinned(!bar.pinned)} onContextMenu={onContextMenu}>
+				{bar.pinned ? <LockClosedIcon className="size-5" /> : <LockOpenIcon className="size-5" />}
+			</button>
+		) : (
+			<button ref={closeBarRef} {...closeBarAttrs} className={className} onClick={() => bar.setOpen(false)} onContextMenu={onContextMenu}>
+				<EyeSlashIcon className="size-5" />
+			</button>
+		);
 
 	const { ref: menuTriggerRef, placeholder: menuTriggerAttrs } = useHolyAttr({ title: "Menu", "aria-label": "Menu" });
 	const openCompactMenu = (e: React.MouseEvent<HTMLElement>) => {
@@ -716,7 +763,10 @@ const Shell = () => {
 			</div>
 			<div className="flex shrink-0 items-center justify-end gap-2.5">
 				{compact ? (
-					compactTrigger
+					<>
+						{barToggle("flex shrink-0 items-center justify-center p-2 rounded-full bg-(--secondary) text-(--text-secondary) inset-shadow-(--inset-shadow-secondary) hover:inset-shadow-(--inset-shadow-accent) hover:text-(--text-primary) cursor-pointer duration-200")}
+						{compactTrigger}
+					</>
 				) : (
 					<>
 						<div
@@ -728,14 +778,16 @@ const Shell = () => {
                     hover:inset-shadow-[0_0_0_2px_var(--accent)]
                 `
 							}
+							aria-haspopup={engines.length > 2 ? "menu" : undefined}
+							// Two engines: a click switches to the other. More: a click lists them to pick from.
 							onMouseDown={() => {
-								window.dispatchEvent(
-									new CustomEvent("proxy-change", {
-										detail: {
-											proxy: engines[(engines.indexOf(shownProxy) + 1) % engines.length],
-										},
-									}),
-								);
+								if (engines.length > 2) return;
+								setEngine(engines[(engines.indexOf(shownProxy) + 1) % engines.length]);
+							}}
+							onClick={e => {
+								if (engines.length <= 2) return;
+								const rect = e.currentTarget.getBoundingClientRect();
+								setContextMenu({ x: rect.left, y: rect.bottom + 8, visible: true, items: engines.map(engineItem) });
 							}}
 						>
 							<div className="flex items-center overflow-hidden h-5">
@@ -750,7 +802,9 @@ const Shell = () => {
 								>
 									<div className={"flex items-center justify-center gap-2 duration-150"}>
 										<span className="text-(--text-secondary) group-hover:text-(--text-primary) font-bold text-lg duration-150">UV</span>
-										<span className="text-(--text-tertiary) group-hover:text-(--text-primary) font-semibold duration-150">{uvVersion}</span>
+										<span className="max-w-16 truncate text-(--text-tertiary) group-hover:text-(--text-primary) font-semibold duration-150" title={uvVersion}>
+											{uvVersion}
+										</span>
 									</div>
 									<div
 										className={
@@ -762,7 +816,9 @@ const Shell = () => {
 										}
 									>
 										<span className="text-(--text-secondary) group-hover:text-(--text-primary) font-bold text-lg duration-150">Scramjet</span>
-										<span className="text-(--text-tertiary) group-hover:text-(--text-primary) font-semibold duration-150">{sjVersion}</span>
+										<span className="max-w-16 truncate text-(--text-tertiary) group-hover:text-(--text-primary) font-semibold duration-150" title={sjVersion}>
+											{sjVersion}
+										</span>
 									</div>
 									{experimentalProxies && (
 										<div
@@ -775,7 +831,9 @@ const Shell = () => {
 											}
 										>
 											<HolyText as="span" className="text-(--text-secondary) group-hover:text-(--text-primary) font-bold text-lg duration-150" text="Stomp" />
-											<span className="text-(--text-tertiary) group-hover:text-(--text-primary) font-semibold duration-150">{stompBuild}</span>
+											<span className="max-w-16 truncate text-(--text-tertiary) group-hover:text-(--text-primary) font-semibold duration-150" title={stompBuild}>
+												{stompBuild}
+											</span>
 											{stompState && <HolyText as="span" className="text-(--text-tertiary) group-hover:text-(--text-primary) font-medium text-sm duration-150" text={stompState} />}
 										</div>
 									)}
@@ -805,34 +863,10 @@ const Shell = () => {
 							title="Top bar"
 							trigger={(toggle, open) => (
 								<div className={`flex items-center rounded-full bg-(--secondary) text-(--text-secondary) duration-200 inset-shadow-(--inset-shadow-secondary) hover:inset-shadow-(--inset-shadow-accent) ${open ? "inset-shadow-(--inset-shadow-accent)" : ""}`}>
-									{bar.mode === "hover" ? (
-										<button
-											ref={pinRef}
-											{...pinAttrs}
-											aria-pressed={bar.pinned}
-											className="flex items-center justify-center p-2 pr-1 rounded-l-full hover:text-(--text-primary) cursor-pointer duration-200"
-											onClick={() => bar.setPinned(!bar.pinned)}
-											onContextMenu={e => {
-												e.preventDefault();
-												toggle();
-											}}
-										>
-											{bar.pinned ? <LockClosedIcon className="size-5" /> : <LockOpenIcon className="size-5" />}
-										</button>
-									) : (
-										<button
-											ref={closeBarRef}
-											{...closeBarAttrs}
-											className="flex items-center justify-center p-2 pr-1 rounded-l-full hover:text-(--text-primary) cursor-pointer duration-200"
-											onClick={() => bar.setOpen(false)}
-											onContextMenu={e => {
-												e.preventDefault();
-												toggle();
-											}}
-										>
-											<EyeSlashIcon className="size-5" />
-										</button>
-									)}
+									{barToggle("flex items-center justify-center p-2 pr-1 rounded-l-full hover:text-(--text-primary) cursor-pointer duration-200", e => {
+										e.preventDefault();
+										toggle();
+									})}
 									<button ref={barSettingsRef} {...barSettingsAttrs} aria-haspopup="dialog" aria-expanded={open} className="flex items-center justify-center p-2 pl-0.5 rounded-r-full hover:text-(--text-primary) cursor-pointer duration-200" onClick={toggle}>
 										<ChevronDownIcon className={`size-4 stroke-current stroke-1 duration-200 ${open ? "rotate-180" : ""}`} />
 									</button>

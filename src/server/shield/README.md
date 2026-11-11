@@ -12,6 +12,11 @@
 >   (`String.raw`), and separate native parser chunks would import the shared
 >   music-metadata core, a native→VM edge that demotes the whole app.
 > - `SHIELD_DEBUG=1` logs each fixpoint demotion with its importing edges.
+> - Every other `node_modules` package gets its own chunk in `manualChunks`, and
+>   bundler helpers (`\0` ids) share one, so third-party code ships native
+>   instead of being bundled into the app chunks and interpreted. VM bytecode
+>   dropped from ~2.9 MB to ~530 KB (app code only); at a 6× CPU throttle the app
+>   opens after Ctrl+E in ~1.4 s instead of ~3.9 s.
 > Integration proof (Fracital, headless Chrome, `scripts/boot-check.mjs`):
 > entry (255 KB) + app (2.6 MB) compile to bytecode, `bootViaLoader: true`, app
 > renders 35 KB DOM with zero shield errors; vendor chunks stay native by

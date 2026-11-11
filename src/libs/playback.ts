@@ -28,7 +28,15 @@ export const setPlaybackOwner = (next: PlaybackOwner | null) => {
 	owner = next;
 };
 
+let playGate: (() => boolean) | null = null;
+
+/** While the gate returns true (an ad break in music), requests to play are held. */
+export const setPlayGate = (gate: (() => boolean) | null) => {
+	playGate = gate;
+};
+
 export const play = async () => {
+	if (playGate?.()) return;
 	if (owner) return owner.play();
 	if (!audioEl) return;
 	if (audioCtx?.state === "suspended") await audioCtx.resume();
@@ -43,6 +51,7 @@ export const pause = () => {
 };
 
 export const togglePlay = async () => {
+	if (playGate?.()) return;
 	if (owner) return owner.paused() ? owner.play() : owner.pause();
 	if (!audioEl) return;
 	if (audioEl.paused) await play();

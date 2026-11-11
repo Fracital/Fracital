@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { RectangleGroupIcon, PaintBrushIcon, PlusIcon, TrashIcon, ScaleIcon } from "@heroicons/react/24/solid";
+import { RectangleGroupIcon, PaintBrushIcon, PlusIcon, TrashIcon, ScaleIcon, GlobeAltIcon } from "@heroicons/react/24/solid";
 import { CheckCircleIcon } from "@heroicons/react/24/outline";
 import LinkCard from "../components/LinkCard";
 import { isColorBright } from "../libs/colorBright";
@@ -7,7 +7,11 @@ import { quickLinks } from "../libs/init";
 import type { linkProps } from "./Home";
 import { BIG_PLAYER_DEFAULT_SETTING, useSettingsStore } from "../store";
 import { loadTheme } from "../libs/theme";
-import { ThemePath, SettingsPath, EXPERIMENTAL_PROXIES_SETTING, getProxy } from "../types";
+import { ThemePath, SettingsPath, EXPERIMENTAL_PROXIES_SETTING, getProxy, isProxyEngine, type ProxyEngine } from "../types";
+import { useEngineVersions } from "../libs/proxyEngines";
+import { currentSearchEngine, SEARCH_ENGINE_SETTING, SEARCH_ENGINES } from "../libs/searchEngines";
+
+const ENGINE_NAMES: Record<ProxyEngine, string> = { sj: "Scramjet", uv: "UV", st: "Stomp" };
 import { HolyText } from "../components/common/HolyText";
 import { isMotionSetting, MOTION_SETTING } from "../libs/motion";
 import { useModal } from "../components/Modal/ModalContext";
@@ -103,6 +107,19 @@ const Settings = ({ className }: SettingsProps) => {
 	const setSettings = useSettingsStore(state => state.setSettings);
 	const settings = useSettingsStore(state => state.settings);
 	const [page, setpage] = useState<string>("general");
+	const versions = useEngineVersions();
+	const availableEngines: ProxyEngine[] = settings[EXPERIMENTAL_PROXIES_SETTING] === true ? ["sj", "uv", "st"] : ["sj", "uv"];
+	// The engine in use, kept in step with the top bar's selector.
+	const [engine, setEngine] = useState<ProxyEngine>("sj");
+	useEffect(() => {
+		void getProxy().then(setEngine);
+		const onChange = (e: Event) => {
+			const next = (e as CustomEvent<{ proxy: unknown }>).detail.proxy;
+			if (isProxyEngine(next)) setEngine(next);
+		};
+		window.addEventListener("proxy-change", onChange);
+		return () => window.removeEventListener("proxy-change", onChange);
+	}, []);
 	const [themes, setThemes] = useState<any[]>([]);
 	const compactTabs = settings["compact-tabs"] === true;
 	const { openModal } = useModal();
@@ -218,44 +235,104 @@ const Settings = ({ className }: SettingsProps) => {
 						</div>
 					</div>
 				</div>
-				<HolyText as="h1" className="text-2xl font-bold" text="Proxy" />
-				<div className="flex gap-2">
-					<HolyText as="h2" className="text-xl font-medium" text="Experimental Proxies" />
-					<label className="flex items-center gap-3 cursor-pointer select-none">
-						<input
-							type="checkbox"
-							checked={settings[EXPERIMENTAL_PROXIES_SETTING] === true}
-							onChange={async () => {
-								const next = !(settings[EXPERIMENTAL_PROXIES_SETTING] === true);
-								await window.fr.fs.promises.writeFile(SettingsPath, JSON.stringify({ ...settings, [EXPERIMENTAL_PROXIES_SETTING]: next }, null, 4), "utf-8");
-								setSettings(EXPERIMENTAL_PROXIES_SETTING, next);
-								// Turning it off takes the experimental engine out of the selector; a tab on it goes back to the default.
-								if (!next && (await getProxy()) === "st") window.dispatchEvent(new CustomEvent("proxy-change", { detail: { proxy: "sj" } }));
-							}}
-							className="sr-only peer"
-						/>
-						<span
-							className={
-								"relative inline-block w-12 h-7 transition-colors duration-200 rounded-full" +
-								" " +
-								`
-                            ${settings[EXPERIMENTAL_PROXIES_SETTING] === true ? "bg-(--accent)" : `${settings.brightness === "dark" ? "bg-[#ffffff10] hover:bg-[#ffffff20]" : "bg-[#00000025] hover:bg-[#00000035]"}`}
-                        `
-							}
-						>
+			</div>
+		),
+		network: (
+			<div className="flex flex-col gap-3">
+				<HolyText as="h1" className="text-2xl font-bold" text="Network" />
+				<div className="flex flex-col gap-0.5">
+					<div className="flex flex-wrap items-center gap-2">
+						<h2 className="text-xl font-medium">
+							<HolyText text="Proxy Engine" />
+						</h2>
+						<div role="radiogroup" className={`flex flex-wrap gap-1 p-1 rounded-2xl ${settings.brightness === "dark" ? "bg-[#ffffff10]" : "bg-[#00000025]"}`}>
+							{availableEngines.map(choice => {
+								const on = engine === choice;
+								return (
+									<button
+										key={choice}
+										role="radio"
+										aria-checked={on}
+										className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-semibold cursor-pointer duration-150 ${on ? "bg-(--accent) text-white" : "text-(--text-secondary) hover:text-(--text-primary)"}`}
+										onClick={() => !on && window.dispatchEvent(new CustomEvent("proxy-change", { detail: { proxy: choice } }))}
+									>
+										<HolyText text={ENGINE_NAMES[choice]} />
+										{/* The engine's version: a data value. */}
+										{versions[choice] && <span className={`text-xs font-medium ${on ? "text-white/70" : "text-(--text-tertiary)"}`}>{versions[choice]}</span>}
+									</button>
+								);
+							})}
+						</div>
+					</div>
+					<HolyText as="p" className="text-sm text-(--text-secondary)" text="The engine that loads websites in your tabs. Switch to another one if a site doesn't load. The same choice is in the top bar." />
+				</div>
+				<div className="flex flex-col gap-0.5">
+					<div className="flex gap-2">
+						<HolyText as="h2" className="text-xl font-medium" text="Experimental Proxies" />
+						<label className="flex items-center gap-3 cursor-pointer select-none">
+							<input
+								type="checkbox"
+								checked={settings[EXPERIMENTAL_PROXIES_SETTING] === true}
+								onChange={async () => {
+									const next = !(settings[EXPERIMENTAL_PROXIES_SETTING] === true);
+									await window.fr.fs.promises.writeFile(SettingsPath, JSON.stringify({ ...settings, [EXPERIMENTAL_PROXIES_SETTING]: next }, null, 4), "utf-8");
+									setSettings(EXPERIMENTAL_PROXIES_SETTING, next);
+									// Turning it off takes the experimental engine out of the selector; a tab on it goes back to the default.
+									if (!next && (await getProxy()) === "st") window.dispatchEvent(new CustomEvent("proxy-change", { detail: { proxy: "sj" } }));
+								}}
+								className="sr-only peer"
+							/>
 							<span
 								className={
-									"absolute left-1 top-1 w-5 h-5 bg-white rounded-full shadow transform transition-transform duration-200" +
+									"relative inline-block w-12 h-7 transition-colors duration-200 rounded-full" +
 									" " +
 									`
-                                ${settings[EXPERIMENTAL_PROXIES_SETTING] === true ? "translate-x-5" : ""}
-                            `
+	                            ${settings[EXPERIMENTAL_PROXIES_SETTING] === true ? "bg-(--accent)" : `${settings.brightness === "dark" ? "bg-[#ffffff10] hover:bg-[#ffffff20]" : "bg-[#00000025] hover:bg-[#00000035]"}`}
+	                        `
 								}
-							/>
-						</span>
-					</label>
+							>
+								<span
+									className={
+										"absolute left-1 top-1 w-5 h-5 bg-white rounded-full shadow transform transition-transform duration-200" +
+										" " +
+										`
+	                                ${settings[EXPERIMENTAL_PROXIES_SETTING] === true ? "translate-x-5" : ""}
+	                            `
+									}
+								/>
+							</span>
+						</label>
+					</div>
+					<HolyText as="p" className="text-(--text-secondary)" text="Adds the Stomp engine to the engine selector in the top bar. It is new and may not work on every site." />
 				</div>
-				<HolyText as="p" className="text-(--text-secondary)" text="Adds the Stomp engine to the engine selector in the top bar. It is new and may not work on every site." />
+				<div className="flex flex-col gap-0.5">
+					<div className="flex flex-wrap items-center gap-2">
+						<h2 className="text-xl font-medium">
+							<HolyText text="Search Engine" />
+						</h2>
+						<div role="radiogroup" className={`flex flex-wrap gap-1 p-1 rounded-2xl ${settings.brightness === "dark" ? "bg-[#ffffff10]" : "bg-[#00000025]"}`}>
+							{SEARCH_ENGINES.map(choice => {
+								const on = currentSearchEngine(settings).id === choice.id;
+								return (
+									<button
+										key={choice.id}
+										role="radio"
+										aria-checked={on}
+										className={`px-3 py-1 rounded-full text-sm font-semibold cursor-pointer duration-150 ${on ? "bg-(--accent) text-white" : "text-(--text-secondary) hover:text-(--text-primary)"}`}
+										onClick={async () => {
+											if (on) return;
+											await window.fr.fs.promises.writeFile(SettingsPath, JSON.stringify({ ...settings, [SEARCH_ENGINE_SETTING]: choice.id }, null, 4), "utf-8");
+											setSettings(SEARCH_ENGINE_SETTING, choice.id);
+										}}
+									>
+										<HolyText text={choice.name} />
+									</button>
+								);
+							})}
+						</div>
+					</div>
+					<HolyText as="p" className="text-sm text-(--text-secondary)" text="Where the address bar sends anything that isn't a web address." />
+				</div>
 			</div>
 		),
 		app: (
@@ -517,10 +594,11 @@ const Settings = ({ className }: SettingsProps) => {
 					}
 				>
 					<TabItem currentPage={page} setPage={setpage} icon={<RectangleGroupIcon className="size-6 text-current duration-150" />} name="General" pageKey="general" />
+					<TabItem currentPage={page} setPage={setpage} icon={<GlobeAltIcon className="size-6 text-current duration-150" />} name="Network" pageKey="network" />
 					<TabItem currentPage={page} setPage={setpage} icon={<PaintBrushIcon className="size-6 text-current duration-150" />} name="Appearance" pageKey="app" />
 				</div>
 			</div>
-			<div className="relative overflow-y-auto sm:h-full h-[calc(100%-10rem)]">
+			<div className="relative flex-1 min-w-0 overflow-y-auto sm:h-full h-[calc(100%-10rem)]">
 				{Object.entries(pages).map(([key, pageComponent], index) => (
 					<div
 						key={index}
@@ -528,7 +606,7 @@ const Settings = ({ className }: SettingsProps) => {
 							"inset-0 flex flex-col gap-2 p-3.5 rounded-lg duration-150 h-full" +
 							" " +
 							`
-                            ${page === key ? "" : "absolute -translate-y-2.5 opacity-0 pointer-events-none"}
+                            ${page === key ? "" : "absolute -translate-y-2.5 opacity-0 pointer-events-none overflow-hidden invisible"}
                         `
 						}
 					>
