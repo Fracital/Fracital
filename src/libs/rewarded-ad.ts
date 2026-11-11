@@ -16,6 +16,7 @@ interface Slot {
 interface SlotEvent {
 	slot: Slot;
 	isEmpty?: boolean;
+	size?: number[] | string | null;
 	makeRewardedVisible?: () => void;
 }
 
@@ -23,6 +24,7 @@ interface PubAds {
 	addEventListener: (type: string, listener: (event: SlotEvent) => void) => void;
 	removeEventListener: (type: string, listener: (event: SlotEvent) => void) => void;
 	isInitialLoadDisabled: () => boolean;
+	getSlots: () => Slot[];
 	refresh: (slots: Slot[]) => void;
 }
 

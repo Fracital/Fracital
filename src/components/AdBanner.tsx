@@ -135,9 +135,10 @@ const REV_FILL_MS = 8000;
 /**
  * A RevIQ slot: its tag fills each `data-ad` div by name. With a `fallback`, an Adsterra unit takes the
  * slot's place when RevIQ has nothing for it: GPT reports the slot empty, or nothing has rendered by
- * REV_FILL_MS. The RevIQ div goes away then, so a late fill can't show both. Hidden for premium accounts.
+ * REV_FILL_MS, or (with `maxWidth`) what it sent is wider than the space. The RevIQ div goes away then,
+ * so a late fill can't show both. Hidden for premium accounts.
  */
-export const RevSlot = ({ name, className = "", fallback }: { name: string; className?: string; fallback?: Unit }) => {
+export const RevSlot = ({ name, className = "", fallback, maxWidth }: { name: string; className?: string; fallback?: Unit; maxWidth?: number }) => {
 	const show = useShowAds();
 	const ref = useRef<HTMLDivElement>(null);
 	const [failed, setFailed] = useState(false);
@@ -145,31 +146,58 @@ export const RevSlot = ({ name, className = "", fallback }: { name: string; clas
 	useEffect(() => {
 		const el = ref.current;
 		if (!el || !show || !fallback || failed) return;
-		const filled = () => [...el.querySelectorAll("iframe")].some(frame => frame.offsetWidth > 0 && frame.offsetHeight > 0);
-		const timer = window.setTimeout(() => {
-			if (!filled()) setFailed(true);
-		}, REV_FILL_MS);
+		const frames = () => [...el.querySelectorAll("iframe")].filter(frame => frame.offsetWidth > 0 && frame.offsetHeight > 0);
+		const tooWide = () => !!maxWidth && frames().some(frame => frame.offsetWidth > maxWidth);
 		const gt = window.googletag;
-		const onRender = (e: { slot: { getSlotElementId: () => string }; isEmpty?: boolean }) => {
-			if (!e.isEmpty) return;
+		// The GPT slot behind this div, so a replaced one is destroyed instead of refreshing unseen.
+		let gptSlot: Parameters<NonNullable<typeof gt>["destroySlots"]>[0][number] | null = null;
+		const fail = () => {
+			gt?.cmd.push(() => {
+				const slots = gptSlot
+					? [gptSlot]
+					: gt
+							.pubads()
+							.getSlots()
+							.filter(slot => {
+								const target = document.getElementById(slot.getSlotElementId());
+								return !!target && (target === el || el.contains(target));
+							});
+				if (slots.length) gt.destroySlots(slots);
+			});
+			setFailed(true);
+		};
+		const onRender = (e: { slot: Parameters<NonNullable<typeof gt>["destroySlots"]>[0][number] & { getSlotElementId: () => string }; isEmpty?: boolean; size?: number[] | string | null }) => {
 			const target = document.getElementById(e.slot.getSlotElementId());
-			if (target && (target === el || el.contains(target))) setFailed(true);
+			if (!target || (target !== el && !el.contains(target))) return;
+			gptSlot = e.slot;
+			const width = Array.isArray(e.size) ? e.size[0] : 0;
+			if (e.isEmpty || (maxWidth && width > maxWidth)) fail();
 		};
 		gt?.cmd.push(() => gt.pubads().addEventListener("slotRenderEnded", onRender));
+		const timer = window.setTimeout(() => {
+			if (!frames().length || tooWide()) fail();
+		}, REV_FILL_MS);
+		// An ad too wide for the space, as soon as it lands.
+		const watch = new MutationObserver(() => {
+			if (tooWide()) fail();
+		});
+		watch.observe(el, { childList: true, subtree: true, attributes: true, attributeFilter: ["width", "style"] });
 		return () => {
 			window.clearTimeout(timer);
+			watch.disconnect();
 			gt?.cmd.push(() => gt.pubads().removeEventListener("slotRenderEnded", onRender));
 		};
-	}, [show, fallback, failed]);
+	}, [show, fallback, failed, maxWidth]);
 
 	if (!show) return null;
+	// Keyed apart from the RevIQ div so React drops that one whole, with what RevIQ put inside it.
 	if (failed && fallback)
 		return (
-			<div className={`flex justify-center ${className}`}>
+			<div key="fallback" className={`flex justify-center ${className}`}>
 				<AdBanner unit={fallback} refreshMinutes={[5, 10]} className="rounded-lg" />
 			</div>
 		);
-	return <div ref={ref} data-ad={name} className={className} />;
+	return <div key="rev" ref={ref} data-ad={name} className={className} />;
 };
 
 /**

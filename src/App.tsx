@@ -887,6 +887,9 @@ const App = () => {
 
 export default App;
 
+/** The widest ad the side panel takes (300×250, 300×600); a wider one gets the panel's own unit instead. */
+const MAX_SIDE_AD_WIDTH = 300;
+
 function SideAd() {
 	const show = useShowAds();
 	const [closed, setClosed] = useState(false);
@@ -917,7 +920,8 @@ function SideAd() {
 
 	if (!show || closed) return null;
 	return (
-		<div ref={panelRef} className="hidden lg:flex flex-col shrink-0 rounded-2xl bg-(--secondary) inset-shadow-(--inset-shadow-primary) overflow-y-auto overflow-x-hidden scrollbar-none">
+		// As wide as its ads, up to a 300px one: anything wider is clipped and never widens the panel further.
+		<div ref={panelRef} className="hidden lg:flex flex-col shrink-0 min-w-44 max-w-79 rounded-2xl bg-(--secondary) inset-shadow-(--inset-shadow-primary) overflow-y-auto overflow-x-hidden scrollbar-none">
 			<div className="sticky top-0 z-10 m-2 p-2 pb-1.5 bg-(--secondary)">
 				<button className="flex items-center gap-1.5 w-full justify-center px-2 py-1 rounded-lg text-xs font-medium text-(--text-secondary) hover:text-(--text-primary) hover:bg-[#ffffff14] duration-150" title="Close ads" onClick={() => setClosed(true)}>
 					<XMarkIcon className="size-3.5" />
@@ -925,7 +929,7 @@ function SideAd() {
 				</button>
 			</div>
 			<div className="flex flex-col items-center gap-2 px-2 pb-2">
-				<RevSlot name="left-rail-2" fallback={AD_UNITS.side} />
+				<RevSlot name="left-rail-2" fallback={AD_UNITS.side} maxWidth={MAX_SIDE_AD_WIDTH} className="max-w-full overflow-hidden" />
 				{Array.from({ length: slots }, (_, i) => (
 					<AdBanner key={i} unit={AD_UNITS.side} refreshMinutes={[5, 10]} className="rounded-lg" />
 				))}
