@@ -714,12 +714,18 @@ else setTimeout(() => location.replace("/"), 1500);
 	// real name or email: other chat users and Discord see it.
 	app.get("/api/me/chat", async c => {
 		const user = c.get("user") as Env["Variables"]["user"] & { emailVerified?: boolean };
-		const { username } = await userMeta(c.get("pool"), user);
+		const [{ username }, accounts] = await Promise.all([userMeta(c.get("pool"), user), (await c.get("auth").$context).internalAdapter.findAccounts(user.id)]);
 		const placeholderEmail = user.email.endsWith("@lastfm.invalid");
-		// holt fetches and checks the avatar itself before showing it; only an https image is worth offering.
-		const avatar = typeof user.image === "string" && user.image.startsWith("https://") ? user.image : null;
+		// holt lets a user post once this is true. A verified email, or a sign-in an outside provider vouches
+		// for (Last.fm, Discord, Google, ...): Last.fm-only accounts have no real email to verify. A
+		// password-only account still verifies its email first.
+		const vouched = (!placeholderEmail && !!user.emailVerified) || accounts.some(a => a.providerId !== "credential");
+		// holt fetches and checks the avatar itself before showing it. An upload is a path on this site
+		// (/api/artist-media/…), which holt resolves against this endpoint's own origin.
+		const image = typeof user.image === "string" ? user.image : "";
+		const avatar = image.startsWith("https://") || (image.startsWith("/") && !image.startsWith("//")) ? image : null;
 		c.header("Cache-Control", "private, no-store");
-		return c.json({ id: user.id, username: username || user.name, email_verified: !placeholderEmail && !!user.emailVerified, avatar });
+		return c.json({ id: user.id, username: username || user.name, email_verified: vouched, avatar });
 	});
 
 	/** Re-reads the Last.fm profile now instead of waiting out the cache. */
