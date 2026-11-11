@@ -231,10 +231,13 @@ const Games = ({ query, className }: GamesProps) => {
 	useEffect(() => {
 		readGames();
 
-		// @ts-expect-error types
-		const watcher = window.fr.fs.watch(GamesPath, { recursive: true }, () => {
-			readGames();
-		});
+		// Without the file system (it failed to start) the list stays empty instead of taking the app down.
+		const watcher = window.fr?.fs
+			? // @ts-expect-error types
+				window.fr.fs.watch(GamesPath, { recursive: true }, () => {
+					readGames();
+				})
+			: null;
 
 		return () => {
 			// @ts-expect-error types

@@ -14,7 +14,7 @@
  */
 import { createHash, randomInt } from "node:crypto";
 import { dash } from "@better-auth/infra";
-import { betterAuth, type BetterAuthPlugin } from "better-auth";
+import { betterAuth, type BetterAuthOptions, type BetterAuthPlugin } from "better-auth";
 import { APIError, createAuthEndpoint, createAuthMiddleware, getSessionFromCtx } from "better-auth/api";
 import { setSessionCookie } from "better-auth/cookies";
 import { getMigrations } from "better-auth/db/migration";
@@ -34,6 +34,12 @@ import { discordPresenceEnabled, hasPresenceScope, migratePresence, readPresence
 import { discordBotStatus, discordBotToken, discordPresenceFor } from "./discord-bot";
 import { migratePlaylists, registerPlaylistRoutes } from "./playlists";
 import { buildExport, migrateExports, purgeExpiredExports, registerExportRoutes, saveExport } from "./data-export";
+
+/** An account with a real email can always get back in: a password-reset link sets a password. */
+const canRecoverByEmail = (email: string | null | undefined) => !!email && !email.endsWith("@lastfm.invalid") && mailEnabled();
+
+/** The endpoint context better-auth passes its account hooks. */
+type AccountHookContext = Parameters<NonNullable<NonNullable<NonNullable<NonNullable<BetterAuthOptions["databaseHooks"]>["account"]>["create"]>["after"]>>[1];
 
 const MUSIC_API = "/api/music";
 const STATE_COOKIE = "fracital_lastfm_state";
@@ -210,7 +216,13 @@ const authOptions = (pool: Pool) => ({
 	socialProviders: socialProviders(),
 	account: {
 		// Last.fm-only accounts have a placeholder email, so linking can't require matching emails.
-		accountLinking: { enabled: true, allowDifferentEmails: true },
+		// Signing in with a provider that vouches for the email (Google, Microsoft, a verified GitHub or
+		// Discord address) signs into the account with that email even when the account never verified
+		// it, instead of asking to sign in first. The provider's proof wins: databaseHooks.account below
+		// clears whatever else could sign into that account. better-auth marks this option deprecated
+		// (its next minor makes the check unconditional); after that upgrade, only accounts with a
+		// verified email link this way again.
+		accountLinking: { enabled: true, allowDifferentEmails: true, requireLocalEmailVerified: false },
 	},
 	emailVerification: {
 		sendOnSignUp: mailEnabled(),
@@ -241,12 +253,35 @@ const authOptions = (pool: Pool) => ({
 			const session = await getSessionFromCtx(ctx);
 			if (!session) return;
 			const accounts = await ctx.context.internalAdapter.findAccounts(session.user.id);
-			if (accounts.length) return;
+			if (accounts.length || canRecoverByEmail(session.user.email)) return;
 			const { rows } = await pool.query<{ n: string }>('select count(*) as n from passkey where "userId" = $1', [session.user.id]);
 			if (Number(rows[0]?.n) <= 1) throw new APIError("BAD_REQUEST", { message: "This passkey is your account's only way to sign in" });
 		}),
 	},
 	databaseHooks: {
+		account: {
+			create: {
+				// A provider sign-in that linked itself into an account whose email was never verified (see
+				// accountLinking): someone may have registered that email first, so the provider's proof of
+				// it wins. Every other way in (password, passkeys, other providers, open sessions) is removed.
+				after: async (account: { id: string; userId: string; providerId: string }, ctx: AccountHookContext) => {
+					if (!ctx || account.providerId === "credential") return;
+					const adapter = ctx.context.internalAdapter;
+					const user = await adapter.findUserById(account.userId);
+					if (!user || user.emailVerified) return;
+					// Linking from the account page while signed into it is the owner's own doing.
+					const session = await getSessionFromCtx(ctx).catch(() => null);
+					if (session?.user.id === account.userId) return;
+					const others = (await adapter.findAccounts(account.userId)).filter((a: { id: string }) => a.id !== account.id);
+					// A brand-new account has nothing else to clear.
+					if (!others.length) return;
+					for (const other of others) await adapter.deleteAccount(other.id);
+					await pool.query('delete from passkey where "userId" = $1', [account.userId]);
+					await adapter.deleteUserSessions(account.userId);
+					console.warn(`Provider sign-in took over unverified account ${account.userId}: removed ${others.length} other sign-in method(s), its passkeys and sessions`);
+				},
+			},
+		},
 		session: {
 			create: {
 				// Banned accounts can't sign in.
@@ -681,18 +716,37 @@ else setTimeout(() => location.replace("/"), 1500);
 		return c.json({ lastfm: await lastfmProfile(c.get("user").id, link.username, link.sessionKey) });
 	});
 
-	// Disconnects a sign-in provider, unless it's the account's last way to sign in.
+	// Disconnects a sign-in provider, unless that would lock the account out: it's the last way to sign
+	// in and there's no email to set a password through.
 	const disconnect = async (c: Ctx, providerId: string) => {
 		const adapter = (await c.get("auth").$context).internalAdapter;
 		const accounts = await adapter.findAccounts(c.get("user").id);
 		const targets = accounts.filter(a => a.providerId === providerId);
 		if (!targets.length) return { ok: true as const };
-		const otherSignIn = accounts.some(a => a.providerId !== providerId) || (await countPasskeys(c)) > 0;
+		const otherSignIn = accounts.some(a => a.providerId !== providerId) || (await countPasskeys(c)) > 0 || canRecoverByEmail(c.get("user").email);
 		if (!otherSignIn) return { error: "This is your account's only way to sign in. Add a password, passkey or another sign-in method first." };
 		for (const acc of targets) await adapter.deleteAccount(acc.id);
 		invalidateUser(c.get("user").id);
 		return { ok: true as const };
 	};
+
+	// Sets a first password on a signed-in account that has none (one that signed up with a provider or a
+	// passkey). Changing an existing password goes through better-auth's /change-password instead.
+	app.post("/api/me/password", async c => {
+		const body = z.object({ newPassword: z.string().min(8).max(120) }).safeParse(await c.req.json().catch(() => null));
+		if (!body.success) return c.json({ error: "Passwords need 8 to 120 characters" }, 400);
+		const user = c.get("user");
+		if (!user.email || user.email.endsWith("@lastfm.invalid")) return c.json({ error: "Add an email to your account before setting a password" }, 400);
+		const accounts = await (await c.get("auth").$context).internalAdapter.findAccounts(user.id);
+		if (accounts.some(a => a.providerId === "credential")) return c.json({ error: "Your account already has a password. Change it instead." }, 400);
+		try {
+			await c.get("auth").api.setPassword({ body: { newPassword: body.data.newPassword }, headers: c.req.raw.headers });
+		} catch (err) {
+			return c.json({ error: err instanceof Error ? err.message : "Couldn't set your password" }, 400);
+		}
+		invalidateUser(user.id);
+		return c.json({ ok: true });
+	});
 
 	app.delete("/api/me/lastfm", async c => {
 		const res = await disconnect(c, "lastfm");

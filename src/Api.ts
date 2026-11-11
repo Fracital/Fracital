@@ -15,7 +15,7 @@ declare global {
 	}
 }
 
-/** filer.min.js loads async (index.html) so it doesn't hold up the app's first paint; it's needed from here on. */
+/** filer.min.js (index.html) must have run before window.fr exists: views restored at startup read the file system as they mount. */
 const filerReady = () =>
 	typeof Filer !== "undefined"
 		? Promise.resolve()

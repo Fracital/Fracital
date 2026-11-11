@@ -266,6 +266,9 @@ export const DigitalLibrary = ({ query, urlPage = "library", urlPrefix, nav, ove
 	const [artists, setArtists] = useState<MusicArtist[]>([]);
 	const [chartTracks, setChartTracks] = useState<MusicTrack[]>([]);
 	const [chartAlbums, setChartAlbums] = useState<MusicAlbum[]>([]);
+	const [chartsLoaded, setChartsLoaded] = useState(false);
+	/** What's being opened, so its page shows a skeleton until it arrives. */
+	const [opening, setOpening] = useState<"album" | "artist" | "playlist" | null>(null);
 	const [loading, setLoading] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const [albumDetail, setAlbumDetail] = useState<AlbumDetail | null>(null);
@@ -390,7 +393,8 @@ export const DigitalLibrary = ({ query, urlPage = "library", urlPrefix, nav, ove
 				setChartTracks(res.tracks || []);
 				setChartAlbums(res.albums || []);
 			})
-			.catch(() => {});
+			.catch(() => {})
+			.finally(() => setChartsLoaded(true));
 	}, [configured]);
 
 	/** Query string of the view this component itself last pushed, so tab-history
@@ -444,6 +448,7 @@ export const DigitalLibrary = ({ query, urlPage = "library", urlPrefix, nav, ove
 
 	const openAlbum = async (id: string, sync = true) => {
 		setLoading(true);
+		setOpening("album");
 		try {
 			const detail = await getAlbum(id);
 			setAlbumDetail(detail);
@@ -453,11 +458,13 @@ export const DigitalLibrary = ({ query, urlPage = "library", urlPrefix, nav, ove
 			console.error("Failed to load album:", err);
 		} finally {
 			setLoading(false);
+			setOpening(null);
 		}
 	};
 
 	const openArtist = async (id: string, sync = true) => {
 		setLoading(true);
+		setOpening("artist");
 		try {
 			const detail = await getArtist(id);
 			setExtras(null);
@@ -475,6 +482,7 @@ export const DigitalLibrary = ({ query, urlPage = "library", urlPrefix, nav, ove
 			console.error("Failed to load artist:", err);
 		} finally {
 			setLoading(false);
+			setOpening(null);
 		}
 	};
 
@@ -488,6 +496,7 @@ export const DigitalLibrary = ({ query, urlPage = "library", urlPrefix, nav, ove
 			return;
 		}
 		setLoading(true);
+		setOpening("playlist");
 		try {
 			const playlist = await library.playlist(id);
 			setPlaylistView(playlist);
@@ -497,12 +506,14 @@ export const DigitalLibrary = ({ query, urlPage = "library", urlPrefix, nav, ove
 			console.error("Failed to load playlist:", err);
 		} finally {
 			setLoading(false);
+			setOpening(null);
 		}
 	};
 
 	/** Opens an artist page from a bare name (for collab credits without an id) by resolving it through search. */
 	const openArtistByName = async (name: string) => {
 		setLoading(true);
+		setOpening("artist");
 		try {
 			const res = await searchTracks(name, 5);
 			const hit = res.artists?.find(a => a.name.toLowerCase() === name.toLowerCase()) ?? res.artists?.[0];
@@ -511,12 +522,14 @@ export const DigitalLibrary = ({ query, urlPage = "library", urlPrefix, nav, ove
 			console.error("Failed to resolve artist:", err);
 		} finally {
 			setLoading(false);
+			setOpening(null);
 		}
 	};
 
 	/** Opens the album/single a song belongs to when only its title and artist are known. */
 	const openAlbumForTrack = async (title: string, artist: string) => {
 		setLoading(true);
+		setOpening("album");
 		try {
 			const res = await searchTracks(`${title} ${artist}`, 10);
 			const norm = (s: string) => s.toLowerCase().trim();
@@ -527,12 +540,14 @@ export const DigitalLibrary = ({ query, urlPage = "library", urlPrefix, nav, ove
 			console.error("Failed to resolve album:", err);
 		} finally {
 			setLoading(false);
+			setOpening(null);
 		}
 	};
 
 	/** Opens an album known only by title + artist (Last.fm top albums). */
 	const openAlbumByName = async (title: string, artist: string) => {
 		setLoading(true);
+		setOpening("album");
 		try {
 			const res = await searchTracks(`${title} ${artist}`, 5);
 			const norm = (s: string) => cleanAlbumTitle(s).toLowerCase().trim();
@@ -543,6 +558,7 @@ export const DigitalLibrary = ({ query, urlPage = "library", urlPrefix, nav, ove
 			console.error("Failed to resolve album:", err);
 		} finally {
 			setLoading(false);
+			setOpening(null);
 		}
 	};
 
@@ -605,9 +621,53 @@ export const DigitalLibrary = ({ query, urlPage = "library", urlPrefix, nav, ove
 
 	// --- Shared components ---
 
-	const Spinner = () => (
-		<div className="flex items-center justify-center py-12">
-			<div className={`size-6 border-2 border-t-transparent rounded-full animate-spin ${brightness === "dark" ? "border-white" : "border-black"}`} />
+	// Loading placeholders shaped like what's on the way: track rows, cards and a page header.
+	const bone = `animate-pulse rounded-md ${brightness === "dark" ? "bg-[#ffffff12]" : "bg-[#0000000f]"}`;
+
+	const SkeletonHeading = () => <div className={`${bone} h-5 w-40 mx-1`} />;
+
+	const SkeletonTracks = ({ count = 8 }: { count?: number }) => (
+		<div className="flex flex-col" aria-hidden="true">
+			{Array.from({ length: count }, (_, i) => (
+				<div key={i} className="flex items-center gap-3 p-2 px-3">
+					<div className={`${bone} w-6 h-3 shrink-0`} />
+					<div className={`${bone} size-10 shrink-0`} />
+					<div className="flex flex-col gap-1.5 flex-1 min-w-0">
+						<div className={`${bone} h-3.5`} style={{ width: `${40 + ((i * 37) % 35)}%` }} />
+						<div className={`${bone} h-3 w-1/4`} />
+					</div>
+					<div className={`${bone} h-3 w-10 shrink-0`} />
+				</div>
+			))}
+		</div>
+	);
+
+	const SkeletonCards = ({ count = 8, round = false, min = 140 }: { count?: number; round?: boolean; min?: number }) => (
+		// One row at any width: the cards past it get zero-height rows and are clipped.
+		<div className="grid gap-x-1 overflow-hidden" style={{ gridTemplateColumns: `repeat(auto-fill,minmax(${min}px,1fr))`, gridTemplateRows: "auto", gridAutoRows: 0 }} aria-hidden="true">
+			{Array.from({ length: count }, (_, i) => (
+				<div key={i} className={`flex flex-col gap-2 p-2 ${round ? "items-center" : ""}`}>
+					<div className={`${bone} ${round ? "rounded-full w-4/5" : "w-full"} aspect-square`} />
+					<div className={`${bone} h-3.5 ${round ? "w-3/5" : "w-4/5"}`} />
+					{!round && <div className={`${bone} h-3 w-1/2`} />}
+				</div>
+			))}
+		</div>
+	);
+
+	/** An album, artist or playlist page on its way: the header, then its tracks. */
+	const SkeletonDetail = ({ round = false }: { round?: boolean }) => (
+		<div className="flex flex-col gap-6" aria-hidden="true">
+			<div className="flex items-end gap-5 pt-2">
+				<div className={`${bone} ${round ? "rounded-full" : "rounded-lg"} size-40 shrink-0`} />
+				<div className="flex flex-col gap-3 flex-1 min-w-0 pb-2">
+					<div className={`${bone} h-3 w-20`} />
+					<div className={`${bone} h-8 w-2/3`} />
+					<div className={`${bone} h-3.5 w-1/3`} />
+					<div className={`${bone} h-9 w-28 rounded-full mt-1`} />
+				</div>
+			</div>
+			<SkeletonTracks count={10} />
 		</div>
 	);
 
@@ -867,6 +927,18 @@ export const DigitalLibrary = ({ query, urlPage = "library", urlPrefix, nav, ove
 	const HomePage = () => (
 		<div className="flex flex-col gap-6">
 			<YourLibrary mode="browse" dark={brightness === "dark"} onPlayList={playListFrom} onOpenArtist={openArtistByName} onOpenAlbum={openAlbumByName} onOpenAlbumId={openAlbum} onOpenPlaylist={openPlaylist} onSongMenu={openSongMenu} />
+			{!chartsLoaded && (
+				<>
+					<div className="flex flex-col gap-2">
+						<SkeletonHeading />
+						<SkeletonCards count={8} />
+					</div>
+					<div className="flex flex-col gap-2">
+						<SkeletonHeading />
+						<SkeletonTracks count={10} />
+					</div>
+				</>
+			)}
 			{chartAlbums.length > 0 && (
 				<div className="flex flex-col gap-2">
 					<h2 className="text-lg font-bold px-1">Popular Right Now</h2>
@@ -1006,7 +1078,18 @@ export const DigitalLibrary = ({ query, urlPage = "library", urlPrefix, nav, ove
 
 	const SearchPage = () => (
 		<div className="flex flex-col gap-6">
-			{loading && <Spinner />}
+			{loading && (
+				<div className="flex flex-col gap-6">
+					<div className="flex flex-col gap-2">
+						<SkeletonHeading />
+						<SkeletonCards count={6} round min={110} />
+					</div>
+					<div className="flex flex-col gap-2">
+						<SkeletonHeading />
+						<SkeletonTracks count={6} />
+					</div>
+				</div>
+			)}
 			{!loading && error && <EmptyState message={error} />}
 			{!loading && !error && tracks.length === 0 && albums.length === 0 && artists.length === 0 && searchQuery.trim() && <EmptyState message="No results found" />}
 			{artists.length > 0 && (
@@ -1631,12 +1714,13 @@ export const DigitalLibrary = ({ query, urlPage = "library", urlPrefix, nav, ove
 			<div className={`flex-1 overflow-auto px-4 pb-4 ${overrideShown ? "hidden" : ""}`}>
 				{/* Called (not <HomePage />) so Your Library keeps its state across re-renders. */}
 				{showMyMusic && MyMusicPage()}
-				{!showMyMusic && page === "home" && HomePage()}
-				{!showMyMusic && page === "search" && <SearchPage />}
-				{!showMyMusic && page === "album" && AlbumPage()}
+				{!showMyMusic && opening && <SkeletonDetail round={opening === "artist"} />}
+				{!showMyMusic && !opening && page === "home" && HomePage()}
+				{!showMyMusic && !opening && page === "search" && <SearchPage />}
+				{!showMyMusic && !opening && page === "album" && AlbumPage()}
 				{/* Called, not mounted as <ArtistPage />: a fresh component identity each render would remount it as play counts stream in. */}
-				{!showMyMusic && page === "artist" && ArtistPage()}
-				{!showMyMusic && page === "playlist" && PlaylistPage()}
+				{!showMyMusic && !opening && page === "artist" && ArtistPage()}
+				{!showMyMusic && !opening && page === "playlist" && PlaylistPage()}
 			</div>
 			{override && <div className={`flex-1 min-h-0 px-4 pb-4 ${overrideShown ? "" : "hidden"}`}>{override}</div>}
 			{songMenu && <ContextMenu items={songMenu.items} position={songMenu.position} onClose={() => setSongMenu(null)} />}

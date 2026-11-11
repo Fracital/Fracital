@@ -294,6 +294,18 @@ export async function requestPasswordReset(email: string): Promise<void> {
 	if (res.error) throw new Error(res.error.message || "Couldn't send the reset email");
 }
 
+/** A first password for a signed-in account that has none. */
+export async function setAccountPassword(newPassword: string): Promise<void> {
+	await meFetch("/api/me/password", { method: "POST", body: JSON.stringify({ newPassword }) });
+	await refreshMe();
+}
+
+/** Changes the password; other devices are signed out. */
+export async function changeAccountPassword(currentPassword: string, newPassword: string): Promise<void> {
+	const res = await authClient.changePassword({ currentPassword, newPassword, revokeOtherSessions: true });
+	if (res.error) throw new Error(res.error.message || "Couldn't change your password");
+}
+
 export async function resetPassword(token: string, newPassword: string): Promise<void> {
 	const res = await authClient.resetPassword({ token, newPassword });
 	if (res.error) throw new Error(res.error.message || "Couldn't reset your password");

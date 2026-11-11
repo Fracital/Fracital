@@ -31,6 +31,8 @@ import {
 	requestAccountDeletion,
 	requestPasswordReset,
 	resetPassword,
+	setAccountPassword,
+	changeAccountPassword,
 	sendVerificationEmail,
 	setDiscordActivityShown,
 	setDiscordPresence,
@@ -353,6 +355,8 @@ const Manage = ({ me, notice, onChange, onDeleted }: { me: Me; notice?: string; 
 	const avatar = me.user.image || me.lastfm?.image;
 	const providers = new Set(me.providers ?? []);
 	const signInMethods = providers.size + (me.passkeys ?? 0);
+	// A real email with mail on is a way back in too: a reset link sets a password (the server checks the same).
+	const emailRecovery = !!me.user.email && !!options?.mail;
 
 	const run = async (key: string, fn: () => Promise<unknown>, done?: string) => {
 		setError("");
@@ -406,7 +410,7 @@ const Manage = ({ me, notice, onChange, onDeleted }: { me: Me; notice?: string; 
 
 				{me.discordActivity && <DiscordActivityCard me={me} options={options} busy={busy} run={run} />}
 
-				<ConnectedServices me={me} options={options} busy={busy} run={run} canDisconnect={signInMethods > 1 || !providers.has("lastfm")} />
+				<ConnectedServices me={me} options={options} busy={busy} run={run} canDisconnect={signInMethods > 1 || !providers.has("lastfm") || emailRecovery} />
 
 				<SignInMethods me={me} options={options} busy={busy} run={run} signInMethods={signInMethods} />
 
@@ -602,10 +606,12 @@ const ConnectedServices = ({ me, options, busy, run, canDisconnect }: { me: Me; 
 								<ArrowPathIcon className={`size-4 ${busy === "lf-refresh" ? "animate-spin" : ""}`} />
 							</button>
 						)}
-						{canDisconnect && (
+						{canDisconnect ? (
 							<button className={pill} disabled={!!busy} onClick={() => run("lf-off", disconnectLastfm)}>
 								<HolyText text="Disconnect" />
 							</button>
+						) : (
+							<HolyText as="span" className="text-xs text-(--text-tertiary)" text="Your only sign-in: add another to disconnect" />
 						)}
 					</>
 				) : (
@@ -1021,6 +1027,10 @@ const SignInMethods = ({ me, options, busy, run, signInMethods }: { me: Me; opti
 	const providers = new Set(me.providers ?? []);
 	const [passkeys, setPasskeys] = useState<PasskeyInfo[]>([]);
 	const [terbiumForm, setTerbiumForm] = useState(false);
+	const hasPassword = providers.has("credential");
+	const [pwForm, setPwForm] = useState(false);
+	const [currentPw, setCurrentPw] = useState("");
+	const [newPw, setNewPw] = useState("");
 	const [tbEmail, setTbEmail] = useState("");
 	const [tbPassword, setTbPassword] = useState("");
 	const canPasskey = !!options && passkeysUsable(options);
@@ -1032,7 +1042,8 @@ const SignInMethods = ({ me, options, busy, run, signInMethods }: { me: Me; opti
 			.catch(() => {});
 	}, [canPasskey, me.passkeys]);
 
-	const last = signInMethods <= 1;
+	// The only way into the account, with no email to set a password through: removing it would lock the account.
+	const last = signInMethods <= 1 && !(me.user.email && options?.mail);
 	const oauthOk = oauthUsable(options);
 
 	return (
@@ -1042,13 +1053,44 @@ const SignInMethods = ({ me, options, busy, run, signInMethods }: { me: Me; opti
 			</h2>
 
 			{me.user.email && (
-				<MethodRow icon={<KeyIcon className="size-5" />} label="Password" detail={providers.has("credential") ? me.user.email : "Not set"}>
-					{options?.mail && (
-						<button className={pill} disabled={!!busy} onClick={() => run("pw", () => requestPasswordReset(me.user.email!), `We emailed a link to ${me.user.email} to ${providers.has("credential") ? "change" : "set"} your password.`)}>
-							<HolyText text={busy === "pw" ? "Sending…" : providers.has("credential") ? "Change" : "Set password"} />
+				<MethodRow icon={<KeyIcon className="size-5" />} label="Password" detail={hasPassword ? me.user.email : "Not set"}>
+					{!pwForm && (
+						<button className={pill} disabled={!!busy} onClick={() => setPwForm(true)}>
+							<HolyText text={hasPassword ? "Change" : "Set password"} />
 						</button>
 					)}
 				</MethodRow>
+			)}
+			{me.user.email && pwForm && (
+				<div className="flex flex-col gap-2 pl-13">
+					{hasPassword && <Input title="Current password" type="password" value={currentPw} onChange={e => setCurrentPw(e.target.value)} />}
+					<Input title="New password" type="password" value={newPw} onChange={e => setNewPw(e.target.value)} />
+					<div className="flex flex-wrap gap-2">
+						<button
+							className={pill}
+							disabled={!!busy || newPw.length < 8 || (hasPassword && !currentPw)}
+							onClick={() =>
+								run("pw", () => (hasPassword ? changeAccountPassword(currentPw, newPw) : setAccountPassword(newPw)), hasPassword ? "Password changed. Other devices were signed out." : "Password set. You can now sign in with your email and password.").then(() => {
+									setCurrentPw("");
+									setNewPw("");
+									setPwForm(false);
+								})
+							}
+						>
+							<HolyText text={busy === "pw" ? "Saving…" : hasPassword ? "Change password" : "Set password"} />
+						</button>
+						{/* Forgot the current one: a reset link sets a new one. */}
+						{hasPassword && options?.mail && (
+							<button className={pill} disabled={!!busy} onClick={() => run("pw-mail", () => requestPasswordReset(me.user.email!), `We emailed a link to ${me.user.email} to reset your password.`)}>
+								<HolyText text={busy === "pw-mail" ? "Sending…" : "Email me a reset link"} />
+							</button>
+						)}
+						<button className={pill} onClick={() => setPwForm(false)}>
+							<HolyText text="Cancel" />
+						</button>
+					</div>
+					{newPw.length > 0 && newPw.length < 8 && <HolyText as="p" className="text-xs text-(--text-tertiary)" text="At least 8 characters." />}
+				</div>
 			)}
 
 			{options?.social.map(p => {
