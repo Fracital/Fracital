@@ -147,6 +147,17 @@ const regSw = async () => {
 			wisp: wispURL,
 		}),
 	});
+	// A worker of a new build takes the page over a moment after a visit begins (sw.js differs with every build,
+	// and the new worker claims its clients). It knows no controller, and the controller would go on talking to
+	// the worker it was made with, which is gone: every proxied request after that was let through to the server
+	// until a reload. The controller registers with the worker that controls the page now. (public/sw.js holds a
+	// request that arrives before it has.)
+	navigator.serviceWorker.addEventListener("controllerchange", () => {
+		const worker = navigator.serviceWorker.controller;
+		if (!worker || worker === scramjet.serviceWorkerController) return;
+		scramjet.serviceWorkerController = worker;
+		(scramjet as unknown as { setupMessagePort(): void }).setupMessagePort();
+	});
 	// The SW only routes a frame's requests after the controller handshake finishes.
 	await scramjet.wait();
 	window.scramjetController = scramjet;

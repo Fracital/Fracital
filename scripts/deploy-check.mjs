@@ -262,6 +262,11 @@ const visit = async (label, dir, write, emptyHttpCache = false) => {
 			}, ENGINE_DIR),
 		15000,
 	);
+	// Scramjet's worker (/sw.js) differs with every build, and the new one takes
+	// the page over seconds into the first visit after a deploy: the page still
+	// loads through Scramjet then.
+	const later = await scramjetLoad("null");
+	check(`${label}: a page loads through Scramjet later in the visit`, later.error === "", later.error);
 
 	// Every vendored file the page loaded is a file of the build being served.
 	const foreign = loads.filter(load => {

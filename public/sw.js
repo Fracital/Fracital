@@ -22,8 +22,28 @@ const withBufferedBody = async e => {
 	};
 };
 
+// A worker that has only just started knows no controller: the page's controller registers with it by message, after a
+// worker of a new build took the page over (every deploy: this file differs with each build) or when the browser starts
+// the worker again after stopping it idle. A request for a proxied URL that came first was let through to the server,
+// which has no such path: the page got its 404, or a proxied document ran without the scripts that contain it. Such a
+// request waits for its controller instead.
+const ENGINE_PREFIX = "/~/sj/"; // the controller's default prefix (App.tsx passes none)
+const CONTROLLER_WAIT_MS = 5000;
+const controllerFor = async e => {
+	const until = Date.now() + CONTROLLER_WAIT_MS;
+	while (!$scramjetController.shouldRoute(e)) {
+		if (Date.now() > until) return false;
+		await new Promise(resolve => setTimeout(resolve, 20));
+	}
+	return true;
+};
+const route = e => withBufferedBody(e).then(event => $scramjetController.route(event));
+
 self.addEventListener("fetch", e => {
 	if ($scramjetController.shouldRoute(e)) {
-		e.respondWith(withBufferedBody(e).then(event => $scramjetController.route(event)));
+		e.respondWith(route(e));
+	} else if (new URL(e.request.url).pathname.startsWith(ENGINE_PREFIX)) {
+		// No controller within the wait: the page that made the URL is gone, and the server answers as it did.
+		e.respondWith(controllerFor(e).then(found => (found ? route(e) : fetch(e.request))));
 	}
 });
