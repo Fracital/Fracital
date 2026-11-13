@@ -98,7 +98,15 @@ function registerMusicApi(server: { middlewares: ViteDevServer["middlewares"] },
 		const id = (req.url || "/").split("?")[0].replace(/^\//, "");
 		if (!id) {
 			const ids = Object.keys(FILTER_LISTS) as FilterListId[];
-			const lists = await Promise.all(ids.map(async list => ({ id: list, version: await getFilterList(list).then(held => held.version, () => null) })));
+			const lists = await Promise.all(
+				ids.map(async list => ({
+					id: list,
+					version: await getFilterList(list).then(
+						held => held.version,
+						() => null,
+					),
+				})),
+			);
 			return sendJson(res, 200, { lists });
 		}
 		if (!isFilterListId(id)) return sendJson(res, 404, { error: "unknown list" });

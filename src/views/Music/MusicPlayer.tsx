@@ -875,15 +875,7 @@ const MusicVideo = ({ track, videoId, seconds, onUnplayable, className }: { trac
 	const params = new URLSearchParams({ enablejsapi: "1", origin: location.origin, controls: "0", disablekb: "1", fs: "0", iv_load_policy: "3", playsinline: "1", rel: "0", mute: "1" });
 	return (
 		<div className={`relative overflow-hidden rounded-3xl bg-black shadow-[0_10px_40px_0px_#00000090] ${className ?? ""}`}>
-			<iframe
-				ref={frameRef}
-				src={`${YT_ORIGIN}/embed/${videoId}?${params}`}
-				title={`${track.title} music video`}
-				allow="autoplay; encrypted-media; picture-in-picture"
-				referrerPolicy="strict-origin-when-cross-origin"
-				tabIndex={-1}
-				className="absolute inset-0 size-full pointer-events-none"
-			/>
+			<iframe ref={frameRef} src={`${YT_ORIGIN}/embed/${videoId}?${params}`} title={`${track.title} music video`} allow="autoplay; encrypted-media; picture-in-picture" referrerPolicy="strict-origin-when-cross-origin" tabIndex={-1} className="absolute inset-0 size-full pointer-events-none" />
 			<VideoPoster track={track} className={`duration-700 ${started ? "opacity-0" : "opacity-100"}`} />
 		</div>
 	);

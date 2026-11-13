@@ -83,7 +83,15 @@ export function fsrv() {
 	// The ad blocker extension's filter lists: their current versions, then each list (sealed like all /api JSON).
 	app.get("/api/extensions/filters", async c => {
 		const ids = Object.keys(FILTER_LISTS) as FilterListId[];
-		const lists = await Promise.all(ids.map(async id => ({ id, version: await getFilterList(id).then(list => list.version, () => null) })));
+		const lists = await Promise.all(
+			ids.map(async id => ({
+				id,
+				version: await getFilterList(id).then(
+					list => list.version,
+					() => null,
+				),
+			})),
+		);
 		return c.json({ lists });
 	});
 	app.get("/api/extensions/filters/:id", async c => {

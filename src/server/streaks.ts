@@ -206,9 +206,7 @@ export function registerStreakRoutes(app: Hono<Env>) {
 
 	// Start (counting from now) or stop the promo. Winners stay winners either way.
 	app.post("/api/admin/promo", async c => {
-		const body = z
-			.object({ action: z.enum(["start", "stop"]), slots: z.number().int().min(1).max(1000).optional(), days: z.number().int().min(1).max(365).optional(), rewardDays: z.number().int().min(1).max(365).optional() })
-			.safeParse(await c.req.json().catch(() => null));
+		const body = z.object({ action: z.enum(["start", "stop"]), slots: z.number().int().min(1).max(1000).optional(), days: z.number().int().min(1).max(365).optional(), rewardDays: z.number().int().min(1).max(365).optional() }).safeParse(await c.req.json().catch(() => null));
 		if (!body.success) return c.json({ error: "Invalid request" }, 400);
 		const pool = c.get("pool");
 		const { action, slots = PROMO_DEFAULTS.slots, days = PROMO_DEFAULTS.days, rewardDays = PROMO_DEFAULTS.rewardDays } = body.data;

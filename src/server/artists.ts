@@ -121,10 +121,7 @@ const adminEmails = () =>
 		.filter(Boolean);
 
 export async function userMeta(pool: Pool, user: { id: string; email: string }) {
-	const { rows } = await pool.query<{ role: string; banned_at: Date | null; ban_reason: string | null; username: string | null; premium: boolean }>(
-		"select role, banned_at, ban_reason, username, premium or coalesce(premium_until > now(), false) premium from fracital_user_meta where user_id = $1",
-		[user.id],
-	);
+	const { rows } = await pool.query<{ role: string; banned_at: Date | null; ban_reason: string | null; username: string | null; premium: boolean }>("select role, banned_at, ban_reason, username, premium or coalesce(premium_until > now(), false) premium from fracital_user_meta where user_id = $1", [user.id]);
 	const meta = rows[0];
 	return {
 		isAdmin: meta?.role === "admin" || adminEmails().includes(user.email.toLowerCase()),

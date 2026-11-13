@@ -59,7 +59,16 @@ export const LinkCard = ({ link, index, count }: { link: QuickLink; index: numbe
 	};
 	const items = (): MenuItem[] => [
 		{ title: <HolyText text="Open in new tab" />, icon: <ArrowTopRightOnSquareIcon className="size-5" />, onClick: () => useTabsStore.getState().newTab({ id: createId(), url: link.href, displayUrl: link.href, title: link.title, icon: null, current: true }) },
-		{ title: <HolyText text="Edit" />, icon: <PencilSquareIcon className="size-5" />, onClick: () => openModal(<Modal><QuickLinkEditor index={index} initial={readLinks()[index]} /></Modal>) },
+		{
+			title: <HolyText text="Edit" />,
+			icon: <PencilSquareIcon className="size-5" />,
+			onClick: () =>
+				openModal(
+					<Modal>
+						<QuickLinkEditor index={index} initial={readLinks()[index]} />
+					</Modal>,
+				),
+		},
 		...(index > 0 ? [{ title: <HolyText text="Move left" />, icon: <ArrowLeftIcon className="size-5" />, onClick: () => moveLink(index, -1) }] : []),
 		...(index < count - 1 ? [{ title: <HolyText text="Move right" />, icon: <ArrowRightIcon className="size-5" />, onClick: () => moveLink(index, 1) }] : []),
 		{ title: <HolyText text="Remove" />, icon: <TrashIcon className="size-5" />, onClick: () => removeLink(index) },
@@ -112,7 +121,16 @@ export const LinkCard = ({ link, index, count }: { link: QuickLink; index: numbe
 const AddCard = () => {
 	const { openModal } = useModal();
 	return (
-		<button className={`${CARD} justify-center cursor-pointer text-(--text-tertiary) hover:text-(--text-primary) hover:-translate-y-0.5 bg-transparent! inset-shadow-none! border-2 border-dashed border-(--text-quaternary) hover:border-(--text-tertiary)`} onClick={() => openModal(<Modal><QuickLinkEditor /></Modal>)}>
+		<button
+			className={`${CARD} justify-center cursor-pointer text-(--text-tertiary) hover:text-(--text-primary) hover:-translate-y-0.5 bg-transparent! inset-shadow-none! border-2 border-dashed border-(--text-quaternary) hover:border-(--text-tertiary)`}
+			onClick={() =>
+				openModal(
+					<Modal>
+						<QuickLinkEditor />
+					</Modal>,
+				)
+			}
+		>
 			<span className="flex items-center justify-center size-14">
 				<PlusIcon className="size-8" />
 			</span>

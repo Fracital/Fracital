@@ -473,10 +473,7 @@ const Promo = ({ dark }: { dark: boolean }) => {
 			.then(setData)
 			.catch(e => setError(String((e as Error).message)));
 	useEffect(load, []);
-	const act = (work: Promise<unknown>) =>
-		void work
-			.then(load)
-			.catch(e => setError(String((e as Error).message)));
+	const act = (work: Promise<unknown>) => void work.then(load).catch(e => setError(String((e as Error).message)));
 
 	if (!data) return <Panel dark={dark}>{error ? <span className="text-red-400">{error}</span> : <HolyText className="text-(--text-tertiary)" text="Loading…" />}</Panel>;
 	const { promo, winners } = data;

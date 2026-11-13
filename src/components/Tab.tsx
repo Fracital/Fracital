@@ -1,4 +1,22 @@
-import { XMarkIcon, GlobeAltIcon, MusicalNoteIcon, SpeakerWaveIcon, SpeakerXMarkIcon, ChevronDownIcon, PlusIcon, ArrowPathIcon, DocumentDuplicateIcon, LinkIcon, RectangleStackIcon, ArrowUturnLeftIcon, XCircleIcon, BarsArrowDownIcon, BarsArrowUpIcon, ChevronDoubleLeftIcon, ChevronDoubleRightIcon } from "@heroicons/react/24/solid";
+import {
+	XMarkIcon,
+	GlobeAltIcon,
+	MusicalNoteIcon,
+	SpeakerWaveIcon,
+	SpeakerXMarkIcon,
+	ChevronDownIcon,
+	PlusIcon,
+	ArrowPathIcon,
+	DocumentDuplicateIcon,
+	LinkIcon,
+	RectangleStackIcon,
+	ArrowUturnLeftIcon,
+	XCircleIcon,
+	BarsArrowDownIcon,
+	BarsArrowUpIcon,
+	ChevronDoubleLeftIcon,
+	ChevronDoubleRightIcon,
+} from "@heroicons/react/24/solid";
 import { createId } from "@paralleldrive/cuid2";
 import { ContextMenu, type MenuItem } from "./ContextMenu";
 import { fixLayout, groupKey, nextGroupName, tabKey, topLevel, useMusicStore, usePanelsStore, usePlaybackStore, useSettingsStore, useTabAudioStore, useTabsStore } from "../store";
@@ -65,17 +83,7 @@ export const useTabFace = ({ title, url, id, icon }: Pick<TabProps, "title" | "u
 		if (typeof currIcon === "string") setLoadedIcon({ key: currIcon, failed: true });
 	};
 
-	const iconNode = hasStringIcon ? (
-		iconSrc && !iconFailed ? (
-			<img src={iconSrc} alt={currTitle} className={`size-5 ${iconClassName}`} onError={handleIconError} />
-		) : (
-			<GlobeAltIcon className="size-5" />
-		)
-	) : currIcon && typeof currIcon !== "string" ? (
-		currIcon
-	) : (
-		<GlobeAltIcon className="size-5" />
-	);
+	const iconNode = hasStringIcon ? iconSrc && !iconFailed ? <img src={iconSrc} alt={currTitle} className={`size-5 ${iconClassName}`} onError={handleIconError} /> : <GlobeAltIcon className="size-5" /> : currIcon && typeof currIcon !== "string" ? currIcon : <GlobeAltIcon className="size-5" />;
 
 	return { title: currTitle, icon: iconNode };
 };
@@ -158,9 +166,7 @@ export const useTabMenu = (id: string, layout: "grid" | "list" = "list") => {
 		const others = store.tabs.filter(t => t.id !== id);
 		// Closing all to one side acts on the tabs shown with this one, in order: its group's, or the loose tabs in the
 		// top level's order (groups between them are left alone).
-		const siblings = self.groupId
-			? store.tabs.filter(t => t.groupId === self.groupId)
-			: topLevel(store).flatMap(item => (item.kind === "tab" ? store.tabs.filter(t => t.id === item.id) : []));
+		const siblings = self.groupId ? store.tabs.filter(t => t.groupId === self.groupId) : topLevel(store).flatMap(item => (item.kind === "tab" ? store.tabs.filter(t => t.id === item.id) : []));
 		const at = siblings.findIndex(t => t.id === id);
 		const after = siblings.slice(at + 1);
 		const before = siblings.slice(0, at);
