@@ -76,9 +76,15 @@ export function useHolyAttr(values: HolyAttrValues, opts?: UseHolyAttrOptions): 
 		[serialized, revealForBots],
 	);
 
-	const ref = useCallback<RefCallback<HTMLElement>>(node => {
-		nodeRef.current = node;
-	}, []);
+	// Also reveal when the element attaches: one rendered conditionally (a badge that appears once data loads)
+	// mounts after the layout effect below ran, with the same values, so that effect wouldn't run again for it.
+	const ref = useCallback<RefCallback<HTMLElement>>(
+		node => {
+			nodeRef.current = node;
+			if (node) apply(node);
+		},
+		[apply],
+	);
 
 	// Layout effect: set real attributes synchronously after mount, before paint,
 	// to keep the dashes-visible-to-a11y window as short as possible.

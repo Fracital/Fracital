@@ -1,22 +1,25 @@
-import { useEffect, useState } from "react";
-import { RectangleGroupIcon, PaintBrushIcon, PlusIcon, TrashIcon, ScaleIcon, GlobeAltIcon } from "@heroicons/react/24/solid";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { RectangleGroupIcon, PaintBrushIcon, TrashIcon, ScaleIcon, GlobeAltIcon, ChevronDownIcon } from "@heroicons/react/24/solid";
 import { CheckCircleIcon } from "@heroicons/react/24/outline";
-import LinkCard from "../components/LinkCard";
-import { isColorBright } from "../libs/colorBright";
+import { QuickLinksGrid } from "../components/LinkCard";
 import { quickLinks } from "../libs/init";
-import type { linkProps } from "./Home";
 import { BIG_PLAYER_DEFAULT_SETTING, useSettingsStore } from "../store";
 import { loadTheme } from "../libs/theme";
-import { ThemePath, SettingsPath, EXPERIMENTAL_PROXIES_SETTING, getProxy, isProxyEngine, type ProxyEngine } from "../types";
+import { ThemePath, SettingsPath, EXPERIMENTAL_PROXIES_SETTING, TAB_VIEW_SETTING, CLOSE_GROUP_TABS_SETTING, GROUPS_ON_TOP_SETTING, getProxy, isProxyEngine, type ProxyEngine } from "../types";
 import { useEngineVersions } from "../libs/proxyEngines";
 import { currentSearchEngine, SEARCH_ENGINE_SETTING, SEARCH_ENGINES } from "../libs/searchEngines";
 
 const ENGINE_NAMES: Record<ProxyEngine, string> = { sj: "Scramjet", uv: "UV", st: "Stomp" };
+const ENGINE_ABOUT: Record<ProxyEngine, string> = { sj: "The default. Works with most sites.", uv: "Another engine to try when a site doesn't load.", st: "Experimental. May not work on every site." };
+const SEARCH_ABOUT: Record<(typeof SEARCH_ENGINES)[number]["id"], string> = {
+	duckduckgo: "The default. Doesn't keep a profile of your searches.",
+	google: "Google Search.",
+	bing: "Microsoft's search engine.",
+	brave: "Brave's own independent index.",
+	startpage: "Google's results without the tracking.",
+};
 import { HolyText } from "../components/common/HolyText";
 import { isMotionSetting, MOTION_SETTING } from "../libs/motion";
-import { useModal } from "../components/Modal/ModalContext";
-import { Modal } from "../components/Modal/Modal";
-import FavoriteModal from "../components/Modal/Favorite";
 
 interface SettingsProps {
 	className?: string;
@@ -103,6 +106,98 @@ const ThemeCard = (config: any) => {
 	);
 };
 
+interface SliderOption<T extends string> {
+	value: T;
+	/** Its name, on the pill and in the list. */
+	label: string;
+	/** What picking it does, for the list under the pills. */
+	about: string;
+	/** Shown after the name on the pill only (an engine's version): a data value. */
+	extra?: React.ReactNode;
+}
+
+interface OptionSliderProps<T extends string> {
+	title: string;
+	/** A sentence on what the choice is about. */
+	summary: string;
+	options: SliderOption<T>[];
+	value: T;
+	onChange: (value: T) => void;
+}
+
+/**
+ * A choice between a few options: pills with a highlight that slides to the picked one, a sentence on what the choice
+ * is about, then a list of each option and what it does, the picked one in brighter text with an accent dash.
+ */
+const OptionSlider = <T extends string>({ title, summary, options, value, onChange }: OptionSliderProps<T>) => {
+	const dark = useSettingsStore(state => state.settings.brightness !== "light");
+	const groupRef = useRef<HTMLDivElement>(null);
+	const [thumb, setThumb] = useState<{ left: number; top: number; width: number; height: number } | null>(null);
+
+	// biome-ignore lint/correctness/useExhaustiveDependencies: re-measured when the pick or the options change (and on resize).
+	useLayoutEffect(() => {
+		const group = groupRef.current;
+		if (!group) return;
+		const measure = () => {
+			const pill = group.querySelector<HTMLElement>(`[data-option="${CSS.escape(value)}"]`);
+			setThumb(pill ? { left: pill.offsetLeft, top: pill.offsetTop, width: pill.offsetWidth, height: pill.offsetHeight } : null);
+		};
+		measure();
+		const ro = new ResizeObserver(measure);
+		ro.observe(group);
+		return () => ro.disconnect();
+	}, [value, options.length]);
+
+	return (
+		<div className="flex flex-col gap-1">
+			<div className="flex flex-wrap items-center gap-2">
+				<h2 className="text-xl font-medium">
+					<HolyText text={title} />
+				</h2>
+				<div ref={groupRef} role="radiogroup" className={`relative flex flex-wrap gap-1 p-1 rounded-2xl ${dark ? "bg-[#ffffff10]" : "bg-[#00000025]"}`}>
+					{thumb && <span aria-hidden="true" className="absolute rounded-full bg-(--accent) duration-200 ease-out pointer-events-none" style={thumb} />}
+					{options.map(option => {
+						const on = option.value === value;
+						return (
+							<button
+								key={option.value}
+								data-option={option.value}
+								role="radio"
+								aria-checked={on}
+								className={`relative flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-semibold cursor-pointer duration-150 ${on ? "text-white" : "text-(--text-secondary) hover:text-(--text-primary)"}`}
+								onClick={() => !on && onChange(option.value)}
+							>
+								<HolyText text={option.label} />
+								{option.extra}
+							</button>
+						);
+					})}
+				</div>
+			</div>
+			<HolyText as="p" className="text-sm text-(--text-secondary)" text={summary} />
+			<ul className="flex flex-col gap-0.5 text-sm">
+				{options.map(option => {
+					const on = option.value === value;
+					return (
+						<li key={option.value} className={`flex gap-1.5 duration-150 ${on ? "text-(--text-primary)" : "text-(--text-tertiary)"}`}>
+							{/* A plain dash marking each item. */}
+							<span aria-hidden="true" className={on ? "text-(--accent)" : ""}>
+								–
+							</span>
+							<span>
+								<HolyText className="font-semibold" text={option.label} />
+								{/* Punctuation between the name and what it does. */}
+								{": "}
+								<HolyText text={option.about} />
+							</span>
+						</li>
+					);
+				})}
+			</ul>
+		</div>
+	);
+};
+
 const Settings = ({ className }: SettingsProps) => {
 	const setSettings = useSettingsStore(state => state.setSettings);
 	const settings = useSettingsStore(state => state.settings);
@@ -122,18 +217,14 @@ const Settings = ({ className }: SettingsProps) => {
 	}, []);
 	const [themes, setThemes] = useState<any[]>([]);
 	const compactTabs = settings["compact-tabs"] === true;
-	const { openModal } = useModal();
-
-	const [links, setLinks] = useState<linkProps[]>(
-		(() => {
-			const stored = window.localStorage.getItem("quicklinks");
-			try {
-				return stored ? JSON.parse(stored) : quickLinks;
-			} catch {
-				return quickLinks;
-			}
-		})(),
-	);
+	const tabView = settings[TAB_VIEW_SETTING] === true;
+	const closeGroupTabs = settings[CLOSE_GROUP_TABS_SETTING] === true;
+	const groupsOnTop = settings[GROUPS_ON_TOP_SETTING] === true;
+	/** Saves settings to settings.json and the store. */
+	const save = async (changes: Record<string, unknown>) => {
+		await window.fr.fs.promises.writeFile(SettingsPath, JSON.stringify({ ...settings, ...changes }, null, 4), "utf-8");
+		for (const [key, value] of Object.entries(changes)) setSettings(key, value);
+	};
 
 	useEffect(() => {
 		const getThemes = async () => {
@@ -175,408 +266,320 @@ const Settings = ({ className }: SettingsProps) => {
 		getSettings();
 	}, []);
 
-	useEffect(() => {
-		const updLinks = () => {
-			const stored = window.localStorage.getItem("quicklinks");
-			try {
-				const links = stored ? JSON.parse(stored) : [];
-				setLinks(links);
-			} catch {
-				setLinks([]);
-			}
-		};
-		window.addEventListener("links-upd", updLinks);
-		window.addEventListener("storage", updLinks);
-		return () => {
-			window.removeEventListener("links-upd", updLinks);
-			window.removeEventListener("storage", updLinks);
-		};
-	}, []);
-
 	const pages = {
 		general: (
-			<div className="flex flex-col gap-2">
-				<h1 className="text-3xl font-bold">General</h1>
-				<h1 className="text-2xl font-bold">Quick Links</h1>
-				<div className="flex flex-wrap gap-2">
-					{links.length > 0 && links.map((link, index) => <LinkCard key={index} title={link.title} icon={link.icon} color={link.color} edit={true} href={link.href} id={index} brightness={isColorBright(link.color)} />)}
-					<div
-						className="flex flex-col p-3 rounded-2xl bg-[#ffffff25] hover:bg-[#ffffff35] overflow-hidden cursor-pointer duration-200"
-						onMouseDown={() => {
-							openModal(
-								<Modal>
-									<FavoriteModal />
-								</Modal>,
-								{
-									url: "https://example.com",
-									name: "Example",
-									icon: "",
-									color: "#ffffff",
-								},
-							);
-						}}
-					>
-						<div className="*:pointer-events-none *:select-none">
-							<div className="flex items-center justify-center py-5 px-22">
-								<div className="flex sm:size-16 size-8 justify-center items-center">{<PlusIcon className="size-10 rounded-full stroke-current stroke-2 duration-200" />}</div>
-							</div>
-							<div className="flex w-full justify-center">
+			<div className="flex flex-col gap-5">
+				<SettingsSection id="general" title="General" titleClassName="text-3xl font-bold">
+					<OptionSlider
+						title="Reduce Motion"
+						summary="Turns off sliding, fading and other animations."
+						value={isMotionSetting(settings[MOTION_SETTING]) ? settings[MOTION_SETTING] : "system"}
+						options={[
+							{ value: "system", label: "System", about: "Follows your device's setting." },
+							{ value: "on", label: "On", about: "Always reduces animations." },
+							{ value: "off", label: "Off", about: "Always shows animations." },
+						]}
+						onChange={choice => save({ [MOTION_SETTING]: choice })}
+					/>
+					<div className="flex flex-col gap-0.5">
+						<div className="flex gap-2">
+							<h2 className="text-xl font-medium">
+								<HolyText text="Close Tabs With Group" />
+							</h2>
+							<label className="flex items-center gap-3 cursor-pointer select-none">
+								<input
+									type="checkbox"
+									checked={closeGroupTabs}
+									onChange={async () => {
+										const next = !closeGroupTabs;
+										await window.fr.fs.promises.writeFile(SettingsPath, JSON.stringify({ ...settings, [CLOSE_GROUP_TABS_SETTING]: next }, null, 4), "utf-8");
+										setSettings(CLOSE_GROUP_TABS_SETTING, next);
+									}}
+									className="sr-only peer"
+								/>
+								<span className={`relative inline-block w-12 h-7 transition-colors duration-200 rounded-full ${closeGroupTabs ? "bg-(--accent)" : settings.brightness === "dark" ? "bg-[#ffffff10] hover:bg-[#ffffff20]" : "bg-[#00000025] hover:bg-[#00000035]"}`}>
+									<span className={`absolute left-1 top-1 w-5 h-5 bg-white rounded-full shadow transform transition-transform duration-200 ${closeGroupTabs ? "translate-x-5" : ""}`} />
+								</span>
+							</label>
+						</div>
+						<HolyText as="p" className="text-sm text-(--text-secondary)" text="Closing a group also closes the tabs in it. Off, they stay open, out of any group. A group's menu always has the other way." />
+					</div>
+					<div className="flex flex-col gap-0.5">
+						<div className="flex gap-2">
+							<h2 className="text-xl font-medium">
+								<HolyText text="Keep Groups on Top" />
+							</h2>
+							<label className="flex items-center gap-3 cursor-pointer select-none">
+								<input
+									type="checkbox"
+									checked={groupsOnTop}
+									onChange={async () => {
+										const next = !groupsOnTop;
+										await window.fr.fs.promises.writeFile(SettingsPath, JSON.stringify({ ...settings, [GROUPS_ON_TOP_SETTING]: next }, null, 4), "utf-8");
+										setSettings(GROUPS_ON_TOP_SETTING, next);
+									}}
+									className="sr-only peer"
+								/>
+								<span className={`relative inline-block w-12 h-7 transition-colors duration-200 rounded-full ${groupsOnTop ? "bg-(--accent)" : settings.brightness === "dark" ? "bg-[#ffffff10] hover:bg-[#ffffff20]" : "bg-[#00000025] hover:bg-[#00000035]"}`}>
+									<span className={`absolute left-1 top-1 w-5 h-5 bg-white rounded-full shadow transform transition-transform duration-200 ${groupsOnTop ? "translate-x-5" : ""}`} />
+								</span>
+							</label>
+						</div>
+						<HolyText as="p" className="text-sm text-(--text-secondary)" text="Groups show first and tabs in no group after them. Off, groups and tabs mix in the order you put them; turning it back off brings that order back." />
+					</div>
+					<div className="flex flex-col gap-0.5">
+						<div className="flex gap-2">
+							<h2 className="text-xl font-medium">
+								<HolyText text="Persistent Tabs" />
+							</h2>
+							<label className="flex items-center gap-3 cursor-pointer select-none">
+								<input
+									type="checkbox"
+									checked={settings["persistent-tabs"] === true}
+									onChange={async () => {
+										const next = !(settings["persistent-tabs"] === true);
+										await window.fr.fs.promises.writeFile(SettingsPath, JSON.stringify({ ...settings, "persistent-tabs": next }, null, 4), "utf-8");
+										setSettings("persistent-tabs", next);
+										window.localStorage.setItem("fracital:persist-tabs", String(next));
+										if (!next) {
+											window.localStorage.removeItem("fracital:saved-tabs");
+											window.localStorage.removeItem("fracital:saved-music");
+										}
+									}}
+									className="sr-only peer"
+								/>
 								<span
 									className={
-										"font-extrabold text-lg leading-none" +
+										"relative inline-block w-12 h-7 transition-colors duration-200 rounded-full" +
 										" " +
-										`text-[#ffffffc7]
-                                `
+										`
+                            ${settings["persistent-tabs"] === true ? "bg-(--accent)" : `${settings.brightness === "dark" ? "bg-[#ffffff10] hover:bg-[#ffffff20]" : "bg-[#00000025] hover:bg-[#00000035]"}`}
+                        `
 									}
 								>
-									Add Site
+									<span
+										className={
+											"absolute left-1 top-1 w-5 h-5 bg-white rounded-full shadow transform transition-transform duration-200" +
+											" " +
+											`
+                                ${settings["persistent-tabs"] === true ? "translate-x-5" : ""}
+                            `
+										}
+									/>
 								</span>
-							</div>
+							</label>
 						</div>
+						<HolyText as="p" className="text-sm text-(--text-secondary)" text="Keeps your open tabs, pages and music queue across page refreshes." />
 					</div>
-				</div>
+				</SettingsSection>
+				<SettingsSection id="quick-links" title="Quick Links">
+					<HolyText as="p" className="-mt-1 text-sm text-(--text-secondary)" text="Shown on the new tab page. Use a link's ⋯ menu (or right-click it) to edit, move or remove it." />
+					<QuickLinksGrid className="max-w-3xl" />
+				</SettingsSection>
 			</div>
 		),
 		network: (
-			<div className="flex flex-col gap-3">
-				<HolyText as="h1" className="text-2xl font-bold" text="Network" />
-				<div className="flex flex-col gap-0.5">
-					<div className="flex flex-wrap items-center gap-2">
-						<h2 className="text-xl font-medium">
-							<HolyText text="Proxy Engine" />
-						</h2>
-						<div role="radiogroup" className={`flex flex-wrap gap-1 p-1 rounded-2xl ${settings.brightness === "dark" ? "bg-[#ffffff10]" : "bg-[#00000025]"}`}>
-							{availableEngines.map(choice => {
-								const on = engine === choice;
-								return (
-									<button
-										key={choice}
-										role="radio"
-										aria-checked={on}
-										className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-semibold cursor-pointer duration-150 ${on ? "bg-(--accent) text-white" : "text-(--text-secondary) hover:text-(--text-primary)"}`}
-										onClick={() => !on && window.dispatchEvent(new CustomEvent("proxy-change", { detail: { proxy: choice } }))}
-									>
-										<HolyText text={ENGINE_NAMES[choice]} />
-										{/* The engine's version: a data value. */}
-										{versions[choice] && <span className={`text-xs font-medium ${on ? "text-white/70" : "text-(--text-tertiary)"}`}>{versions[choice]}</span>}
-									</button>
-								);
-							})}
-						</div>
-					</div>
-					<HolyText as="p" className="text-sm text-(--text-secondary)" text="The engine that loads websites in your tabs. Switch to another one if a site doesn't load. The same choice is in the top bar." />
-				</div>
-				<div className="flex flex-col gap-0.5">
-					<div className="flex gap-2">
-						<HolyText as="h2" className="text-xl font-medium" text="Experimental Proxies" />
-						<label className="flex items-center gap-3 cursor-pointer select-none">
-							<input
-								type="checkbox"
-								checked={settings[EXPERIMENTAL_PROXIES_SETTING] === true}
-								onChange={async () => {
-									const next = !(settings[EXPERIMENTAL_PROXIES_SETTING] === true);
-									await window.fr.fs.promises.writeFile(SettingsPath, JSON.stringify({ ...settings, [EXPERIMENTAL_PROXIES_SETTING]: next }, null, 4), "utf-8");
-									setSettings(EXPERIMENTAL_PROXIES_SETTING, next);
-									// Turning it off takes the experimental engine out of the selector; a tab on it goes back to the default.
-									if (!next && (await getProxy()) === "st") window.dispatchEvent(new CustomEvent("proxy-change", { detail: { proxy: "sj" } }));
-								}}
-								className="sr-only peer"
-							/>
-							<span
-								className={
-									"relative inline-block w-12 h-7 transition-colors duration-200 rounded-full" +
-									" " +
-									`
-	                            ${settings[EXPERIMENTAL_PROXIES_SETTING] === true ? "bg-(--accent)" : `${settings.brightness === "dark" ? "bg-[#ffffff10] hover:bg-[#ffffff20]" : "bg-[#00000025] hover:bg-[#00000035]"}`}
-	                        `
-								}
-							>
+			<div className="flex flex-col gap-5">
+				<SettingsSection id="network" title="Network" bodyClassName="gap-3">
+					<OptionSlider
+						title="Proxy Engine"
+						summary="The engine that loads websites in your tabs. The same choice is in the top bar."
+						value={engine}
+						options={availableEngines.map(choice => ({
+							value: choice,
+							label: ENGINE_NAMES[choice],
+							about: ENGINE_ABOUT[choice],
+							// The engine's version: a data value.
+							extra: versions[choice] ? <span className={`text-xs font-medium ${engine === choice ? "text-white/70" : "text-(--text-tertiary)"}`}>{versions[choice]}</span> : null,
+						}))}
+						onChange={choice => window.dispatchEvent(new CustomEvent("proxy-change", { detail: { proxy: choice } }))}
+					/>
+					<div className="flex flex-col gap-0.5">
+						<div className="flex gap-2">
+							<HolyText as="h2" className="text-xl font-medium" text="Experimental Proxies" />
+							<label className="flex items-center gap-3 cursor-pointer select-none">
+								<input
+									type="checkbox"
+									checked={settings[EXPERIMENTAL_PROXIES_SETTING] === true}
+									onChange={async () => {
+										const next = !(settings[EXPERIMENTAL_PROXIES_SETTING] === true);
+										await window.fr.fs.promises.writeFile(SettingsPath, JSON.stringify({ ...settings, [EXPERIMENTAL_PROXIES_SETTING]: next }, null, 4), "utf-8");
+										setSettings(EXPERIMENTAL_PROXIES_SETTING, next);
+										// Turning it off takes the experimental engine out of the selector; a tab on it goes back to the default.
+										if (!next && (await getProxy()) === "st") window.dispatchEvent(new CustomEvent("proxy-change", { detail: { proxy: "sj" } }));
+									}}
+									className="sr-only peer"
+								/>
 								<span
 									className={
-										"absolute left-1 top-1 w-5 h-5 bg-white rounded-full shadow transform transition-transform duration-200" +
+										"relative inline-block w-12 h-7 transition-colors duration-200 rounded-full" +
 										" " +
 										`
+	                            ${settings[EXPERIMENTAL_PROXIES_SETTING] === true ? "bg-(--accent)" : `${settings.brightness === "dark" ? "bg-[#ffffff10] hover:bg-[#ffffff20]" : "bg-[#00000025] hover:bg-[#00000035]"}`}
+	                        `
+									}
+								>
+									<span
+										className={
+											"absolute left-1 top-1 w-5 h-5 bg-white rounded-full shadow transform transition-transform duration-200" +
+											" " +
+											`
 	                                ${settings[EXPERIMENTAL_PROXIES_SETTING] === true ? "translate-x-5" : ""}
 	                            `
-									}
-								/>
-							</span>
-						</label>
-					</div>
-					<HolyText as="p" className="text-(--text-secondary)" text="Adds the Stomp engine to the engine selector in the top bar. It is new and may not work on every site." />
-				</div>
-				<div className="flex flex-col gap-0.5">
-					<div className="flex flex-wrap items-center gap-2">
-						<h2 className="text-xl font-medium">
-							<HolyText text="Search Engine" />
-						</h2>
-						<div role="radiogroup" className={`flex flex-wrap gap-1 p-1 rounded-2xl ${settings.brightness === "dark" ? "bg-[#ffffff10]" : "bg-[#00000025]"}`}>
-							{SEARCH_ENGINES.map(choice => {
-								const on = currentSearchEngine(settings).id === choice.id;
-								return (
-									<button
-										key={choice.id}
-										role="radio"
-										aria-checked={on}
-										className={`px-3 py-1 rounded-full text-sm font-semibold cursor-pointer duration-150 ${on ? "bg-(--accent) text-white" : "text-(--text-secondary) hover:text-(--text-primary)"}`}
-										onClick={async () => {
-											if (on) return;
-											await window.fr.fs.promises.writeFile(SettingsPath, JSON.stringify({ ...settings, [SEARCH_ENGINE_SETTING]: choice.id }, null, 4), "utf-8");
-											setSettings(SEARCH_ENGINE_SETTING, choice.id);
-										}}
-									>
-										<HolyText text={choice.name} />
-									</button>
-								);
-							})}
+										}
+									/>
+								</span>
+							</label>
 						</div>
+						<HolyText as="p" className="text-(--text-secondary)" text="Adds the Stomp engine to the engine selector in the top bar. It is new and may not work on every site." />
 					</div>
-					<HolyText as="p" className="text-sm text-(--text-secondary)" text="Where the address bar sends anything that isn't a web address." />
-				</div>
+					<OptionSlider
+						title="Search Engine"
+						summary="Where the address bar sends anything that isn't a web address."
+						value={currentSearchEngine(settings).id}
+						options={SEARCH_ENGINES.map(choice => ({ value: choice.id, label: choice.name, about: SEARCH_ABOUT[choice.id] }))}
+						onChange={choice => save({ [SEARCH_ENGINE_SETTING]: choice })}
+					/>
+				</SettingsSection>
 			</div>
 		),
 		app: (
-			<div className="flex flex-col gap-2">
-				<h1 className="text-2xl font-bold">Tabs Appearance</h1>
-				<div className="flex flex-col gap-0.5">
-					<div className="flex gap-2">
-						<h2 className="text-xl font-medium">
-							<HolyText text="Compact Mode" />
-						</h2>
-						<label className="flex items-center gap-3 cursor-pointer select-none">
-							<input
-								type="checkbox"
-								checked={compactTabs}
-								onChange={async () => {
-									const next = !compactTabs;
-									await window.fr.fs.promises.writeFile(SettingsPath, JSON.stringify({ ...settings, "compact-tabs": next }, null, 4), "utf-8");
-									setSettings("compact-tabs", next);
-								}}
-								className="sr-only peer"
-							/>
-							<span className={`relative inline-block w-12 h-7 transition-colors duration-200 rounded-full ${compactTabs ? "bg-(--accent)" : settings.brightness === "dark" ? "bg-[#ffffff10] hover:bg-[#ffffff20]" : "bg-[#00000025] hover:bg-[#00000035]"}`}>
-								<span className={`absolute left-1 top-1 w-5 h-5 bg-white rounded-full shadow transform transition-transform duration-200 ${compactTabs ? "translate-x-5" : ""}`} />
+			<div className="flex flex-col gap-5">
+				<SettingsSection id="tabs-appearance" title="Tabs Appearance">
+					<OptionSlider
+						title="Tabs List"
+						summary="How your open tabs are shown."
+						value={tabView ? "bigscreen" : compactTabs ? "compact" : "floating"}
+						options={[
+							{ value: "compact", label: "Compact", about: "The side panel collapses to a slim strip of round icons." },
+							{ value: "floating", label: "Floating", about: "The collapsed side panel peeks out from the edge of the screen." },
+							{ value: "bigscreen", label: "Big Screen", about: "Your tabs show as cards with live previews in a full view, opened from the top bar." },
+						]}
+						onChange={choice => save({ "compact-tabs": choice === "compact", [TAB_VIEW_SETTING]: choice === "bigscreen" })}
+					/>
+					<OptionSlider
+						title="Open Panels on Click"
+						summary="What clicking inside the collapsed side panel does."
+						value={["anywhere", "except-tabs", "off"].includes(settings["panel-click-open"]) ? settings["panel-click-open"] : "except-tabs"}
+						options={[
+							{ value: "anywhere", label: "Anywhere", about: "Any click inside it opens it." },
+							{ value: "except-tabs", label: "Except tabs", about: "Switching tabs keeps it collapsed; any other click opens it." },
+							{ value: "off", label: "Off", about: "Only the open/close button opens it." },
+						]}
+						onChange={choice => save({ "panel-click-open": choice })}
+					/>
+					<OptionSlider
+						title="Tabs Position"
+						summary="Which side of the screen the side panel sits on."
+						value={settings["tabs-position"] === "left" ? "left" : "right"}
+						options={[
+							{ value: "left", label: "Left", about: "On the left, next to the page." },
+							{ value: "right", label: "Right", about: "On the right, next to the page." },
+						]}
+						onChange={choice => save({ "tabs-position": choice })}
+					/>
+				</SettingsSection>
+				<SettingsSection id="theme" title="Theme">
+					<div className="flex flex-wrap gap-2">
+						{themes.length > 0 ? (
+							themes.map((theme, index) => <ThemeCard key={index} config={theme} />)
+						) : (
+							<span className="text-(--text-secondary)">
+								No themes found. Please add themes to the <code>/themes</code> directory.
 							</span>
-						</label>
+						)}
 					</div>
-					<HolyText as="p" className="text-sm text-(--text-secondary)" text="Collapsed side panels shrink to a slim strip of round icons. Off, they peek out from the screen edge." />
-				</div>
-				<div className="flex flex-col gap-0.5">
-					<div className="flex flex-wrap items-center gap-2">
-						<h2 className="text-xl font-medium">
-							<HolyText text="Open Panels on Click" />
-						</h2>
-						<div role="radiogroup" className={`flex gap-1 p-1 rounded-full ${settings.brightness === "dark" ? "bg-[#ffffff10]" : "bg-[#00000025]"}`}>
-							{(["anywhere", "except-tabs", "off"] as const).map(choice => {
-								const current = ["anywhere", "except-tabs", "off"].includes(settings["panel-click-open"]) ? settings["panel-click-open"] : "except-tabs";
-								const on = current === choice;
-								return (
-									<button
-										key={choice}
-										role="radio"
-										aria-checked={on}
-										className={`px-3 py-1 rounded-full text-sm font-semibold cursor-pointer duration-150 ${on ? "bg-(--accent) text-white" : "text-(--text-secondary) hover:text-(--text-primary)"}`}
-										onClick={async () => {
-											if (on) return;
-											await window.fr.fs.promises.writeFile(SettingsPath, JSON.stringify({ ...settings, "panel-click-open": choice }, null, 4), "utf-8");
-											setSettings("panel-click-open", choice);
+				</SettingsSection>
+				<SettingsSection id="quick-player" title="Quick Player">
+					<div className="flex flex-col gap-2">
+						<div className="flex gap-5">
+							<div className="flex flex-col gap-2">
+								<label title="When off, the quick player opens on the track list instead of the big player" className="flex items-center justify-between gap-10 cursor-pointer select-none">
+									<span className="text-xl font-medium">Open in big player</span>
+									<input
+										type="checkbox"
+										checked={settings[BIG_PLAYER_DEFAULT_SETTING] ?? true}
+										onChange={async () => {
+											const next = !(settings[BIG_PLAYER_DEFAULT_SETTING] ?? true);
+											const newSettings = { ...settings, [BIG_PLAYER_DEFAULT_SETTING]: next };
+											await window.fr.fs.promises.writeFile(SettingsPath, JSON.stringify(newSettings, null, 4), "utf-8");
+											setSettings(BIG_PLAYER_DEFAULT_SETTING, next);
 										}}
+										className="sr-only peer"
+									/>
+									<span
+										className={
+											"relative inline-block w-12 h-7 transition-colors duration-200 rounded-full" + " " + `${(settings[BIG_PLAYER_DEFAULT_SETTING] ?? true) ? "bg-(--accent)" : `${settings.brightness === "dark" ? "bg-[#ffffff10] hover:bg-[#ffffff20]" : "bg-[#00000025] hover:bg-[#00000035]"}`}`
+										}
 									>
-										<HolyText text={choice === "anywhere" ? "Anywhere" : choice === "except-tabs" ? "Except tabs" : "Off"} />
-									</button>
-								);
-							})}
+										<span className={"absolute left-1 top-1 w-5 h-5 bg-white rounded-full shadow transform transition-transform duration-200" + " " + `${(settings[BIG_PLAYER_DEFAULT_SETTING] ?? true) ? "translate-x-5" : ""}`} />
+									</span>
+								</label>
+
+								<label className="flex items-center justify-between cursor-pointer select-none">
+									<span className="text-xl font-medium">All visualizers</span>
+									<input
+										type="checkbox"
+										checked={settings["disable-visualizers"] === false ? true : false}
+										onChange={async () => {
+											const next = !(settings["disable-visualizers"] ?? false);
+											const newSettings = {
+												...settings,
+												"disable-visualizers": next,
+											};
+											await window.fr.fs.promises.writeFile(SettingsPath, JSON.stringify(newSettings, null, 4), "utf-8");
+											setSettings("disable-visualizers", next);
+										}}
+										className="sr-only peer"
+									/>
+									<span
+										className={"relative inline-block w-12 h-7 transition-colors duration-200 rounded-full" + " " + `${settings["disable-visualizers"] === false ? "bg-(--accent)" : `${settings.brightness === "dark" ? "bg-[#ffffff10] hover:bg-[#ffffff20]" : "bg-[#00000025] hover:bg-[#00000035]"}`}`}
+									>
+										<span className={"absolute left-1 top-1 w-5 h-5 bg-white rounded-full shadow transform transition-transform duration-200" + " " + `${settings["disable-visualizers"] === false ? "translate-x-5" : ""}`} />
+									</span>
+								</label>
+
+								<label className={"flex items-center justify-between cursor-pointer select-none " + (settings["disable-visualizers"] ? "opacity-50 pointer-events-none" : "")}>
+									<span className="text-lg font-medium">Tracks visualizer</span>
+									<input
+										type="checkbox"
+										checked={settings["tracks-visualizer"] ?? true}
+										onChange={async () => {
+											const next = !(settings["tracks-visualizer"] ?? true);
+											const newSettings = { ...settings, "tracks-visualizer": next };
+											await window.fr.fs.promises.writeFile(SettingsPath, JSON.stringify(newSettings, null, 4), "utf-8");
+											setSettings("tracks-visualizer", next);
+										}}
+										className="sr-only peer"
+										disabled={settings["disable-visualizers"] ?? false}
+									/>
+									<span className={"relative inline-block w-12 h-7 transition-colors duration-200 rounded-full" + " " + `${settings["tracks-visualizer"] ? "bg-(--accent)" : `${settings.brightness === "dark" ? "bg-[#ffffff10] hover:bg-[#ffffff20]" : "bg-[#00000025] hover:bg-[#00000035]"}`}`}>
+										<span className={"absolute left-1 top-1 w-5 h-5 bg-white rounded-full shadow transform transition-transform duration-200" + " " + `${settings["tracks-visualizer"] ? "translate-x-5" : ""}`} />
+									</span>
+								</label>
+
+								<label className={"flex items-center justify-between gap-10 cursor-pointer select-none " + (settings["disable-visualizers"] ? "opacity-50 pointer-events-none" : "")}>
+									<span className="text-lg font-medium">Big player visualizer</span>
+									<input
+										type="checkbox"
+										checked={settings["big-player-visualizer"] ?? true}
+										onChange={async () => {
+											const next = !(settings["big-player-visualizer"] ?? true);
+											const newSettings = { ...settings, "big-player-visualizer": next };
+											await window.fr.fs.promises.writeFile(SettingsPath, JSON.stringify(newSettings, null, 4), "utf-8");
+											setSettings("big-player-visualizer", next);
+										}}
+										className="sr-only peer"
+										disabled={settings["disable-visualizers"] ?? false}
+									/>
+									<span className={"relative inline-block w-12 h-7 transition-colors duration-200 rounded-full" + " " + `${settings["big-player-visualizer"] ? "bg-(--accent)" : `${settings.brightness === "dark" ? "bg-[#ffffff10] hover:bg-[#ffffff20]" : "bg-[#00000025] hover:bg-[#00000035]"}`}`}>
+										<span className={"absolute left-1 top-1 w-5 h-5 bg-white rounded-full shadow transform transition-transform duration-200" + " " + `${settings["big-player-visualizer"] ? "translate-x-5" : ""}`} />
+									</span>
+								</label>
+							</div>
 						</div>
 					</div>
-					<HolyText as="p" className="text-sm text-(--text-secondary)" text="What clicking inside the collapsed side panel does. Except tabs: switching tabs keeps it collapsed. Off: only the open/close button opens it." />
-				</div>
-				<div className="flex items-center gap-2">
-					<h2 className="text-xl font-medium">
-						<HolyText text="Tabs Position" />
-					</h2>
-					<div role="radiogroup" className={`flex gap-1 p-1 rounded-full ${settings.brightness === "dark" ? "bg-[#ffffff10]" : "bg-[#00000025]"}`}>
-						{(["left", "right"] as const).map(side => {
-							const on = (settings["tabs-position"] === "left" ? "left" : "right") === side;
-							return (
-								<button
-									key={side}
-									role="radio"
-									aria-checked={on}
-									className={`px-3 py-1 rounded-full text-sm font-semibold cursor-pointer duration-150 ${on ? "bg-(--accent) text-white" : "text-(--text-secondary) hover:text-(--text-primary)"}`}
-									onClick={async () => {
-										if (on) return;
-										await window.fr.fs.promises.writeFile(SettingsPath, JSON.stringify({ ...settings, "tabs-position": side }, null, 4), "utf-8");
-										setSettings("tabs-position", side);
-									}}
-								>
-									<HolyText text={side === "left" ? "Left" : "Right"} />
-								</button>
-							);
-						})}
-					</div>
-				</div>
-				<div className="flex items-center gap-2">
-					<h2 className="text-xl font-medium">
-						<HolyText text="Reduce Motion" />
-					</h2>
-					<div role="radiogroup" className={`flex gap-1 p-1 rounded-full ${settings.brightness === "dark" ? "bg-[#ffffff10]" : "bg-[#00000025]"}`}>
-						{(["system", "on", "off"] as const).map(choice => {
-							const on = (isMotionSetting(settings[MOTION_SETTING]) ? settings[MOTION_SETTING] : "system") === choice;
-							return (
-								<button
-									key={choice}
-									role="radio"
-									aria-checked={on}
-									className={`px-3 py-1 rounded-full text-sm font-semibold cursor-pointer duration-150 ${on ? "bg-(--accent) text-white" : "text-(--text-secondary) hover:text-(--text-primary)"}`}
-									onClick={async () => {
-										if (on) return;
-										await window.fr.fs.promises.writeFile(SettingsPath, JSON.stringify({ ...settings, [MOTION_SETTING]: choice }, null, 4), "utf-8");
-										setSettings(MOTION_SETTING, choice);
-									}}
-								>
-									<HolyText text={choice === "system" ? "System" : choice === "on" ? "On" : "Off"} />
-								</button>
-							);
-						})}
-					</div>
-				</div>
-				<HolyText as="p" className="-mt-1 text-sm text-(--text-secondary)" text="Turns off sliding, fading and other animations. System follows your device's setting." />
-				<div className="flex gap-2">
-					<h2 title="Keep your open tabs, pages and music queue across page refreshes" className="text-xl font-medium">
-						Persistent Tabs
-					</h2>
-					<label className="flex items-center gap-3 cursor-pointer select-none">
-						<input
-							type="checkbox"
-							checked={settings["persistent-tabs"] === true}
-							onChange={async () => {
-								const next = !(settings["persistent-tabs"] === true);
-								await window.fr.fs.promises.writeFile(SettingsPath, JSON.stringify({ ...settings, "persistent-tabs": next }, null, 4), "utf-8");
-								setSettings("persistent-tabs", next);
-								window.localStorage.setItem("fracital:persist-tabs", String(next));
-								if (!next) {
-									window.localStorage.removeItem("fracital:saved-tabs");
-									window.localStorage.removeItem("fracital:saved-music");
-								}
-							}}
-							className="sr-only peer"
-						/>
-						<span
-							className={
-								"relative inline-block w-12 h-7 transition-colors duration-200 rounded-full" +
-								" " +
-								`
-                            ${settings["persistent-tabs"] === true ? "bg-(--accent)" : `${settings.brightness === "dark" ? "bg-[#ffffff10] hover:bg-[#ffffff20]" : "bg-[#00000025] hover:bg-[#00000035]"}`}
-                        `
-							}
-						>
-							<span
-								className={
-									"absolute left-1 top-1 w-5 h-5 bg-white rounded-full shadow transform transition-transform duration-200" +
-									" " +
-									`
-                                ${settings["persistent-tabs"] === true ? "translate-x-5" : ""}
-                            `
-								}
-							/>
-						</span>
-					</label>
-				</div>
-				<h1 className="text-2xl font-bold">Theme</h1>
-				<div className="flex flex-wrap gap-2">
-					{themes.length > 0 ? (
-						themes.map((theme, index) => <ThemeCard key={index} config={theme} />)
-					) : (
-						<span className="text-(--text-secondary)">
-							No themes found. Please add themes to the <code>/themes</code> directory.
-						</span>
-					)}
-				</div>
-				<h1 className="text-2xl font-bold">Quick Player</h1>
-				<div className="flex flex-col gap-2">
-					<div className="flex gap-5">
-						<div className="flex flex-col gap-2">
-							<label title="When off, the quick player opens on the track list instead of the big player" className="flex items-center justify-between gap-10 cursor-pointer select-none">
-								<span className="text-xl font-medium">Open in big player</span>
-								<input
-									type="checkbox"
-									checked={settings[BIG_PLAYER_DEFAULT_SETTING] ?? true}
-									onChange={async () => {
-										const next = !(settings[BIG_PLAYER_DEFAULT_SETTING] ?? true);
-										const newSettings = { ...settings, [BIG_PLAYER_DEFAULT_SETTING]: next };
-										await window.fr.fs.promises.writeFile(SettingsPath, JSON.stringify(newSettings, null, 4), "utf-8");
-										setSettings(BIG_PLAYER_DEFAULT_SETTING, next);
-									}}
-									className="sr-only peer"
-								/>
-								<span
-									className={"relative inline-block w-12 h-7 transition-colors duration-200 rounded-full" + " " + `${(settings[BIG_PLAYER_DEFAULT_SETTING] ?? true) ? "bg-(--accent)" : `${settings.brightness === "dark" ? "bg-[#ffffff10] hover:bg-[#ffffff20]" : "bg-[#00000025] hover:bg-[#00000035]"}`}`}
-								>
-									<span className={"absolute left-1 top-1 w-5 h-5 bg-white rounded-full shadow transform transition-transform duration-200" + " " + `${(settings[BIG_PLAYER_DEFAULT_SETTING] ?? true) ? "translate-x-5" : ""}`} />
-								</span>
-							</label>
-
-							<label className="flex items-center justify-between cursor-pointer select-none">
-								<span className="text-xl font-medium">All visualizers</span>
-								<input
-									type="checkbox"
-									checked={settings["disable-visualizers"] === false ? true : false}
-									onChange={async () => {
-										const next = !(settings["disable-visualizers"] ?? false);
-										const newSettings = {
-											...settings,
-											"disable-visualizers": next,
-										};
-										await window.fr.fs.promises.writeFile(SettingsPath, JSON.stringify(newSettings, null, 4), "utf-8");
-										setSettings("disable-visualizers", next);
-									}}
-									className="sr-only peer"
-								/>
-								<span className={"relative inline-block w-12 h-7 transition-colors duration-200 rounded-full" + " " + `${settings["disable-visualizers"] === false ? "bg-(--accent)" : `${settings.brightness === "dark" ? "bg-[#ffffff10] hover:bg-[#ffffff20]" : "bg-[#00000025] hover:bg-[#00000035]"}`}`}>
-									<span className={"absolute left-1 top-1 w-5 h-5 bg-white rounded-full shadow transform transition-transform duration-200" + " " + `${settings["disable-visualizers"] === false ? "translate-x-5" : ""}`} />
-								</span>
-							</label>
-
-							<label className={"flex items-center justify-between cursor-pointer select-none " + (settings["disable-visualizers"] ? "opacity-50 pointer-events-none" : "")}>
-								<span className="text-lg font-medium">Tracks visualizer</span>
-								<input
-									type="checkbox"
-									checked={settings["tracks-visualizer"] ?? true}
-									onChange={async () => {
-										const next = !(settings["tracks-visualizer"] ?? true);
-										const newSettings = { ...settings, "tracks-visualizer": next };
-										await window.fr.fs.promises.writeFile(SettingsPath, JSON.stringify(newSettings, null, 4), "utf-8");
-										setSettings("tracks-visualizer", next);
-									}}
-									className="sr-only peer"
-									disabled={settings["disable-visualizers"] ?? false}
-								/>
-								<span className={"relative inline-block w-12 h-7 transition-colors duration-200 rounded-full" + " " + `${settings["tracks-visualizer"] ? "bg-(--accent)" : `${settings.brightness === "dark" ? "bg-[#ffffff10] hover:bg-[#ffffff20]" : "bg-[#00000025] hover:bg-[#00000035]"}`}`}>
-									<span className={"absolute left-1 top-1 w-5 h-5 bg-white rounded-full shadow transform transition-transform duration-200" + " " + `${settings["tracks-visualizer"] ? "translate-x-5" : ""}`} />
-								</span>
-							</label>
-
-							<label className={"flex items-center justify-between gap-10 cursor-pointer select-none " + (settings["disable-visualizers"] ? "opacity-50 pointer-events-none" : "")}>
-								<span className="text-lg font-medium">Big player visualizer</span>
-								<input
-									type="checkbox"
-									checked={settings["big-player-visualizer"] ?? true}
-									onChange={async () => {
-										const next = !(settings["big-player-visualizer"] ?? true);
-										const newSettings = { ...settings, "big-player-visualizer": next };
-										await window.fr.fs.promises.writeFile(SettingsPath, JSON.stringify(newSettings, null, 4), "utf-8");
-										setSettings("big-player-visualizer", next);
-									}}
-									className="sr-only peer"
-									disabled={settings["disable-visualizers"] ?? false}
-								/>
-								<span className={"relative inline-block w-12 h-7 transition-colors duration-200 rounded-full" + " " + `${settings["big-player-visualizer"] ? "bg-(--accent)" : `${settings.brightness === "dark" ? "bg-[#ffffff10] hover:bg-[#ffffff20]" : "bg-[#00000025] hover:bg-[#00000035]"}`}`}>
-									<span className={"absolute left-1 top-1 w-5 h-5 bg-white rounded-full shadow transform transition-transform duration-200" + " " + `${settings["big-player-visualizer"] ? "translate-x-5" : ""}`} />
-								</span>
-							</label>
-						</div>
-					</div>
-				</div>
+				</SettingsSection>
 			</div>
 		),
 	};
@@ -617,6 +620,70 @@ const Settings = ({ className }: SettingsProps) => {
 		</div>
 	);
 };
+/** Taller than this, a settings section can be folded down to its title. */
+const COLLAPSIBLE_PX = 240;
+/** The sections folded in this browser, by id. */
+const COLLAPSED_KEY = "fracital:settings-collapsed";
+const readCollapsed = (): Record<string, true> => {
+	try {
+		return JSON.parse(localStorage.getItem(COLLAPSED_KEY) || "{}") ?? {};
+	} catch {
+		return {};
+	}
+};
+
+/** A titled group of settings; tall ones fold away under their title (remembered per browser). */
+const SettingsSection = ({ id, title, titleClassName = "text-2xl font-bold", bodyClassName = "gap-2", children }: { id: string; title: string; titleClassName?: string; bodyClassName?: string; children: React.ReactNode }) => {
+	const bodyRef = useRef<HTMLDivElement>(null);
+	const [tall, setTall] = useState(false);
+	const [collapsed, setCollapsed] = useState(() => !!readCollapsed()[id]);
+	/** Clipped while it folds or unfolds, so nothing shows outside the moving edge; visible when open (hover lifts, focus rings). */
+	const [moving, setMoving] = useState(false);
+	useLayoutEffect(() => {
+		const body = bodyRef.current;
+		if (!body) return;
+		// The body keeps its own height when folded, so this measures the same either way.
+		const measure = () => setTall(body.offsetHeight > COLLAPSIBLE_PX);
+		measure();
+		const observer = new ResizeObserver(measure);
+		observer.observe(body);
+		return () => observer.disconnect();
+	}, []);
+	const open = !tall || !collapsed;
+	const toggle = () => {
+		const next = !collapsed;
+		setCollapsed(next);
+		setMoving(true);
+		try {
+			const all = readCollapsed();
+			if (next) all[id] = true;
+			else delete all[id];
+			localStorage.setItem(COLLAPSED_KEY, JSON.stringify(all));
+		} catch {
+			// Storage unavailable: it stays folded for this visit only.
+		}
+	};
+	return (
+		<section className="flex flex-col gap-2">
+			{tall ? (
+				<button type="button" aria-expanded={open} onClick={toggle} className="group flex items-center gap-2 self-start text-left cursor-pointer">
+					<HolyText as="h1" className={titleClassName} text={title} />
+					<ChevronDownIcon className={`size-5 shrink-0 stroke-current stroke-1 text-(--text-tertiary) group-hover:text-(--text-primary) duration-200 ${open ? "" : "-rotate-90"}`} />
+				</button>
+			) : (
+				<HolyText as="h1" className={titleClassName} text={title} />
+			)}
+			<div className={`grid transition-[grid-template-rows] duration-300 ease-out ${open ? "grid-rows-[1fr]" : "grid-rows-[0fr]"}`} onTransitionEnd={e => e.target === e.currentTarget && setMoving(false)}>
+				<div inert={!open} className={`min-h-0 ${!open || moving ? "overflow-hidden" : ""}`}>
+					<div ref={bodyRef} className={`flex flex-col ${bodyClassName}`}>
+						{children}
+					</div>
+				</div>
+			</div>
+		</section>
+	);
+};
+
 interface TabItemProps {
 	currentPage: string;
 	setPage: (page: string) => void;

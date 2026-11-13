@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { QueueListIcon, MusicalNoteIcon, PlusIcon, MinusIcon, ArrowUturnLeftIcon, BackwardIcon, ForwardIcon, RectangleGroupIcon, ArrowPathRoundedSquareIcon, SpeakerWaveIcon, SpeakerXMarkIcon, AdjustmentsHorizontalIcon } from "@heroicons/react/24/solid";
 import { PlayIcon, PauseIcon, EllipsisHorizontalIcon } from "@heroicons/react/24/solid";
 import { ArrowsPointingOutIcon, ChatBubbleBottomCenterTextIcon } from "@heroicons/react/24/solid";
+import { MusicComments } from "../components/MusicComments";
 import { useMusicStore, usePlaybackStore, useSettingsStore } from "../store";
 import { ContextMenu, type MenuItem } from "../components/ContextMenu";
 import { AudvisVisualizer } from "../components/AudvisVisualizer";
@@ -35,6 +36,9 @@ const RailButton = ({ onClick, dark, strong, children }: { onClick: () => void; 
 		{children}
 	</button>
 );
+
+/** How much of the queue shows under the big player: its handle, heading and the top of the first song. */
+const QUEUE_SLIVER = "5.5rem";
 
 interface QuickPlayerProps {
 	panelsOpen: boolean;
@@ -83,6 +87,36 @@ export const QuickPlayer = ({ panelsOpen, className, onOpenPanels }: QuickPlayer
 	const playNext = useMusicStore(state => state.playNext);
 	const playerView = useMusicStore(state => state.playerView);
 	const changeView = useMusicStore(state => state.changeView);
+	const queueUp = playerView === "tracks";
+	const bigPlayerRef = useRef<HTMLDivElement>(null);
+	/** The stack's offset in px while the queue is being dragged, else null (it rests where queueUp puts it). */
+	const [queueDrag, setQueueDrag] = useState<number | null>(null);
+	const queueDragStart = useRef<{ y: number; from: number; travel: number; moved: boolean } | null>(null);
+	const startQueueDrag = (e: React.PointerEvent<HTMLElement>) => {
+		if (e.button !== 0) return;
+		// The stack travels the big player's height: from the sliver showing to the queue filling the panel.
+		const travel = bigPlayerRef.current?.offsetHeight ?? 0;
+		e.currentTarget.setPointerCapture(e.pointerId);
+		queueDragStart.current = { y: e.clientY, from: queueUp ? -travel : 0, travel, moved: false };
+	};
+	const moveQueueDrag = (e: React.PointerEvent<HTMLElement>) => {
+		const drag = queueDragStart.current;
+		if (!drag) return;
+		const dy = e.clientY - drag.y;
+		if (!drag.moved && Math.abs(dy) < 4) return;
+		drag.moved = true;
+		setQueueDrag(Math.min(0, Math.max(-drag.travel, drag.from + dy)));
+	};
+	const endQueueDrag = (e: React.PointerEvent<HTMLElement>) => {
+		const drag = queueDragStart.current;
+		queueDragStart.current = null;
+		if (!drag) return;
+		const dy = e.clientY - drag.y;
+		// A tap toggles; a drag settles on the side it was pulled past a quarter of the way.
+		const open = !drag.moved ? !queueUp : queueUp ? dy < drag.travel / 4 : -dy > drag.travel / 4;
+		setQueueDrag(null);
+		changeView(open ? "tracks" : "bigplayer");
+	};
 
 	const [platform, setPlatform] = useState<string>("");
 	const [brightness, setBrightness] = useState<"dark" | "light">("dark");
@@ -105,7 +139,8 @@ export const QuickPlayer = ({ panelsOpen, className, onOpenPanels }: QuickPlayer
 
 	const musicRef = useRef<HTMLDivElement>(null);
 	const audioRef = useRef<HTMLAudioElement>(null);
-	const seekbarRef = useRef<HTMLSpanElement>(null);
+	/** The seek bar last pressed (the big player and the queue each show one). */
+	const seekbarRef = useRef<HTMLElement | null>(null);
 	const playRef = useRef<HTMLButtonElement>(null);
 
 	const volume = usePlaybackStore(state => state.volume);
@@ -259,7 +294,7 @@ export const QuickPlayer = ({ panelsOpen, className, onOpenPanels }: QuickPlayer
 
 	useEffect(() => {
 		const percent = duration ? (currentTime / duration) * 100 : 0;
-		seekbarRef.current?.style.setProperty("--current", `${percent}%`);
+		musicRef.current?.style.setProperty("--current", `${percent}%`);
 	}, [currentTime, duration]);
 
 	useEffect(() => {
@@ -366,7 +401,8 @@ export const QuickPlayer = ({ panelsOpen, className, onOpenPanels }: QuickPlayer
 		seek(newTime);
 	};
 
-	const handleMouseDown = (e: React.MouseEvent) => {
+	const handleMouseDown = (e: React.MouseEvent<HTMLElement>) => {
+		seekbarRef.current = e.currentTarget;
 		setIsDragging(true);
 		handleSeek(e.clientX);
 	};
@@ -465,6 +501,225 @@ export const QuickPlayer = ({ panelsOpen, className, onOpenPanels }: QuickPlayer
 		};
 	}, [isVolumeDragging]);
 
+	/** The queue with its seek bar and button row: the whole player when nothing plays, else what slides up under the big player. */
+	const queueView = (
+		<>
+			<div className={"relative flex w-full flex-1 min-h-0 overflow-auto gap-2 p-2 px-3 flex-col duration-200"}>
+				{failed && currentTrack && queueUp && <span className="ml-1.5 mt-1 text-xs font-semibold text-[#ff6b6b]">Couldn't play this song{queue.length ? " — skipping" : ""}</span>}
+				<div className="flex flex-col items-start w-full mt-1.5">
+					<QueueList dark={brightness === "dark"} variant="compact" />
+				</div>
+			</div>
+			<div>
+				{/* It only draws while music plays: paused or stopped it would be a blank band over the queue, so it folds away. */}
+				{currentTrack && analyser && showVisualizer && settings["tracks-visualizer"] === true && settings["disable-visualizers"] !== true && (
+					<div className={`flex justify-center items-center px-4 overflow-hidden transition-[height] duration-300 ${isPlaying && !loadingSong ? "h-12" : "h-0"}`}>
+						<AudvisVisualizer analyser={analyser} isPlaying={isPlaying} width={250} height={20} color={brightness === "dark" ? "#FFFFFF" : "#000000"} opacity={0.6} scale={1} />
+					</div>
+				)}
+				<div className="relative flex justify-center items-center h-9">
+					<div ref={controlsRef} className={`absolute flex p-2.5 gap-2 w-full items-center transition-[bottom,opacity,visibility] duration-200 ${currentTrack ? "" : "-bottom-22 opacity-0 invisible pointer-events-none"}`}>
+						<span className="font-medium">{formatTime(currentTime)}</span>
+						<span className="w-full h-2 bg-(--text-tertiary) rounded-full overflow-hidden hover:h-2.5 cursor-pointer duration-150" onMouseDown={handleMouseDown} onClick={e => handleSeek(e.clientX)}>
+							<span style={{ width: `var(--current, 0%)` }} className={`flex h-full ${brightness === "dark" ? "bg-white" : "bg-black"}`}></span>
+						</span>
+						<span className="font-medium">{formatTime(duration)}</span>
+					</div>
+				</div>
+				{/* Audio Equalizer Panel */}
+				{showEQ && (
+					<div className="flex flex-col gap-3 p-4 bg-(--tertiary) rounded-lg mx-2 mt-2 mb-2">
+						<h3 className="text-sm font-semibold text-(--text-primary)">Equalizer</h3>
+						<div className="flex flex-col gap-4">
+							{/* Bass Control */}
+							<div className="flex flex-col gap-1.5">
+								<div className="flex justify-between items-center">
+									<label className="text-xs text-(--text-secondary)">Bass</label>
+									<span className="text-xs font-mono text-(--text-secondary)">
+										{eqBass > 0 ? "+" : ""}
+										{eqBass.toFixed(1)} dB
+									</span>
+								</div>
+								<div className="relative flex items-center">
+									<div className="absolute inset-0 flex justify-between items-center pointer-events-none px-0.5 z-0">
+										{Array.from({ length: 13 }).map((_, i) => (
+											<div key={i} className={`w-0.5 h-2 rounded-full ${i === 12 ? "bg-(--accent)" : "bg-(--text-tertiary) opacity-30"}`}></div>
+										))}
+									</div>
+									<input
+										type="range"
+										min="-12"
+										max="12"
+										step="0.5"
+										value={eqBass}
+										onChange={e => setEqBass(parseFloat(e.target.value))}
+										className="eq-slider w-full relative z-10"
+										style={{
+											background: `linear-gradient(to right, 
+								var(--accent) 0%, 
+								var(--accent) ${((eqBass + 12) / 24) * 100}%, 
+								var(--secondary) ${((eqBass + 12) / 24) * 100}%, 
+								var(--secondary) 100%)`,
+										}}
+									/>
+								</div>
+							</div>
+
+							{/* Mid Control */}
+							<div className="flex flex-col gap-1.5">
+								<div className="flex justify-between items-center">
+									<label className="text-xs text-(--text-secondary)">Mid</label>
+									<span className="text-xs font-mono text-(--text-secondary)">
+										{eqMid > 0 ? "+" : ""}
+										{eqMid.toFixed(1)} dB
+									</span>
+								</div>
+								<div className="relative flex items-center">
+									<div className="absolute inset-0 flex justify-between items-center pointer-events-none px-0.5 z-0">
+										{Array.from({ length: 13 }).map((_, i) => (
+											<div key={i} className={`w-0.5 h-2 rounded-full ${i === 12 ? "bg-(--accent)" : "bg-(--text-tertiary) opacity-30"}`}></div>
+										))}
+									</div>
+									<input
+										type="range"
+										min="-12"
+										max="12"
+										step="0.5"
+										value={eqMid}
+										onChange={e => setEqMid(parseFloat(e.target.value))}
+										className="eq-slider w-full relative z-10"
+										style={{
+											background: `linear-gradient(to right, 
+								var(--accent) 0%, 
+								var(--accent) ${((eqMid + 12) / 24) * 100}%, 
+								var(--secondary) ${((eqMid + 12) / 24) * 100}%, 
+								var(--secondary) 100%)`,
+										}}
+									/>
+								</div>
+							</div>
+
+							{/* Treble Control */}
+							<div className="flex flex-col gap-1.5">
+								<div className="flex justify-between items-center">
+									<label className="text-xs text-(--text-secondary)">Treble</label>
+									<span className="text-xs font-mono text-(--text-secondary)">
+										{eqTreble > 0 ? "+" : ""}
+										{eqTreble.toFixed(1)} dB
+									</span>
+								</div>
+								<div className="relative flex items-center">
+									<div className="absolute inset-0 flex justify-between items-center pointer-events-none px-0.5 z-0">
+										{Array.from({ length: 13 }).map((_, i) => (
+											<div key={i} className={`w-0.5 h-2 rounded-full ${i === 12 ? "bg-(--accent)" : "bg-(--text-tertiary) opacity-30"}`}></div>
+										))}
+									</div>
+									<input
+										type="range"
+										min="-12"
+										max="12"
+										step="0.5"
+										value={eqTreble}
+										onChange={e => setEqTreble(parseFloat(e.target.value))}
+										className="eq-slider w-full relative z-10"
+										style={{
+											background: `linear-gradient(to right, 
+								var(--accent) 0%, 
+								var(--accent) ${((eqTreble + 12) / 24) * 100}%, 
+								var(--secondary) ${((eqTreble + 12) / 24) * 100}%, 
+								var(--secondary) 100%)`,
+										}}
+									/>
+								</div>
+							</div>
+
+							{/* Reset Button */}
+							<button
+								onClick={() => {
+									setEqBass(0);
+									setEqMid(0);
+									setEqTreble(0);
+								}}
+								className="text-xs text-(--text-secondary) hover:text-(--text-primary) bg-(--secondary) hover:bg-[#ffffff10] px-3 py-1.5 rounded-md duration-150"
+							>
+								Reset EQ
+							</button>
+						</div>
+					</div>
+				)}
+				<div className={`flex min-max-1 w-(calc(100%-1rem)) m-2 p-1 rounded-xl overflow-x-auto overflow-y-hidden [scrollbar-width:none] items-start justify-between gap-0.5 ${brightness === "dark" ? "bg-[#ffffff10]" : "bg-[#00000025]"}`}>
+					<div className={`flex gap-0.5 duration-150`}>
+						<div className="flex gap-1">
+							<button ref={playRef} title={platform.includes("Mac") ? "Play ⌃ + P" : "Play: Alt + S"} className="flex items-center justify-center p-2 hover:bg-[#ffffff10] text-(--text-secondary) hover:text-(--text-primary) rounded-lg cursor-pointer duration-150" onClick={() => void togglePlay()}>
+								{isPlaying === false ? (
+									<PlayIcon className="size-5 text-current stroke-current stroke-0.5 pointer-events-none" />
+								) : loadingSong ? (
+									<span aria-hidden className="block size-5 p-0.5 pointer-events-none">
+										<span className="block size-full rounded-full border-2 border-current border-t-transparent animate-spin" />
+									</span>
+								) : (
+									<PauseIcon className="size-5 text-current stroke-current stroke-0.5 pointer-events-none" />
+								)}
+							</button>
+							<button title={platform.includes("Mac") ? "Previous Track ⌃ + ," : "Previous Track: Alt + ,"} className="flex items-center justify-center p-2 hover:bg-[#ffffff10] text-(--text-secondary) hover:text-(--text-primary) rounded-lg cursor-pointer duration-150" onClick={previous}>
+								<BackwardIcon className="size-5 text-current pointer-events-none" />
+							</button>
+							<button
+								title={platform.includes("Mac") ? "Next Track ⌃ + ." : "Next Track: Alt + ."}
+								className="flex items-center justify-center p-2 hover:bg-[#ffffff10] text-(--text-secondary) hover:text-(--text-primary) rounded-lg cursor-pointer duration-150"
+								onClick={() => {
+									playNext();
+								}}
+							>
+								<ForwardIcon className="size-5 text-current pointer-events-none" />
+							</button>
+						</div>
+						<button
+							title={platform.includes("Mac") ? "Loop ⌃ + L" : "Loop: Alt + L"}
+							className={`flex items-center justify-center p-2 hover:bg-[#ffffff10] text-(--text-secondary) hover:text-(--text-primary) rounded-lg cursor-pointer duration-150 ${loop ? "text-(--text-primary)" : ""}`}
+							onClick={() => {
+								if (audioRef.current) {
+									audioRef.current.loop = !loop;
+								}
+								setLoop(!loop);
+							}}
+						>
+							<ArrowPathRoundedSquareIcon className="size-5 stroke-0.5 stroke-current text-current pointer-events-none" />
+						</button>
+						<SongFeedback track={currentTrack} buttonClassName="flex items-center justify-center p-2 hover:bg-[#ffffff10] text-(--text-secondary) hover:text-(--text-primary) rounded-lg cursor-pointer duration-150" iconClassName="size-5 pointer-events-none" />
+						<button title="Drag left/right to change volume" className="flex items-center justify-center p-2 hover:bg-[#ffffff10] text-(--text-secondary) hover:text-(--text-primary) rounded-lg cursor-ew-resize duration-150" onMouseDown={handleVolumeMouseDown} onClick={toggleMute}>
+							{muted || volume === 0 ? <SpeakerXMarkIcon className="size-5 text-current pointer-events-none" /> : <SpeakerWaveIcon className="size-5 text-current pointer-events-none" />}
+						</button>
+						<button title="Audio Equalizer" className={`flex items-center justify-center p-2 hover:bg-[#ffffff10] text-(--text-secondary) hover:text-(--text-primary) rounded-lg cursor-pointer duration-150 ${showEQ ? "text-(--text-primary)" : ""}`} onClick={() => setShowEQ(!showEQ)}>
+							<AdjustmentsHorizontalIcon className="size-5 text-current pointer-events-none" />
+						</button>
+					</div>
+					<div className="flex gap-0.5">
+						<div
+							title={platform.includes("Mac") ? "Toggle Big Player" : "Toggle Big Player"}
+							className="flex items-center justify-center p-2 hover:bg-[#ffffff10] text-(--text-secondary) hover:text-(--text-primary) rounded-lg cursor-pointer duration-150"
+							onClick={() => {
+								if (playerView === "tracks") {
+									changeView("bigplayer");
+								} else {
+									changeView("tracks");
+								}
+							}}
+						>
+							<RectangleGroupIcon className="size-5 text-current pointer-events-none" />
+						</div>
+						<button title="Lyrics" className={`flex items-center justify-center p-2 hover:bg-[#ffffff10] text-(--text-secondary) hover:text-(--text-primary) rounded-lg cursor-pointer duration-150 ${currentTrack ? "" : "hidden"}`} onClick={() => openMusicPlayer("lyrics")}>
+							<ChatBubbleBottomCenterTextIcon className="size-5 text-current pointer-events-none" />
+						</button>
+						<button title="Open Full Player" className={`flex items-center justify-center p-2 hover:bg-[#ffffff10] text-(--text-secondary) hover:text-(--text-primary) rounded-lg cursor-pointer duration-150 ${currentTrack ? "" : "hidden"}`} onClick={() => openMusicPlayer("cover")}>
+							<ArrowsPointingOutIcon className="size-5 text-current pointer-events-none stroke-0.5 stroke-(--text-secondary) hover:stroke-(--text-primary)" />
+						</button>
+					</div>
+				</div>
+			</div>
+		</>
+	);
+
 	return (
 		<div
 			className={
@@ -513,357 +768,165 @@ export const QuickPlayer = ({ panelsOpen, className, onOpenPanels }: QuickPlayer
 							</RailButton>
 						</div>
 					)}
-					{playerView === "tracks" || !currentTrack ? (
-						<>
-							<div className={"relative flex w-full flex-1 min-h-0 overflow-auto gap-2 p-2 px-3 flex-col duration-200"}>
-								{failed && currentTrack && <span className="ml-1.5 mt-1 text-xs font-semibold text-[#ff6b6b]">Couldn't play this song{queue.length ? " — skipping" : ""}</span>}
-								<div className="flex flex-col items-start w-full mt-1.5">
-									<QueueList dark={brightness === "dark"} variant="compact" />
-								</div>
-							</div>
-							<div>
-								{currentTrack && showVisualizer && settings["tracks-visualizer"] === true && settings["disable-visualizers"] !== true && (
-									<div className="flex justify-center items-center h-12 px-4 overflow-hidden">
-										<AudvisVisualizer analyser={analyser} isPlaying={isPlaying} width={250} height={20} color={brightness === "dark" ? "#FFFFFF" : "#000000"} opacity={0.6} scale={1} />
-									</div>
-								)}
-								<div className="relative flex justify-center items-center h-9">
-									<div ref={controlsRef} className={`absolute flex p-2.5 gap-2 w-full items-center transition-[bottom,opacity,visibility] duration-200 ${currentTrack ? "" : "-bottom-22 opacity-0 invisible pointer-events-none"}`}>
-										<span className="font-medium">{formatTime(currentTime)}</span>
-										<span ref={seekbarRef} className="w-full h-2 bg-(--text-tertiary) rounded-full overflow-hidden hover:h-2.5 cursor-pointer duration-150" onMouseDown={handleMouseDown} onClick={e => handleSeek(e.clientX)}>
-											<span style={{ width: `var(--current, 0%)` }} className={`flex h-full ${brightness === "dark" ? "bg-white" : "bg-black"}`}></span>
-										</span>
-										<span className="font-medium">{formatTime(duration)}</span>
-									</div>
-								</div>
-								{/* Audio Equalizer Panel */}
-								{showEQ && (
-									<div className="flex flex-col gap-3 p-4 bg-(--tertiary) rounded-lg mx-2 mt-2 mb-2">
-										<h3 className="text-sm font-semibold text-(--text-primary)">Equalizer</h3>
-										<div className="flex flex-col gap-4">
-											{/* Bass Control */}
-											<div className="flex flex-col gap-1.5">
-												<div className="flex justify-between items-center">
-													<label className="text-xs text-(--text-secondary)">Bass</label>
-													<span className="text-xs font-mono text-(--text-secondary)">
-														{eqBass > 0 ? "+" : ""}
-														{eqBass.toFixed(1)} dB
-													</span>
-												</div>
-												<div className="relative flex items-center">
-													<div className="absolute inset-0 flex justify-between items-center pointer-events-none px-0.5 z-0">
-														{Array.from({ length: 13 }).map((_, i) => (
-															<div key={i} className={`w-0.5 h-2 rounded-full ${i === 12 ? "bg-(--accent)" : "bg-(--text-tertiary) opacity-30"}`}></div>
-														))}
-													</div>
-													<input
-														type="range"
-														min="-12"
-														max="12"
-														step="0.5"
-														value={eqBass}
-														onChange={e => setEqBass(parseFloat(e.target.value))}
-														className="eq-slider w-full relative z-10"
-														style={{
-															background: `linear-gradient(to right, 
-																var(--accent) 0%, 
-																var(--accent) ${((eqBass + 12) / 24) * 100}%, 
-																var(--secondary) ${((eqBass + 12) / 24) * 100}%, 
-																var(--secondary) 100%)`,
-														}}
-													/>
-												</div>
-											</div>
-
-											{/* Mid Control */}
-											<div className="flex flex-col gap-1.5">
-												<div className="flex justify-between items-center">
-													<label className="text-xs text-(--text-secondary)">Mid</label>
-													<span className="text-xs font-mono text-(--text-secondary)">
-														{eqMid > 0 ? "+" : ""}
-														{eqMid.toFixed(1)} dB
-													</span>
-												</div>
-												<div className="relative flex items-center">
-													<div className="absolute inset-0 flex justify-between items-center pointer-events-none px-0.5 z-0">
-														{Array.from({ length: 13 }).map((_, i) => (
-															<div key={i} className={`w-0.5 h-2 rounded-full ${i === 12 ? "bg-(--accent)" : "bg-(--text-tertiary) opacity-30"}`}></div>
-														))}
-													</div>
-													<input
-														type="range"
-														min="-12"
-														max="12"
-														step="0.5"
-														value={eqMid}
-														onChange={e => setEqMid(parseFloat(e.target.value))}
-														className="eq-slider w-full relative z-10"
-														style={{
-															background: `linear-gradient(to right, 
-																var(--accent) 0%, 
-																var(--accent) ${((eqMid + 12) / 24) * 100}%, 
-																var(--secondary) ${((eqMid + 12) / 24) * 100}%, 
-																var(--secondary) 100%)`,
-														}}
-													/>
-												</div>
-											</div>
-
-											{/* Treble Control */}
-											<div className="flex flex-col gap-1.5">
-												<div className="flex justify-between items-center">
-													<label className="text-xs text-(--text-secondary)">Treble</label>
-													<span className="text-xs font-mono text-(--text-secondary)">
-														{eqTreble > 0 ? "+" : ""}
-														{eqTreble.toFixed(1)} dB
-													</span>
-												</div>
-												<div className="relative flex items-center">
-													<div className="absolute inset-0 flex justify-between items-center pointer-events-none px-0.5 z-0">
-														{Array.from({ length: 13 }).map((_, i) => (
-															<div key={i} className={`w-0.5 h-2 rounded-full ${i === 12 ? "bg-(--accent)" : "bg-(--text-tertiary) opacity-30"}`}></div>
-														))}
-													</div>
-													<input
-														type="range"
-														min="-12"
-														max="12"
-														step="0.5"
-														value={eqTreble}
-														onChange={e => setEqTreble(parseFloat(e.target.value))}
-														className="eq-slider w-full relative z-10"
-														style={{
-															background: `linear-gradient(to right, 
-																var(--accent) 0%, 
-																var(--accent) ${((eqTreble + 12) / 24) * 100}%, 
-																var(--secondary) ${((eqTreble + 12) / 24) * 100}%, 
-																var(--secondary) 100%)`,
-														}}
-													/>
-												</div>
-											</div>
-
-											{/* Reset Button */}
-											<button
-												onClick={() => {
-													setEqBass(0);
-													setEqMid(0);
-													setEqTreble(0);
-												}}
-												className="text-xs text-(--text-secondary) hover:text-(--text-primary) bg-(--secondary) hover:bg-[#ffffff10] px-3 py-1.5 rounded-md duration-150"
-											>
-												Reset EQ
-											</button>
-										</div>
-									</div>
-								)}
-								<div className={`flex min-max-1 w-(calc(100%-1rem)) m-2 p-1 rounded-xl overflow-x-auto overflow-y-hidden [scrollbar-width:none] items-start justify-between gap-0.5 ${brightness === "dark" ? "bg-[#ffffff10]" : "bg-[#00000025]"}`}>
-									<div className={`flex gap-0.5 duration-150`}>
-										<div className="flex gap-1">
-											<button
-												ref={playRef}
-												title={platform.includes("Mac") ? "Play ⌃ + P" : "Play: Alt + S"}
-												className="flex items-center justify-center p-2 hover:bg-[#ffffff10] text-(--text-secondary) hover:text-(--text-primary) rounded-lg cursor-pointer duration-150"
-												onClick={() => void togglePlay()}
-											>
-												{isPlaying === false ? (
-													<PlayIcon className="size-5 text-current stroke-current stroke-0.5 pointer-events-none" />
-												) : loadingSong ? (
-													<span aria-hidden className="block size-5 p-0.5 pointer-events-none">
-														<span className="block size-full rounded-full border-2 border-current border-t-transparent animate-spin" />
-													</span>
+					{currentTrack ? (
+						<div className="relative flex-1 min-h-0 overflow-hidden">
+							{/* The big player sits over the queue, whose top shows below it. Opening the queue slides both up
+							    until the player is out of view; the sliver (or the handle once open) can be dragged too. */}
+							<div className={`absolute inset-0 ${queueDrag === null ? "transition-transform duration-500 ease-[cubic-bezier(0.32,0.72,0,1)]" : ""}`} style={{ transform: queueDrag === null ? (queueUp ? `translateY(calc(-100% + ${QUEUE_SLIVER}))` : "none") : `translateY(${queueDrag}px)` }}>
+								<div ref={bigPlayerRef} inert={queueUp} className="absolute inset-x-0 top-0" style={{ height: `calc(100% - ${QUEUE_SLIVER})` }}>
+									<div className="relative flex flex-col w-full items-center h-full min-h-0 overflow-auto p-2.5 duration-200">
+										{/* The player at the top, its song's and album's comments filling the space below (scrolling with it). */}
+										<div className="flex flex-col items-center gap-4 w-full">
+											<div className="group relative flex items-center justify-center w-full cursor-pointer" onMouseEnter={() => setIsHoveringCover(true)} onMouseLeave={() => setIsHoveringCover(false)} onClick={() => void togglePlay()}>
+												{currentTrack?.cover ? (
+													<img src={currentTrack.cover} alt={currentTrack.title} className="w-full aspect-square object-cover rounded-xl shadow-[0_0_20px_0px_#00000080]" />
 												) : (
-													<PauseIcon className="size-5 text-current stroke-current stroke-0.5 pointer-events-none" />
+													<div className="w-full aspect-square rounded-2xl flex justify-center items-center bg-(--primary) text-(--text-secondary) inset-shadow-(--inset-shadow-primary) shadow-[0_0_20px_0px_#00000080]">
+														<MusicalNoteIcon className="size-24 opacity-90" />
+													</div>
 												)}
-											</button>
-											<button title={platform.includes("Mac") ? "Previous Track ⌃ + ," : "Previous Track: Alt + ,"} className="flex items-center justify-center p-2 hover:bg-[#ffffff10] text-(--text-secondary) hover:text-(--text-primary) rounded-lg cursor-pointer duration-150" onClick={previous}>
-												<BackwardIcon className="size-5 text-current pointer-events-none" />
-											</button>
-											<button
-												title={platform.includes("Mac") ? "Next Track ⌃ + ." : "Next Track: Alt + ."}
-												className="flex items-center justify-center p-2 hover:bg-[#ffffff10] text-(--text-secondary) hover:text-(--text-primary) rounded-lg cursor-pointer duration-150"
-												onClick={() => {
-													playNext();
-												}}
-											>
-												<ForwardIcon className="size-5 text-current pointer-events-none" />
-											</button>
-										</div>
-										<button
-											title={platform.includes("Mac") ? "Loop ⌃ + L" : "Loop: Alt + L"}
-											className={`flex items-center justify-center p-2 hover:bg-[#ffffff10] text-(--text-secondary) hover:text-(--text-primary) rounded-lg cursor-pointer duration-150 ${loop ? "text-(--text-primary)" : ""}`}
-											onClick={() => {
-												if (audioRef.current) {
-													audioRef.current.loop = !loop;
-												}
-												setLoop(!loop);
-											}}
-										>
-											<ArrowPathRoundedSquareIcon className="size-5 stroke-0.5 stroke-current text-current pointer-events-none" />
-										</button>
-										<SongFeedback track={currentTrack} buttonClassName="flex items-center justify-center p-2 hover:bg-[#ffffff10] text-(--text-secondary) hover:text-(--text-primary) rounded-lg cursor-pointer duration-150" iconClassName="size-5 pointer-events-none" />
-										<button title="Drag left/right to change volume" className="flex items-center justify-center p-2 hover:bg-[#ffffff10] text-(--text-secondary) hover:text-(--text-primary) rounded-lg cursor-ew-resize duration-150" onMouseDown={handleVolumeMouseDown} onClick={toggleMute}>
-											{muted || volume === 0 ? <SpeakerXMarkIcon className="size-5 text-current pointer-events-none" /> : <SpeakerWaveIcon className="size-5 text-current pointer-events-none" />}
-										</button>
-										<button title="Audio Equalizer" className={`flex items-center justify-center p-2 hover:bg-[#ffffff10] text-(--text-secondary) hover:text-(--text-primary) rounded-lg cursor-pointer duration-150 ${showEQ ? "text-(--text-primary)" : ""}`} onClick={() => setShowEQ(!showEQ)}>
-											<AdjustmentsHorizontalIcon className="size-5 text-current pointer-events-none" />
-										</button>
-									</div>
-									<div className="flex gap-0.5">
-										<div
-											title={platform.includes("Mac") ? "Toggle Big Player" : "Toggle Big Player"}
-											className="flex items-center justify-center p-2 hover:bg-[#ffffff10] text-(--text-secondary) hover:text-(--text-primary) rounded-lg cursor-pointer duration-150"
-											onClick={() => {
-												if (playerView === "tracks") {
-													changeView("bigplayer");
-												} else {
-													changeView("tracks");
-												}
-											}}
-										>
-											<RectangleGroupIcon className="size-5 text-current pointer-events-none" />
-										</div>
-										<button title="Lyrics" className={`flex items-center justify-center p-2 hover:bg-[#ffffff10] text-(--text-secondary) hover:text-(--text-primary) rounded-lg cursor-pointer duration-150 ${currentTrack ? "" : "hidden"}`} onClick={() => openMusicPlayer("lyrics")}>
-											<ChatBubbleBottomCenterTextIcon className="size-5 text-current pointer-events-none" />
-										</button>
-										<button title="Open Full Player" className={`flex items-center justify-center p-2 hover:bg-[#ffffff10] text-(--text-secondary) hover:text-(--text-primary) rounded-lg cursor-pointer duration-150 ${currentTrack ? "" : "hidden"}`} onClick={() => openMusicPlayer("cover")}>
-											<ArrowsPointingOutIcon className="size-5 text-current pointer-events-none stroke-0.5 stroke-(--text-secondary) hover:stroke-(--text-primary)" />
-										</button>
-									</div>
-								</div>
-							</div>
-						</>
-					) : (
-						<div className={"relative flex flex-col w-full items-center flex-1 min-h-0 overflow-auto gap-2 p-2.5 px-2.5 duration-200"}>
-							<div className="flex flex-col items-center justify-evenly h-full w-full">
-								<div className="group relative flex items-center justify-center w-4/5 cursor-pointer" onMouseEnter={() => setIsHoveringCover(true)} onMouseLeave={() => setIsHoveringCover(false)} onClick={() => void togglePlay()}>
-									{currentTrack?.cover ? (
-										<img src={currentTrack.cover} alt={currentTrack.title} className="w-full aspect-square object-cover rounded-xl shadow-[0_0_20px_0px_#00000080]" />
-									) : (
-										<div className="w-full aspect-square rounded-2xl flex justify-center items-center bg-(--primary) text-(--text-secondary) inset-shadow-(--inset-shadow-primary) shadow-[0_0_20px_0px_#00000080]">
-											<MusicalNoteIcon className="size-24 opacity-90" />
-										</div>
-									)}
-									{settings["big-player-visualizer"] === true && settings["disable-visualizers"] !== true && showVisualizer && (
-										<div className={`absolute rounded-xl overflow-hidden duration-300 drop-shadow-xl ${isHoveringCover === false ? "opacity-100 scale-100" : "opacity-0 scale-95"}`}>
-											<AudvisVisualizer analyser={analyser} isPlaying={isPlaying} width={140} height={30} color={brightness === "dark" ? "#FFFFFF" : "#000000"} opacity={visualizerOpacity} scale={visualizerScale} />
-										</div>
-									)}
-									{loadingSong && <div aria-hidden className="absolute size-12 rounded-full border-4 border-white border-t-transparent animate-spin drop-shadow-[0_0_10px_#000] pointer-events-none group-hover:opacity-0 duration-150" />}
-									<div className="absolute group flex gap-3 opacity-0 group-hover:opacity-100 duration-150 z-10">
-										<button
-											className="opacity-80 hover:opacity-100 cursor-pointer duration-150"
-											style={{ filter: "drop-shadow(0px 0px 10px #000)" }}
-											onClick={e => {
-												e.stopPropagation();
-												previous();
-											}}
-										>
-											<BackwardIcon className="size-12" />
-										</button>
-										{isPlaying === false ? (
-											<PlayIcon style={{ filter: "drop-shadow(0px 0px 10px #000)" }} className="size-12 text-current stroke-current stroke-0.5 pointer-events-none" />
-										) : (
-											<PauseIcon style={{ filter: "drop-shadow(0px 0px 10px #000)" }} className="size-12 text-current stroke-current stroke-1 pointer-events-none" />
-										)}
-										<button
-											className="opacity-80 hover:opacity-100 cursor-pointer duration-150"
-											style={{ filter: "drop-shadow(0px 0px 10px #000)" }}
-											onClick={e => {
-												e.stopPropagation();
-												playNext();
-											}}
-										>
-											<ForwardIcon className="size-12" />
-										</button>
-									</div>
-									<div className={`absolute flex flex-col items-center w-4/5 gap-3 z-10 text-white duration-150 pointer-events-none ${volumeSlide ? "" : "opacity-0 pointer-events-none"}`}>
-										<span className="font-semibold text-2xl">{Math.round(volume * 100)}%</span>
-										<span className={"flex w-full h-2 bg-[#ffffff40] rounded-full"}>
-											<span style={{ width: `${Math.round(volume * 100)}%` }} className="h-full bg-white rounded-full"></span>
-										</span>
-									</div>
-								</div>
-								<div className="flex flex-col items-center justify-center w-full gap-2">
-									<div className="flex flex-col items-center gap-1.5">
-										<h1 className={`font-bold text-2xl leading-none ${isLinkable(currentTrack) ? "cursor-pointer hover:underline" : ""}`} onClick={isLinkable(currentTrack) ? () => openTrackAlbum(currentTrack!) : undefined}>
-											{currentTrack?.title}
-										</h1>
-										<h2 className="font-semibold text-lg text-center leading-none mt-0.5">
-											{(Array.isArray(currentTrack?.artists) ? currentTrack.artists : currentTrack?.artists ? [currentTrack.artists] : []).map((artist, i, all) => (
-												<span key={`${artist}-${i}`}>
-													<span className={isLinkable(currentTrack) ? "cursor-pointer hover:underline" : ""} onClick={isLinkable(currentTrack) ? () => openTrackArtist(currentTrack!, artist) : undefined}>
-														{artist}
+												{settings["big-player-visualizer"] === true && settings["disable-visualizers"] !== true && showVisualizer && (
+													<div className={`absolute rounded-xl overflow-hidden duration-300 drop-shadow-xl ${isHoveringCover === false ? "opacity-100 scale-100" : "opacity-0 scale-95"}`}>
+														<AudvisVisualizer analyser={analyser} isPlaying={isPlaying} width={140} height={30} color={brightness === "dark" ? "#FFFFFF" : "#000000"} opacity={visualizerOpacity} scale={visualizerScale} />
+													</div>
+												)}
+												{loadingSong && <div aria-hidden className="absolute size-12 rounded-full border-4 border-white border-t-transparent animate-spin drop-shadow-[0_0_10px_#000] pointer-events-none group-hover:opacity-0 duration-150" />}
+												<div className="absolute group flex gap-3 opacity-0 group-hover:opacity-100 duration-150 z-10">
+													<button
+														className="opacity-80 hover:opacity-100 cursor-pointer duration-150"
+														style={{ filter: "drop-shadow(0px 0px 10px #000)" }}
+														onClick={e => {
+															e.stopPropagation();
+															previous();
+														}}
+													>
+														<BackwardIcon className="size-12" />
+													</button>
+													{isPlaying === false ? (
+														<PlayIcon style={{ filter: "drop-shadow(0px 0px 10px #000)" }} className="size-12 text-current stroke-current stroke-0.5 pointer-events-none" />
+													) : (
+														<PauseIcon style={{ filter: "drop-shadow(0px 0px 10px #000)" }} className="size-12 text-current stroke-current stroke-1 pointer-events-none" />
+													)}
+													<button
+														className="opacity-80 hover:opacity-100 cursor-pointer duration-150"
+														style={{ filter: "drop-shadow(0px 0px 10px #000)" }}
+														onClick={e => {
+															e.stopPropagation();
+															playNext();
+														}}
+													>
+														<ForwardIcon className="size-12" />
+													</button>
+												</div>
+												<div className={`absolute flex flex-col items-center w-4/5 gap-3 z-10 text-white duration-150 pointer-events-none ${volumeSlide ? "" : "opacity-0 pointer-events-none"}`}>
+													<span className="font-semibold text-2xl">{Math.round(volume * 100)}%</span>
+													<span className={"flex w-full h-2 bg-[#ffffff40] rounded-full"}>
+														<span style={{ width: `${Math.round(volume * 100)}%` }} className="h-full bg-white rounded-full"></span>
 													</span>
-													{i < all.length - 1 && ", "}
-												</span>
-											))}
-										</h2>
-										{currentTrack &&
-											(failed ? <span className="text-xs font-semibold text-[#ff6b6b]">Couldn't play this song{queue.length ? " — skipping" : ""}</span> : <PlayCount title={currentTrack.title} artist={currentTrack.artists} skeleton={false} className="text-xs font-medium opacity-60" />)}
-									</div>
-									<div className="flex w-full">
-										<div className="relative flex justify-center items-center w-full h-9">
-											<div className={"flex p-2.5 gap-2 w-full items-center"}>
-												<span className="font-medium">{formatTime(currentTime)}</span>
-												<span ref={seekbarRef} className="w-full h-2 bg-(--text-tertiary) rounded-full overflow-hidden hover:h-2.5 cursor-pointer duration-150" onMouseDown={handleMouseDown} onClick={e => handleSeek(e.clientX)}>
-													<span style={{ width: `var(--current, 0%)` }} className={`flex h-full ${brightness === "dark" ? "bg-white" : "bg-black"}`}></span>
-												</span>
-												<span className="font-medium">{formatTime(duration)}</span>
+												</div>
+											</div>
+											<div className="flex flex-col items-center justify-center w-full gap-2">
+												<div className="flex flex-col items-center gap-1.5">
+													<h1 className={`font-bold text-2xl leading-tight text-center ${isLinkable(currentTrack) ? "cursor-pointer hover:underline" : ""}`} onClick={isLinkable(currentTrack) ? () => openTrackAlbum(currentTrack!) : undefined}>
+														{currentTrack?.title}
+													</h1>
+													<h2 className="font-semibold text-lg text-center leading-none mt-0.5">
+														{(Array.isArray(currentTrack?.artists) ? currentTrack.artists : currentTrack?.artists ? [currentTrack.artists] : []).map((artist, i, all) => (
+															<span key={`${artist}-${i}`}>
+																<span className={isLinkable(currentTrack) ? "cursor-pointer hover:underline" : ""} onClick={isLinkable(currentTrack) ? () => openTrackArtist(currentTrack!, artist) : undefined}>
+																	{artist}
+																</span>
+																{i < all.length - 1 && ", "}
+															</span>
+														))}
+													</h2>
+													{currentTrack &&
+														(failed ? (
+															<span className="text-xs font-semibold text-[#ff6b6b]">Couldn't play this song{queue.length ? " — skipping" : ""}</span>
+														) : (
+															<PlayCount title={currentTrack.title} artist={currentTrack.artists} skeleton={false} className="text-xs font-medium opacity-60" />
+														))}
+												</div>
+												<div className="flex w-full">
+													<div className="relative flex justify-center items-center w-full h-9">
+														<div className={"flex p-2.5 gap-2 w-full items-center"}>
+															<span className="font-medium">{formatTime(currentTime)}</span>
+															<span className="w-full h-2 bg-(--text-tertiary) rounded-full overflow-hidden hover:h-2.5 cursor-pointer duration-150" onMouseDown={handleMouseDown} onClick={e => handleSeek(e.clientX)}>
+																<span style={{ width: `var(--current, 0%)` }} className={`flex h-full ${brightness === "dark" ? "bg-white" : "bg-black"}`}></span>
+															</span>
+															<span className="font-medium">{formatTime(duration)}</span>
+														</div>
+													</div>
+												</div>
+												<div className="relative flex flex-wrap gap-x-1.5 gap-y-1 items-center justify-center">
+													{currentLibraryTrack && (
+														<button
+															title={currentSaved ? "Remove from Library" : "Add to Library"}
+															className={`${currentSaved ? "opacity-100" : "opacity-50 hover:opacity-100"} cursor-pointer duration-150`}
+															onClick={e => {
+																e.stopPropagation();
+																useSavedStore.getState().toggleTrack(currentLibraryTrack);
+															}}
+														>
+															{currentSaved ? <CheckCircleIcon className="size-5 text-[#3d91ff]" /> : <PlusCircleIcon className="size-5" />}
+														</button>
+													)}
+													<SongFeedback track={currentTrack} buttonClassName="cursor-pointer opacity-50 hover:opacity-100 duration-150" iconClassName="size-6" />
+													<button title="Volume" className={`cursor-pointer opacity-50 hover:opacity-100 duration-150`} onMouseDown={handleVolumeMouseDown} onClick={toggleMute}>
+														{muted || volume === 0 ? <SpeakerXMarkIcon className="size-8 stroke-0.5 stroke-current" /> : <SpeakerWaveIcon className="size-8 stroke-0.5 stroke-current" />}
+													</button>
+													<button
+														title="Repeat"
+														className={`cursor-pointer duration-150 ${loop ? "opacity-100 hover:opacity-50" : "opacity-50 hover:opacity-100"}`}
+														onClick={() => {
+															setLoop(prev => !prev);
+														}}
+													>
+														<ArrowPathRoundedSquareIcon className="size-8 stroke-0.5 stroke-current" />
+													</button>
+													<button
+														ref={moreRef}
+														{...moreAttrs}
+														aria-haspopup="menu"
+														className="cursor-pointer opacity-50 hover:opacity-100 duration-150"
+														onClick={e => {
+															e.preventDefault();
+															e.stopPropagation();
+															if (!currentTrack) return;
+															const rect = e.currentTarget.getBoundingClientRect();
+															setContextMenu({ x: rect.left, y: rect.bottom + 6, visible: true, items: moreOptions(currentTrack) });
+														}}
+													>
+														<EllipsisHorizontalIcon className="size-8 stroke-0.5 stroke-current" />
+													</button>
+													<button title="Lyrics" className="cursor-pointer opacity-50 hover:opacity-100 duration-150" onClick={() => openMusicPlayer("lyrics")}>
+														<ChatBubbleBottomCenterTextIcon className="size-7 stroke-0.5 stroke-current" />
+													</button>
+													<button title="Open Full Player" className="cursor-pointer opacity-50 hover:opacity-100 duration-150" onClick={() => openMusicPlayer("cover")}>
+														<ArrowsPointingOutIcon className="size-7 stroke-0.5 stroke-current" />
+													</button>
+												</div>
 											</div>
 										</div>
+										<div className="w-full mt-5 px-1 pb-2">
+											<MusicComments track={currentTrack} dark={brightness === "dark"} />
+										</div>
 									</div>
-									<div className="relative flex flex-wrap gap-x-1.5 gap-y-1 items-center justify-center">
-										{currentLibraryTrack && (
-											<button
-												title={currentSaved ? "Remove from Library" : "Add to Library"}
-												className={`${currentSaved ? "opacity-100" : "opacity-50 hover:opacity-100"} cursor-pointer duration-150`}
-												onClick={e => {
-													e.stopPropagation();
-													useSavedStore.getState().toggleTrack(currentLibraryTrack);
-												}}
-											>
-												{currentSaved ? <CheckCircleIcon className="size-5 text-[#3d91ff]" /> : <PlusCircleIcon className="size-5" />}
-											</button>
-										)}
-										<SongFeedback track={currentTrack} buttonClassName="cursor-pointer opacity-50 hover:opacity-100 duration-150" iconClassName="size-6" />
-										<button title="Volume" className={`cursor-pointer opacity-50 hover:opacity-100 duration-150`} onMouseDown={handleVolumeMouseDown} onClick={toggleMute}>
-											{muted || volume === 0 ? <SpeakerXMarkIcon className="size-8 stroke-0.5 stroke-current" /> : <SpeakerWaveIcon className="size-8 stroke-0.5 stroke-current" />}
-										</button>
-										<button
-											title="Repeat"
-											className={`cursor-pointer duration-150 ${loop ? "opacity-100 hover:opacity-50" : "opacity-50 hover:opacity-100"}`}
-											onClick={() => {
-												setLoop(prev => !prev);
-											}}
-										>
-											<ArrowPathRoundedSquareIcon className="size-8 stroke-0.5 stroke-current" />
-										</button>
-										<button
-											ref={moreRef}
-											{...moreAttrs}
-											aria-haspopup="menu"
-											className="cursor-pointer opacity-50 hover:opacity-100 duration-150"
-											onClick={e => {
-												e.preventDefault();
-												e.stopPropagation();
-												if (!currentTrack) return;
-												const rect = e.currentTarget.getBoundingClientRect();
-												setContextMenu({ x: rect.left, y: rect.bottom + 6, visible: true, items: moreOptions(currentTrack) });
-											}}
-										>
-											<EllipsisHorizontalIcon className="size-8 stroke-0.5 stroke-current" />
-										</button>
-										<button title="Lyrics" className="cursor-pointer opacity-50 hover:opacity-100 duration-150" onClick={() => openMusicPlayer("lyrics")}>
-											<ChatBubbleBottomCenterTextIcon className="size-7 stroke-0.5 stroke-current" />
-										</button>
-										<button title="Open Full Player" className="cursor-pointer opacity-50 hover:opacity-100 duration-150" onClick={() => openMusicPlayer("cover")}>
-											<ArrowsPointingOutIcon className="size-7 stroke-0.5 stroke-current" />
-										</button>
+								</div>
+								<div className="absolute inset-x-0 flex flex-col h-full" style={{ top: `calc(100% - ${QUEUE_SLIVER})` }}>
+									<div className="flex shrink-0 justify-center pt-2 pb-0.5 cursor-grab active:cursor-grabbing touch-none" onPointerDown={startQueueDrag} onPointerMove={moveQueueDrag} onPointerUp={endQueueDrag} onPointerCancel={endQueueDrag}>
+										<span className="h-1 w-9 rounded-full bg-(--text-tertiary)" />
 									</div>
+									<div inert={!queueUp} className="flex flex-col flex-1 min-h-0">
+										{queueView}
+									</div>
+									{/* Closed, the whole sliver opens the queue (tap or drag up). Outside the inert queue, which takes no pointer events. */}
+									{!queueUp && <div className="absolute inset-0 cursor-grab touch-none" onPointerDown={startQueueDrag} onPointerMove={moveQueueDrag} onPointerUp={endQueueDrag} onPointerCancel={endQueueDrag} />}
 								</div>
 							</div>
 						</div>
+					) : (
+						queueView
 					)}
 					<audio
 						ref={audioRef}

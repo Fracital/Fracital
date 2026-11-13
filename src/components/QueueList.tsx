@@ -1,6 +1,7 @@
 import { BackspaceIcon, BarsArrowUpIcon, ChevronDoubleDownIcon, ChevronDoubleUpIcon, ChevronDownIcon, ChevronUpIcon, EllipsisHorizontalIcon, HeartIcon, MusicalNoteIcon, PauseIcon, PlusIcon, RadioIcon, SpeakerWaveIcon, UserIcon } from "@heroicons/react/24/solid";
 import { CheckCircleIcon, HeartIcon as HeartOutlineIcon, MinusCircleIcon, PlusCircleIcon } from "@heroicons/react/24/outline";
 import { type CSSProperties, type PointerEvent as ReactPointerEvent, useEffect, useRef, useState } from "react";
+import { DRAG_DISTANCE, EASE, edgeScrollSpeed, scrollParent, TOUCH_HOLD_MS } from "../libs/dragFeel";
 import { ContextMenu, type MenuItem } from "./ContextMenu";
 import { HolyText } from "./common/HolyText";
 import { PlayCount } from "./PlayCount";
@@ -57,26 +58,13 @@ function useQueueSongMenu() {
 	};
 }
 
-/** How far a mouse moves before a press becomes a drag, and how long a finger holds before one does. */
-const DRAG_DISTANCE = 5;
-const TOUCH_HOLD_MS = 280;
 const SETTLE_MS = 160;
-/** Within this distance of the list's top or bottom edge, the list scrolls while a song is held. */
-const EDGE = 48;
-const EASE = "cubic-bezier(.2, .8, .2, 1)";
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 
 /** The list as shown, read live: played since the list started, the playing song, then what's next. */
 const listIds = () => {
 	const { playedHistory, historyStart, currentTrack, queue } = useMusicStore.getState();
 	return [...playedHistory.slice(historyStart), ...(currentTrack ? [currentTrack] : []), ...queue].map(t => t.id);
-};
-
-/** The nearest ancestor that actually scrolls. */
-const scrollParent = (el: HTMLElement | null) => {
-	let box = el?.parentElement ?? null;
-	while (box && !(/(auto|scroll)/.test(getComputedStyle(box).overflowY) && box.scrollHeight > box.clientHeight)) box = box.parentElement;
-	return box;
 };
 
 /** A press on a song in the list, which becomes a drag once the pointer moves (or a finger holds). */
@@ -210,7 +198,7 @@ export const QueueList = ({ dark, variant }: QueueListProps) => {
 			const s = h.scroller;
 			if (s) {
 				const b = s.getBoundingClientRect();
-				const speed = h.y < b.top + EDGE ? -Math.min(22, (b.top + EDGE - h.y) / 3 + 2) : h.y > b.bottom - EDGE ? Math.min(22, (h.y - b.bottom + EDGE) / 3 + 2) : 0;
+				const speed = edgeScrollSpeed(h.y, b);
 				const before = s.scrollTop;
 				s.scrollTop += speed;
 				if (s.scrollTop !== before) refresh(h);

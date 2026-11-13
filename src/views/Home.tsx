@@ -1,8 +1,5 @@
-import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
-import LinkCard from "../components/LinkCard";
-import { isColorBright } from "../libs/colorBright";
-import { quickLinks } from "../libs/init";
+import { QuickLinksGrid } from "../components/LinkCard";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faDiscord } from "@fortawesome/free-brands-svg-icons";
 import { ChatBubbleLeftRightIcon, MagnifyingGlassIcon } from "@heroicons/react/24/solid";
@@ -31,16 +28,6 @@ interface HomeProps {
 const Home = ({ className, active }: HomeProps) => {
 	const settings = useSettingsStore(state => state.settings);
 
-	const getLinks = () => {
-		const stored = window.localStorage.getItem("quicklinks");
-		try {
-			return stored ? JSON.parse(stored) : quickLinks;
-		} catch {
-			return quickLinks;
-		}
-	};
-
-	const [links, setLinks] = useState<linkProps[]>(getLinks());
 	const { ref: searchRef, placeholder: searchAttrs } = useHolyAttr({ placeholder: "Search or type a web address", "aria-label": "Search or type a web address" });
 
 	/** Opens what was typed in this tab, the way the address bar does. */
@@ -59,20 +46,6 @@ const Home = ({ className, active }: HomeProps) => {
 		if (existing) setCurrentTab(existing.id);
 		else newTab({ id: createId(), url: "about:chat", displayUrl: "about:chat", title: "Chat", icon: <ChatBubbleLeftRightIcon className="size-4.5" />, current: true });
 	};
-
-	useEffect(() => {
-		const handleLinksUpdate = () => {
-			setLinks(getLinks());
-		};
-
-		window.addEventListener("links-upd", handleLinksUpdate);
-		window.addEventListener("storage", handleLinksUpdate);
-
-		return () => {
-			window.removeEventListener("links-upd", handleLinksUpdate);
-			window.removeEventListener("storage", handleLinksUpdate);
-		};
-	}, []);
 
 	return (
 		<div className={"@container flex flex-col items-center size-full p-2 overflow-y-auto" + " " + className}>
@@ -96,7 +69,7 @@ const Home = ({ className, active }: HomeProps) => {
 						<HolyText text="Chat with the community" />
 					</button>
 				)}
-				<div className="grid w-full max-w-3xl grid-cols-2 @lg:grid-cols-3 gap-3 @lg:gap-4">{links.length > 0 && links.map((link, index) => <LinkCard key={index} title={link.title} icon={link.icon} color={link.color} href={link.href} edit={false} brightness={isColorBright(link.color)} />)}</div>
+				<QuickLinksGrid className="max-w-3xl" />
 				{active && <RevSlot name="video" className="w-full max-w-xl" fallback={AD_UNITS.box} />}
 			</div>
 			<div className="flex shrink-0 flex-wrap items-center w-full overflow-hidden">

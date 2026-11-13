@@ -3,6 +3,8 @@ import type { Frame } from "@mercuryworkshop/scramjet-controller";
 import { unrewriteUrl } from "@mercuryworkshop/scramjet";
 import { useTabAudioStore, useTabLoadingStore, useTabsStore } from "../store";
 import { decodeUvUrl, encodeUvUrl, UV_PREFIX } from "../libs/uvEngine";
+import { applyPageStyles, runPageScripts } from "../extensions/runtime";
+import { ExtensionsPlugin } from "../extensions/scramjet";
 
 const LOAD_STUCK_MS = 45_000;
 // A single-page navigation's bar: shown at least SPA_MIN_MS, ended once the page's requests are quiet for
@@ -42,13 +44,13 @@ const getIconUrl = (doc: Document | null | undefined, pageUrl: string, frame: En
 	}
 };
 
-/** Every <audio>/<video> in the page and its same-origin subframes. */
-const collectMedia = (doc: Document | null | undefined, out: HTMLMediaElement[] = [], depth = 0): HTMLMediaElement[] => {
+/** The page's document and its same-origin subframes' documents. */
+const collectDocs = (doc: Document | null | undefined, out: Document[] = [], depth = 0): Document[] => {
 	if (!doc || depth > 4) return out;
-	out.push(...doc.querySelectorAll<HTMLMediaElement>("audio, video"));
+	out.push(doc);
 	for (const frame of doc.querySelectorAll("iframe, frame")) {
 		try {
-			collectMedia((frame as HTMLIFrameElement).contentDocument, out, depth + 1);
+			collectDocs((frame as HTMLIFrameElement).contentDocument, out, depth + 1);
 		} catch {
 			// cross-origin subframe
 		}
@@ -56,45 +58,74 @@ const collectMedia = (doc: Document | null | undefined, out: HTMLMediaElement[] 
 	return out;
 };
 
-const AUDIO_POLL_MS = 1000;
+// Media events don't bubble, but a capturing listener on a document hears them from every element in it. A
+// subframe's load is caught the same way, so its document gets watched too.
+const AUDIO_EVENTS = ["play", "playing", "pause", "ended", "emptied", "volumechange", "load"] as const;
 
 /**
- * Marks the tab audible while its page plays sound and enforces the tab's mute. Only media elements in the
- * DOM are seen; Web Audio and detached `new Audio()` playback can't be detected from outside the page.
+ * Marks the tab audible while its page plays sound and enforces the tab's mute, re-checking only when a media
+ * element starts, stops or changes volume, or a document loads. Only media elements in the DOM are seen; Web
+ * Audio and detached `new Audio()` playback can't be detected from outside the page.
  */
-const useTabAudio = (frameRef: React.RefObject<HTMLIFrameElement | null>, id: string) => {
+const useTabAudio = (frameRef: React.RefObject<HTMLIFrameElement | null>, id: string, hasFrame: boolean) => {
 	const muted = useTabAudioStore(state => Boolean(state.muted[id]));
 	const setAudible = useTabAudioStore(state => state.setAudible);
 	// Elements this tab muted, so unmuting doesn't unmute what the page muted itself.
 	const mutedByTab = useRef(new WeakSet<HTMLMediaElement>());
 
 	useEffect(() => {
-		const check = () => {
-			let media: HTMLMediaElement[];
+		const iframe = frameRef.current;
+		if (!hasFrame || !iframe) return;
+		const watched = new Set<Document>();
+
+		const update = () => {
+			let docs: Document[];
 			try {
-				media = collectMedia(frameRef.current?.contentDocument);
+				docs = collectDocs(iframe.contentDocument);
 			} catch {
 				// The frame is showing a cross-origin page.
-				media = [];
+				docs = [];
+			}
+			// Drop documents the page navigated away from; watch the ones it loaded.
+			for (const doc of watched) {
+				if (docs.includes(doc)) continue;
+				for (const type of AUDIO_EVENTS) doc.removeEventListener(type, onEvent, true);
+				watched.delete(doc);
 			}
 			let audible = false;
-			for (const el of media) {
-				if (muted && !el.muted) {
-					el.muted = true;
-					mutedByTab.current.add(el);
-				} else if (!muted && mutedByTab.current.has(el)) {
-					el.muted = false;
-					mutedByTab.current.delete(el);
+			for (const doc of docs) {
+				if (!watched.has(doc)) {
+					for (const type of AUDIO_EVENTS) doc.addEventListener(type, onEvent, true);
+					watched.add(doc);
 				}
-				const silenced = el.muted && !mutedByTab.current.has(el);
-				if (!el.paused && !el.ended && el.readyState >= 2 && el.volume > 0 && !silenced) audible = true;
+				for (const el of doc.querySelectorAll<HTMLMediaElement>("audio, video")) {
+					if (muted && !el.muted) {
+						el.muted = true;
+						mutedByTab.current.add(el);
+					} else if (!muted && mutedByTab.current.has(el)) {
+						el.muted = false;
+						mutedByTab.current.delete(el);
+					}
+					const silenced = el.muted && !mutedByTab.current.has(el);
+					if (!el.paused && !el.ended && el.volume > 0 && !silenced) audible = true;
+				}
 			}
 			setAudible(id, audible);
 		};
-		check();
-		const timer = window.setInterval(check, AUDIO_POLL_MS);
-		return () => window.clearInterval(timer);
-	}, [frameRef, id, muted, setAudible]);
+		// Images fire load too; only a subframe's load can bring in a new document.
+		const onEvent = (e: Event) => {
+			const name = (e.target as Element | null)?.localName;
+			if (e.type !== "load" || name === "iframe" || name === "frame") update();
+		};
+
+		update();
+		// The frame's own load (a new page) replaces its document.
+		iframe.addEventListener("load", update);
+		return () => {
+			iframe.removeEventListener("load", update);
+			for (const doc of watched) for (const type of AUDIO_EVENTS) doc.removeEventListener(type, onEvent, true);
+		};
+	}, [frameRef, hasFrame, id, muted, setAudible]);
 };
 
 const ExternalSite = ({ url, className, current, id, engine = "sj" }: ExternalSiteProps) => {
@@ -105,7 +136,7 @@ const ExternalSite = ({ url, className, current, id, engine = "sj" }: ExternalSi
 	const updateTab = useTabsStore(state => state.updateTab);
 	const loading = useTabLoadingStore(state => Boolean(state.loading[id]));
 	const setLoading = useTabLoadingStore(state => state.setLoading);
-	useTabAudio(frameRef, id);
+	useTabAudio(frameRef, id, url !== undefined);
 
 	// Never leave the bar running forever if a load event never arrives.
 	useEffect(() => {
@@ -124,7 +155,7 @@ const ExternalSite = ({ url, className, current, id, engine = "sj" }: ExternalSi
 		const controller = window.scramjetController;
 		if (!controller) return null;
 		if (sjFrameRef.current?.element !== iframe) {
-			const frame = controller.createFrame(iframe);
+			const frame = controller.createFrame(iframe, { plugins: [new ExtensionsPlugin()] });
 			sjFrameRef.current = frame;
 			engineFrameRef.current = { prefix: frame.prefix, go: target => frame.go(target), unrewrite: href => unrewriteUrl(href, frame.context) };
 			navigatedUrlRef.current = undefined;
@@ -269,6 +300,26 @@ const ExternalSite = ({ url, className, current, id, engine = "sj" }: ExternalSi
 			}
 		};
 
+		/**
+		 * On UV the extensions' CSS goes in once a page has loaded (UV has no hook at a page's start), and is checked
+		 * again on the poll below, for frames added later. Scramjet pages get it as they start (ExtensionsPlugin).
+		 */
+		const styleUvPages = () => {
+			if (engine !== "uv") return;
+			const frame = getSjFrame();
+			if (!frame) return;
+			for (const doc of collectDocs(iframe.contentDocument)) {
+				try {
+					const pageUrl = frame.unrewrite(doc.location.href);
+					// Late on UV (after the page's own scripts): fixes that must run first only help on later changes.
+					runPageScripts(doc, pageUrl);
+					applyPageStyles(doc, pageUrl);
+				} catch {
+					// cross-origin document
+				}
+			}
+		};
+
 		const handleLoad = () => {
 			let loadedHref: string | undefined;
 			try {
@@ -289,6 +340,7 @@ const ExternalSite = ({ url, className, current, id, engine = "sj" }: ExternalSi
 			shownHref = undefined;
 			sync("push");
 			watchHistory();
+			styleUvPages();
 		};
 
 		// Titles change after a single-page navigation, and some URL changes (location.hash) make no history call.
@@ -300,6 +352,7 @@ const ExternalSite = ({ url, className, current, id, engine = "sj" }: ExternalSi
 			} catch {
 				// cross-origin document
 			}
+			styleUvPages();
 		}, 750);
 
 		const reloadTab = (e: Event) => {

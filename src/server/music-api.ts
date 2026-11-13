@@ -12,6 +12,7 @@ import { artistExtras } from "./artist-extras";
 import { albumInfo, songCredits, songInfo } from "./song-info";
 import { findMusicVideo, findYoutubeMatch, isExplicitEdition, playbackHints } from "./youtube-match";
 import { upstreamRange } from "./stream-range";
+import { FILTER_LISTS, type FilterListId, getFilterList, isFilterListId } from "./filter-lists";
 import type { SimilarArtist } from "./music-radio";
 
 /** Adds Last.fm listener counts to an artist and its similar artists (no-op without a key). */
@@ -87,8 +88,26 @@ function registerMusicApi(server: { middlewares: ViteDevServer["middlewares"] },
 	startDiscordBot();
 	const accounts = getRequestListener(getAccountsApp().fetch);
 	server.middlewares.use((req, res, next) => {
-		if (/^\/api\/(auth|me|admin|artist-profile|artist-media|play-event|export)(\/|\?|$)/.test(req.url || "")) void accounts(req, res);
+		if (/^\/api\/(auth|me|admin|artist-profile|artist-media|play-event|export|comments|profiles|profile-media)(\/|\?|$)/.test(req.url || "")) void accounts(req, res);
 		else next();
+	});
+
+	// The ad blocker extension's filter lists, as the production server serves them (backend.ts).
+	server.middlewares.use("/api/extensions/filters", async (req, res) => {
+		if (req.method !== "GET") return sendJson(res, 405, { error: "method not allowed" });
+		const id = (req.url || "/").split("?")[0].replace(/^\//, "");
+		if (!id) {
+			const ids = Object.keys(FILTER_LISTS) as FilterListId[];
+			const lists = await Promise.all(ids.map(async list => ({ id: list, version: await getFilterList(list).then(held => held.version, () => null) })));
+			return sendJson(res, 200, { lists });
+		}
+		if (!isFilterListId(id)) return sendJson(res, 404, { error: "unknown list" });
+		try {
+			const list = await getFilterList(id);
+			sendJson(res, 200, { id, version: list.version, text: list.text });
+		} catch {
+			sendJson(res, 502, { error: "list unavailable" });
+		}
 	});
 
 	// Terms and privacy policy (never on a decoy host).

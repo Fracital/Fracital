@@ -1,4 +1,6 @@
 import { openLibraryPage } from "../libs/aboutPages";
+import { StreakBadge } from "../components/StreakBadge";
+import { useStreakStore } from "../libs/streak";
 import {
 	Cog6ToothIcon,
 	ArrowsPointingOutIcon,
@@ -16,7 +18,6 @@ import {
 	ArrowRightIcon,
 	FolderIcon,
 	StarIcon as StarIconSolid,
-	FireIcon,
 	WrenchScrewdriverIcon,
 	CheckBadgeIcon,
 	MusicalNoteIcon,
@@ -35,21 +36,22 @@ import { appRoot } from "../libs/cloak";
 import { StarIcon as StarIconOutline } from "@heroicons/react/24/outline";
 import { Suspense, useEffect, useState, useRef } from "react";
 import { ShellButton } from "../components/ShellButton";
-import { useTabsStore, useSettingsStore, useTabLoadingStore } from "../store";
+import { useTabsStore, useSettingsStore, useTabLoadingStore, usePanelsStore } from "../store";
+import TabCountIcon from "../components/TabCountIcon";
 import { createId } from "@paralleldrive/cuid2";
 import { Search } from "../components/Search";
 import { navigationEvent } from "../libs/eventBus";
 import type { linkProps } from "../views/Home";
 
 import { useModal } from "../components/Modal/ModalContext";
-import FavoriteModal from "../components/Modal/Favorite";
+import { QuickLinkEditor } from "../components/Modal/QuickLinkEditor";
 import { Modal } from "../components/Modal/Modal";
-import { changeProxy, EXPERIMENTAL_PROXIES_SETTING, getLogin, getProxy, isProxyEngine, type ProxyEngine } from "../types";
+import { changeProxy, EXPERIMENTAL_PROXIES_SETTING, TAB_VIEW_SETTING, getLogin, getProxy, isProxyEngine, type ProxyEngine } from "../types";
 import { useStompStore } from "../libs/stompEngine";
 import { getMe, signOut } from "../libs/auth";
 import { useEngineVersions } from "../libs/proxyEngines";
 import { HolyText } from "../components/common/HolyText";
-import { ShieldCheckIcon } from "@heroicons/react/24/solid";
+import { PuzzlePieceIcon, ShieldCheckIcon } from "@heroicons/react/24/solid";
 import { ContextMenu, type MenuItem } from "../components/ContextMenu";
 
 declare global {
@@ -70,9 +72,6 @@ export const UserCard = ({ id, display, handle, avatar }: UserProps) => {
 	const [contextOpen, setContextOpen] = useState<boolean>(false);
 
 	const settings = useSettingsStore(state => state.settings);
-	const [isAmplified, setIsAmplified] = useState<boolean>(false);
-	const [isVerified, setIsVerified] = useState<boolean>(false);
-	const [isDev, setIsDev] = useState<boolean>(false);
 
 	const accountRef = useRef<HTMLDivElement>(null);
 	const menuRef = useRef<HTMLDivElement>(null);
@@ -101,12 +100,21 @@ export const UserCard = ({ id, display, handle, avatar }: UserProps) => {
 		};
 	}, [contextOpen]);
 	const [isAdmin, setIsAdmin] = useState(false);
+	const [isPremium, setIsPremium] = useState(false);
 	useEffect(() => {
-		const load = () => void getMe().then(m => setIsAdmin(!!m?.isAdmin));
+		const load = () =>
+			void getMe().then(m => {
+				setIsAdmin(!!m?.isAdmin);
+				setIsPremium(!!m?.premium);
+			});
 		load();
 		window.addEventListener("account-upd", load);
 		return () => window.removeEventListener("account-upd", load);
 	}, []);
+	const hasStreak = useStreakStore(state => (state.streak?.current ?? 0) > 0);
+	const { ref: premiumRef, placeholder: premiumAttrs } = useHolyAttr({ title: "Premium", "aria-label": "Premium" });
+	const { ref: adminRef, placeholder: adminAttrs } = useHolyAttr({ title: "Admin", "aria-label": "Admin" });
+	const badgeHover = settings.brightness === "light" ? "hover:bg-[#ffffff30]" : "hover:bg-[#ffffff18]";
 	const menuItemCls = "group flex items-center justify-between gap-5 w-[calc(100%)] p-2 pl-3 pr-2 rounded-md leading-none text-(--text-secondary) hover:text-(--text-primary) duration-100 cursor-pointer " + (settings.brightness === "light" ? "hover:bg-[#00000018]" : "hover:bg-[#ffffff10]");
 
 	return (
@@ -262,43 +270,19 @@ export const UserCard = ({ id, display, handle, avatar }: UserProps) => {
 								<span className="absolute text-(--text-secondary) p-1 translate-y-2 group-hover:translate-y-0 group-hover:opacity-100 opacity-0 font-semibold leading-none pointer-events-none duration-200">@{handle}</span>
 							</div>
 							<div className="flex items-center pr-1">
-								{isVerified && (
-									<CheckBadgeIcon
-										className={
-											"size-7 p-1 rounded-md stroke-0.5 duration-150" +
-											" " +
-											`
-                                            ${settings.brightness === "light" ? "text-[#9fc8ff] hover:bg-[#ffffff30]" : "text-[#398fff] hover:bg-[#ffffff18]"}
-                                        `
-										}
-										title="Verified User"
-									/>
+								{/* Badges: the active streak, premium (the check) and admin (the wrench). */}
+								<StreakBadge className={`p-1 rounded-md ${badgeHover}`} />
+								{isPremium && (
+									<span ref={premiumRef} {...premiumAttrs} className={`p-1 rounded-md duration-150 ${badgeHover}`}>
+										<CheckBadgeIcon className={`size-5 stroke-0.5 ${settings.brightness === "light" ? "text-[#9fc8ff]" : "text-[#398fff]"}`} />
+									</span>
 								)}
-								{isAmplified && (
-									<FireIcon
-										className={
-											"size-7 p-1 rounded-md duration-150" +
-											" " +
-											`
-                                            ${settings.brightness === "light" ? "text-[#d74040] hover:bg-[#ffffff30]" : "text-[#fb6262] hover:bg-[#ffffff18]"}
-                                        `
-										}
-										title="Amplified since null"
-									/>
+								{isAdmin && (
+									<span ref={adminRef} {...adminAttrs} className={`p-1.5 rounded-md duration-150 ${badgeHover}`}>
+										<WrenchScrewdriverIcon className={`size-4 ${settings.brightness === "light" ? "text-[#eef370]" : "text-[#dbe050]"}`} />
+									</span>
 								)}
-								{isDev && (
-									<WrenchScrewdriverIcon
-										className={
-											"size-7 p-1.5 rounded-md duration-150" +
-											" " +
-											`
-                                            ${settings.brightness === "light" ? "text-[#eef370] hover:bg-[#ffffff30]" : "text-[#dbe050] hover:bg-[#ffffff18]"}
-                                        `
-										}
-										title="Developer: null items"
-									/>
-								)}
-								{!(isVerified && isAmplified && isDev) && <span className="text-xs font-medium text-[#ffffff68] cursor-default pr-1.5">No Badges</span>}
+								{!(hasStreak || isPremium || isAdmin) && <HolyText className="text-xs font-medium whitespace-nowrap text-[#ffffff68] cursor-default pr-1.5" text="No Badges" />}
 							</div>
 						</div>
 					</div>
@@ -449,9 +433,8 @@ const Shell = () => {
 		} else {
 			openModal(
 				<Modal>
-					<FavoriteModal />
+					<QuickLinkEditor initial={{ title: currentTab?.title ?? "", href: currentTab?.url || "", icon: typeof currentTab?.icon === "string" ? currentTab.icon : undefined }} />
 				</Modal>,
-				{ url: currentTab?.url, name: currentTab?.title, icon: currentTab?.icon },
 			);
 		}
 	};
@@ -544,6 +527,7 @@ const Shell = () => {
 			{ title: <HolyText text="Settings" />, icon: <Cog6ToothIcon className="size-5" />, onClick: () => openPage("about:settings", "Settings", <Cog6ToothIcon className="size-5" />) },
 			{ title: <HolyText text="File Manager" />, icon: <FolderIcon className="size-5" />, onClick: () => openPage("about:files", "File Manager", <FolderIcon className="size-4.5" />) },
 			{ title: <HolyText text="Games" />, icon: <PlayIcon className="size-5" />, onClick: () => openPage("about:games", "Games", <PlayIcon className="size-4.5" />) },
+			{ title: <HolyText text="Extensions" />, icon: <PuzzlePieceIcon className="size-5" />, onClick: () => openPage("about:extensions", "Extensions", <PuzzlePieceIcon className="size-4.5" />) },
 			{ title: <HolyText text="Music" />, icon: <MusicalNoteIcon className="size-5" />, onClick: () => openLibraryPage("") },
 			{ title: <HolyText text="Chat" />, icon: <ChatBubbleLeftRightIcon className="size-5" />, onClick: () => openPage("about:chat", "Chat", <ChatBubbleLeftRightIcon className="size-4.5" />) },
 		);
@@ -596,6 +580,17 @@ const Shell = () => {
 		);
 
 	const { ref: menuTriggerRef, placeholder: menuTriggerAttrs } = useHolyAttr({ title: "Menu", "aria-label": "Menu" });
+
+	/** Opens the tab view, which holds the tabs while the tab view setting is on. Shows the tab count. */
+	const tabView = settings[TAB_VIEW_SETTING] === true;
+	const tabViewOpen = usePanelsStore(state => state.tabViewOpen);
+	const setTabViewOpen = usePanelsStore(state => state.setTabViewOpen);
+	const { ref: tabViewRef, placeholder: tabViewAttrs } = useHolyAttr({ title: tabViewOpen ? "Close tabs" : "Show tabs", "aria-label": tabViewOpen ? "Close tabs" : "Show tabs" });
+	const tabViewButton = tabView && (
+		<ShellButton ref={tabViewRef} {...tabViewAttrs} aria-pressed={tabViewOpen} onClick={() => setTabViewOpen(!tabViewOpen)}>
+			<TabCountIcon count={tabs.length} className="size-8" />
+		</ShellButton>
+	);
 	const openCompactMenu = (e: React.MouseEvent<HTMLElement>) => {
 		const rect = e.currentTarget.getBoundingClientRect();
 		// The menu keeps itself on screen, so anchoring at the right edge lines it up under the button.
@@ -766,11 +761,91 @@ const Shell = () => {
 			<div className="flex shrink-0 items-center justify-end gap-2.5">
 				{compact ? (
 					<>
+						{tabViewButton}
 						{barToggle("flex shrink-0 items-center justify-center p-2 rounded-full bg-(--secondary) text-(--text-secondary) inset-shadow-(--inset-shadow-secondary) hover:inset-shadow-(--inset-shadow-accent) hover:text-(--text-primary) cursor-pointer duration-200")}
 						{compactTrigger}
 					</>
 				) : (
 					<>
+						{tabViewButton}
+						<ShellButton
+							title="Page selector"
+							onClick={(e: React.MouseEvent) => {
+								const items: MenuItem[] = [
+									{
+										title: "File Manager",
+										onClick: () => {
+											newTab({
+												id: createId(),
+												title: "File Manager",
+												url: "about:files",
+												icon: <FolderIcon className="size-4.5" />,
+												displayUrl: "about:files",
+											});
+										},
+										icon: <FolderIcon className="size-4.5" />,
+									},
+									{
+										title: "Games",
+										onClick: () => {
+											newTab({
+												id: createId(),
+												title: "Games",
+												url: "about:games",
+												icon: <PlayIcon className="size-4.5" />,
+												displayUrl: "about:games",
+											});
+										},
+										icon: <PlayIcon className="size-4.5" />,
+									},
+									{
+										title: "Music",
+										onClick: () => openLibraryPage(""),
+										icon: <MusicalNoteIcon className="size-4.5" />,
+									},
+									{
+										title: <HolyText text="Extensions" />,
+										onClick: () => openPage("about:extensions", "Extensions", <PuzzlePieceIcon className="size-4.5" />),
+										icon: <PuzzlePieceIcon className="size-4.5" />,
+									},
+								];
+
+								const rect = e.currentTarget.getBoundingClientRect();
+								setContextMenu({ x: rect.right, y: rect.bottom + 8, visible: true, items, align: "end" });
+							}}
+						>
+							<Bars3Icon className="size-5.5 stroke-1 stroke-current" />
+						</ShellButton>
+						<ShellButton
+							title={isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen"}
+							onClick={() => {
+								if (document.fullscreenElement) {
+									document.exitFullscreen();
+								} else {
+									if (document.body) {
+										document.body.requestFullscreen().catch(err => {
+											console.error("Error attempting to enable full-screen mode:", err);
+										});
+									}
+								}
+							}}
+						>
+							{isFullscreen ? <ArrowsPointingInIcon className="p-0.5 size-6 text-current stroke-current stroke-1" /> : <ArrowsPointingOutIcon className="p-0.5 size-6 text-current stroke-current stroke-1" />}
+						</ShellButton>
+						<ShellButton
+							title="Settings"
+							onClick={() =>
+								newTab({
+									id: createId(),
+									title: "Settings",
+									url: "about:settings",
+									icon: <Cog6ToothIcon className="size-5" />,
+									displayUrl: "about:settings",
+								})
+							}
+						>
+							<Cog6ToothIcon className="size-6" />
+						</ShellButton>
 						<div
 							className={
 								"group relative flex justify-center items-center min-h-5 p-2 px-3 gap-1 rounded-full bg-(--secondary) cursor-pointer duration-200" +
@@ -843,22 +918,6 @@ const Shell = () => {
 							</div>
 							<ChevronUpDownIcon className="size-5 text-(--text-tertiary) group-hover:text-(--text-secondary) stroke-current stroke-1 cursor-pointer duration-150" />
 						</div>
-						<ShellButton
-							title={isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen"}
-							onClick={() => {
-								if (document.fullscreenElement) {
-									document.exitFullscreen();
-								} else {
-									if (document.body) {
-										document.body.requestFullscreen().catch(err => {
-											console.error("Error attempting to enable full-screen mode:", err);
-										});
-									}
-								}
-							}}
-						>
-							{isFullscreen ? <ArrowsPointingInIcon className="p-0.5 size-5 text-current stroke-current stroke-1" /> : <ArrowsPointingOutIcon className="p-0.5 size-5 text-current stroke-current stroke-1" />}
-						</ShellButton>
 						<BarSettingsMenu
 							bar={bar}
 							dark={dark}
@@ -875,68 +934,6 @@ const Shell = () => {
 								</div>
 							)}
 						/>
-						<ShellButton
-							title="Settings"
-							onClick={() =>
-								newTab({
-									id: createId(),
-									title: "Settings",
-									url: "about:settings",
-									icon: <Cog6ToothIcon className="size-5" />,
-									displayUrl: "about:settings",
-								})
-							}
-						>
-							<Cog6ToothIcon className="size-5" />
-						</ShellButton>
-						<ShellButton
-							title="Page selector"
-							onClick={(e: React.MouseEvent) => {
-								const items: MenuItem[] = [
-									{
-										title: "File Manager",
-										onClick: () => {
-											newTab({
-												id: createId(),
-												title: "File Manager",
-												url: "about:files",
-												icon: <FolderIcon className="size-4.5" />,
-												displayUrl: "about:files",
-											});
-										},
-										icon: <FolderIcon className="size-4.5" />,
-									},
-									{
-										title: "Games",
-										onClick: () => {
-											newTab({
-												id: createId(),
-												title: "Games",
-												url: "about:games",
-												icon: <PlayIcon className="size-4.5" />,
-												displayUrl: "about:games",
-											});
-										},
-										icon: <PlayIcon className="size-4.5" />,
-									},
-									{
-										title: "Music",
-										onClick: () => openLibraryPage(""),
-										icon: <MusicalNoteIcon className="size-4.5" />,
-									},
-									{
-										title: "Chat",
-										onClick: () => openPage("about:chat", "Chat", <ChatBubbleLeftRightIcon className="size-4.5" />),
-										icon: <ChatBubbleLeftRightIcon className="size-4.5" />,
-									},
-								];
-
-								const rect = e.currentTarget.getBoundingClientRect();
-								setContextMenu({ x: rect.right, y: rect.bottom + 8, visible: true, items, align: "end" });
-							}}
-						>
-							<Bars3Icon className="size-4.5 stroke-1 stroke-current" />
-						</ShellButton>
 						{accountinfo ? (
 							<UserCard
 								avatar={

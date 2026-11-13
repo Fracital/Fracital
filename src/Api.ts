@@ -1,7 +1,9 @@
 import { meFetch, refreshMe } from "./libs/auth";
+import { startStreak } from "./libs/streak";
 import { applySettingsDefaults } from "./libs/updater";
 import { startScrobbler } from "./libs/scrobbler";
 import { startDiscordPresence } from "./libs/discordPresence";
+import { startSocialStatus } from "./libs/social";
 import { initRadio } from "./libs/radio";
 import { useSettingsStore } from "./store";
 import { getLogin, SettingsPath, ThemePath, wispURL, type COM } from "./types";
@@ -103,6 +105,8 @@ export const Api = async () => {
 
 		startScrobbler();
 		startDiscordPresence();
+		startSocialStatus();
+		startStreak();
 		initRadio();
 		void (async () => {
 			// Confirm the saved login still has a live session (clears it if it expired).

@@ -28,6 +28,7 @@ import { artistExtras } from "./src/server/artist-extras";
 import { albumInfo, songCredits, songInfo } from "./src/server/song-info";
 import { findMusicVideo, findYoutubeMatch, isExplicitEdition, playbackHints } from "./src/server/youtube-match";
 import { upstreamRange } from "./src/server/stream-range";
+import { FILTER_LISTS, getFilterList, isFilterListId, type FilterListId } from "./src/server/filter-lists";
 import { SsrLoader } from "./src/components/SsrLoader";
 
 export function fsrv() {
@@ -78,6 +79,23 @@ export function fsrv() {
 
 	// The GPT rewarded ad unit for "watch an ad for an hour without music ad breaks"; none offered when unset.
 	app.get("/api/ads/config", c => c.json({ rewarded: process.env.REWARDED_AD_UNIT?.trim() || null }));
+
+	// The ad blocker extension's filter lists: their current versions, then each list (sealed like all /api JSON).
+	app.get("/api/extensions/filters", async c => {
+		const ids = Object.keys(FILTER_LISTS) as FilterListId[];
+		const lists = await Promise.all(ids.map(async id => ({ id, version: await getFilterList(id).then(list => list.version, () => null) })));
+		return c.json({ lists });
+	});
+	app.get("/api/extensions/filters/:id", async c => {
+		const id = c.req.param("id");
+		if (!isFilterListId(id)) return c.json({ error: "unknown list" }, 404);
+		try {
+			const list = await getFilterList(id);
+			return c.json({ id, version: list.version, text: list.text });
+		} catch {
+			return c.json({ error: "list unavailable" }, 502);
+		}
+	});
 
 	// Social links + gallery photos for the artist page hero (loaded after the page).
 	app.get("/api/music/artist-extras", async c => {

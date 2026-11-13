@@ -15,7 +15,7 @@ export interface MenuItem {
 	// optional submenu children
 	children?: MenuItem[];
 	// layout for children when shown: 'vertical' (column) or 'horizontal' (row)
-	childrenLayout?: "vertical" | "horizontal";
+	childrenLayout?: "vertical" | "horizontal" | "grid";
 	// preferred submenu position relative to parent: 'left' or 'right'
 	childrenPosition?: "left" | "right";
 }
@@ -190,10 +190,20 @@ export const ContextMenu = ({ items, position, onClose, align = "start" }: MenuP
 									style={{ top: -6 - (submenuShift[i] ?? 0) }}
 									className={`absolute ${submenuPositions[i] === "left" ? "right-full pr-1.5" : "left-full pl-1.5"} z-50 transition-opacity duration-150 ${openSub === i ? "opacity-100 pointer-events-auto" : "pointer-events-none opacity-0 group-hover:opacity-100 group-hover:pointer-events-auto"}`}
 								>
-									{item.childrenLayout === "horizontal" ? (
-										<div className="flex flex-row gap-1 p-1.5 bg-(--secondary) inset-shadow-(--inset-shadow-primary) rounded-xl shadow-lg">
+									{item.childrenLayout === "grid" ? (
+										// Rows of round options (the group icons).
+										<div className="grid w-max grid-cols-[repeat(6,auto)] gap-0.5 p-1.5 bg-(--secondary) inset-shadow-(--inset-shadow-primary) rounded-2xl shadow-lg">
 											{item.children.map((child, ci) => (
-												<div key={ci} role="button" tabIndex={0} className={`p-1 rounded-md cursor-pointer duration-150 ${rowHover}`} onClick={e => runChild(e, child)} onKeyDown={e => runChildKey(e, child)}>
+												<div key={ci} role="button" tabIndex={0} className={`flex p-1.5 rounded-lg cursor-pointer duration-150 hover:scale-110 ${rowHover}`} onClick={e => runChild(e, child)} onKeyDown={e => runChildKey(e, child)}>
+													{child.title}
+												</div>
+											))}
+										</div>
+									) : item.childrenLayout === "horizontal" ? (
+										// A pill of round options (the group colors).
+										<div className="flex flex-row items-center gap-0.5 p-1.5 bg-(--secondary) inset-shadow-(--inset-shadow-primary) rounded-full shadow-lg">
+											{item.children.map((child, ci) => (
+												<div key={ci} role="button" tabIndex={0} className={`flex p-1 rounded-full cursor-pointer duration-150 hover:scale-110 ${rowHover}`} onClick={e => runChild(e, child)} onKeyDown={e => runChildKey(e, child)}>
 													{child.title}
 												</div>
 											))}

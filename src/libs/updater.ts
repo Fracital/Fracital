@@ -3,11 +3,17 @@
  * up to date with the deployed app, so new defaults and fixes reach existing users without them
  * resetting or re-downloading anything. Runs on every boot from init().
  *
- * - New settings: add the key and its default to DEFAULT_SETTINGS. Existing values are never overwritten.
+ * Most changes need nothing but editing the defaults below; the updater adds what's new on the next boot:
+ *
+ * - New settings: add the key and its default to DEFAULT_SETTINGS, at any depth. A field missing from the
+ *   user's settings.json is added, inside nested objects too (a new extension, or a new option of one);
+ *   values the user already has, arrays included, are never overwritten.
+ * - New default quick links: add them to DEFAULT_QUICK_LINKS. Each is offered once per browser (by href),
+ *   so one the user deletes stays deleted. A new field on links: add its default to QUICK_LINK_FIELDS.
  * - Built-in themes: edit the CSS in public/themes, then bump that theme's `version` in BUILTIN_THEMES.
  *   A theme that's missing, or older than its entry here, is (re)installed.
- * - Anything else (renaming a setting, changing user data): append a step to MIGRATIONS. Each id runs once
- *   per browser, in order; never reorder or reuse ids. Steps should be idempotent.
+ * - Anything else (renaming a setting, changing a value the user already has): append a step to MIGRATIONS.
+ *   Each id runs once per browser, in order; never reorder or reuse ids. Steps should be idempotent.
  */
 import { dirExists, fileExists, SettingsPath, StaticThemePath, ThemePath } from "../types";
 
@@ -19,7 +25,7 @@ export const DEFAULT_QUICK_LINKS = [
 	{ title: "Google", icon: "/google.svg", color: "#ffffff", href: "https://google.com" },
 	{ title: "Krunker", icon: "/krunker.png", color: "#ffd95c", href: "https://krunk.io" },
 	{ title: "Estro AI Chat", icon: "/estro.svg", color: "#9a5ae7", href: "https://estro.help/" },
-	{ title: "Fracital Music", icon: "/fm.svg", color: "#e25bec", href: "about:music" },
+	{ title: "Fracital Music", icon: "/fm.svg", color: "#FFE1F0", href: "about:music" },
 ];
 
 export const DEFAULT_SETTINGS: Record<string, unknown> = {
@@ -31,6 +37,16 @@ export const DEFAULT_SETTINGS: Record<string, unknown> = {
 	// Clicking inside the collapsed side panel opens it: "anywhere", "except-tabs" or "off".
 	"panel-click-open": "except-tabs",
 	"tabs-position": "right",
+	// Reopen the tabs from last time on the next visit.
+	"persistent-tabs": false,
+	// Tab view: the tabs render in the tab view instead of the side panel.
+	"tab-view": false,
+	// Closing a group also closes its tabs; off, they stay open, out of any group.
+	"close-group-tabs": false,
+	// Extensions (about:extensions) by id: all off until the user turns them on.
+	extensions: { adblock: { enabled: false, allow: [], lists: ["easylist", "easyprivacy", "ublock"] } },
+	// Groups first, then the tabs in no group; off, they mix in the order the user put them.
+	"groups-on-top": false,
 	// "system" follows the OS reduce-motion preference.
 	"reduced-motion": "system",
 	"disable-visualizers": false,
@@ -61,11 +77,16 @@ const BUILTIN_THEMES: { dir: string; css: string; meta: ThemeMeta }[] = [
 
 interface UpdaterState {
 	applied: string[];
+	/** The default quick links (by href) this browser was already offered. */
+	links?: string[];
 	/** Signature of the bundled game files last copied into the virtual drive. */
 	games?: string;
 }
 
 type QuickLink = { title?: string; icon?: string; color?: string; href?: string };
+
+/** Every quick link has these; a saved link missing one gets its default link's value, or this. */
+const QUICK_LINK_FIELDS: Required<Omit<QuickLink, "title" | "href">> = { icon: "default", color: "#ffffff" };
 
 const readQuickLinks = (): QuickLink[] | null => {
 	try {
@@ -85,7 +106,48 @@ const addDefaultLinks = (titles: string[]) => {
 	if (added.length) writeQuickLinks([...saved, ...added]);
 };
 
+/**
+ * Gives a first visit the default links; afterwards adds defaults this browser hasn't been offered yet, and fills
+ * fields missing from saved links. Browsers from before `links` was tracked count today's defaults as offered
+ * (the migrations below already offered those).
+ */
+const syncQuickLinks = (state: UpdaterState) => {
+	const saved = readQuickLinks();
+	const hrefs = DEFAULT_QUICK_LINKS.map(l => l.href);
+	if (!saved) {
+		writeQuickLinks(DEFAULT_QUICK_LINKS);
+		state.links = hrefs;
+		return;
+	}
+	const offered = new Set(state.links ?? hrefs);
+	const added = DEFAULT_QUICK_LINKS.filter(l => !offered.has(l.href) && !saved.some(s => s.href === l.href));
+	state.links = [...new Set([...offered, ...hrefs])];
+	let filled = 0;
+	const next = [...saved, ...added].map(link => {
+		const def = DEFAULT_QUICK_LINKS.find(d => d.href === link.href);
+		const { value, added: fields } = fillDefaults(link, { ...QUICK_LINK_FIELDS, ...def });
+		if (fields.length) filled++;
+		return value as QuickLink;
+	});
+	if (!added.length && !filled) return;
+	writeQuickLinks(next);
+	if (added.length) log(`quick links: added ${added.map(l => l.title).join(", ")}`);
+	if (filled) log(`quick links: filled missing fields on ${filled}`);
+};
+
 const MIGRATIONS: { id: string; run: () => void | Promise<void> }[] = [
+	{
+		// The ad blocker got uBlock's filters (video ads on YouTube and the like): on for settings saved before.
+		id: "adblock-ublock-list",
+		run: async () => {
+			if (!(await fileExists(SettingsPath))) return;
+			const settings = JSON.parse(await window.fr.fs.promises.readFile(SettingsPath, "utf8"));
+			const lists = settings?.extensions?.adblock?.lists;
+			if (!Array.isArray(lists) || lists.includes("ublock")) return;
+			settings.extensions.adblock.lists = [...lists, "ublock"];
+			await window.fr.fs.promises.writeFile(SettingsPath, JSON.stringify(settings, null, 4), "utf-8");
+		},
+	},
 	{
 		// Older defaults linked the Fracital site itself; swap it for YouTube.
 		id: "quicklinks-replace-fractial",
@@ -121,6 +183,17 @@ const MIGRATIONS: { id: string; run: () => void | Promise<void> }[] = [
 			if (changed) writeQuickLinks(next);
 		},
 	},
+	{
+		// Fracital Music's default color went from #e25bec to #FFE1F0; links the user recolored keep theirs.
+		id: "quicklinks-music-color-ffe1f0",
+		run: () => {
+			const saved = readQuickLinks();
+			const music = DEFAULT_QUICK_LINKS.find(l => l.href === "about:music");
+			if (!saved || !music) return;
+			if (!saved.some(l => l.href === music.href && l.color?.toLowerCase() === "#e25bec")) return;
+			writeQuickLinks(saved.map(l => (l.href === music.href && l.color?.toLowerCase() === "#e25bec" ? { ...l, color: music.color } : l)));
+		},
+	},
 ];
 
 const log = (msg: string) => console.log(`%cupdater%c ${msg}`, "color: #c7a1f2", "color: inherit");
@@ -128,7 +201,7 @@ const log = (msg: string) => console.log(`%cupdater%c ${msg}`, "color: #c7a1f2",
 async function readState(): Promise<UpdaterState> {
 	try {
 		const state = JSON.parse(await window.fr.fs.promises.readFile(STATE_PATH, "utf8")) as UpdaterState;
-		return { applied: Array.isArray(state.applied) ? state.applied : [], games: state.games };
+		return { applied: Array.isArray(state.applied) ? state.applied : [], games: state.games, links: Array.isArray(state.links) ? state.links : undefined };
 	} catch {
 		return { applied: [] };
 	}
@@ -136,7 +209,27 @@ async function readState(): Promise<UpdaterState> {
 
 const writeState = (state: UpdaterState) => window.fr.fs.promises.writeFile(STATE_PATH, JSON.stringify(state, null, 2));
 
-/** Creates settings.json, or adds any settings it's missing. Returns true if it wrote the file. */
+const isRecord = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
+
+/**
+ * `current` with every field of `defaults` it lacks, at any depth inside objects (copied, so a default is never
+ * shared). What it has is kept as it is, arrays and values of another type included. `added` lists the dotted
+ * paths it filled.
+ */
+export const fillDefaults = (current: unknown, defaults: unknown, path = ""): { value: unknown; added: string[] } => {
+	if (current === undefined) return { value: structuredClone(defaults), added: path ? [path] : [] };
+	if (!isRecord(current) || !isRecord(defaults)) return { value: current, added: [] };
+	const value: Record<string, unknown> = { ...current };
+	const added: string[] = [];
+	for (const [key, def] of Object.entries(defaults)) {
+		const result = fillDefaults(current[key], def, path ? `${path}.${key}` : key);
+		value[key] = result.value;
+		added.push(...result.added);
+	}
+	return { value, added };
+};
+
+/** Creates settings.json, or adds any settings (at any depth) it's missing. Returns true if it wrote the file. */
 export async function applySettingsDefaults(): Promise<boolean> {
 	let current: Record<string, unknown> | null = null;
 	if (await fileExists(SettingsPath)) {
@@ -147,10 +240,10 @@ export async function applySettingsDefaults(): Promise<boolean> {
 			// Unreadable settings are replaced by the defaults below.
 		}
 	}
-	const missing = Object.keys(DEFAULT_SETTINGS).filter(k => !current || !(k in current));
-	if (!missing.length) return false;
-	await window.fr.fs.promises.writeFile(SettingsPath, JSON.stringify({ ...DEFAULT_SETTINGS, ...current }, null, 4));
-	log(current ? `settings: added ${missing.join(", ")}` : "settings: created settings.json");
+	const { value, added } = fillDefaults(current ?? {}, DEFAULT_SETTINGS);
+	if (current && !added.length) return false;
+	await window.fr.fs.promises.writeFile(SettingsPath, JSON.stringify(value, null, 4));
+	log(current ? `settings: added ${added.join(", ")}` : "settings: created settings.json");
 	return true;
 }
 
@@ -207,7 +300,6 @@ export async function runUpdater(gamesList: string): Promise<{ refreshGames: boo
 	await applySettingsDefaults();
 	await syncThemes();
 
-	if (!readQuickLinks()) writeQuickLinks(DEFAULT_QUICK_LINKS);
 	for (const step of MIGRATIONS) {
 		if (state.applied.includes(step.id)) continue;
 		try {
@@ -219,6 +311,7 @@ export async function runUpdater(gamesList: string): Promise<{ refreshGames: boo
 			console.warn(`updater: migration ${step.id} failed`, err);
 		}
 	}
+	syncQuickLinks(state);
 	await writeState(state);
 
 	return {

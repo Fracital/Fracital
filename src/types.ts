@@ -40,6 +40,12 @@ export const clearLogin = async (): Promise<void> => {
 export type ProxyEngine = "sj" | "uv" | "st";
 export const PROXY_ENGINES: readonly ProxyEngine[] = ["sj", "uv", "st"];
 export const EXPERIMENTAL_PROXIES_SETTING = "experimental-proxies";
+/** Renders the tabs in the tab view instead of the side panel. */
+export const TAB_VIEW_SETTING = "tab-view";
+/** Closing a group also closes its tabs. Off (the default), they stay open, out of any group. */
+export const CLOSE_GROUP_TABS_SETTING = "close-group-tabs";
+/** Groups show first and tabs in no group after them, instead of mixed in the order the user put them. */
+export const GROUPS_ON_TOP_SETTING = "groups-on-top";
 export const isProxyEngine = (value: unknown): value is ProxyEngine => typeof value === "string" && (PROXY_ENGINES as readonly string[]).includes(value);
 
 export const getProxy = async (): Promise<ProxyEngine> => {

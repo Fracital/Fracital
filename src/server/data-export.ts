@@ -45,7 +45,7 @@ export async function buildExport(pool: Pool, userId: string): Promise<Record<st
 	const many = (sql: string) => rows(pool, `select coalesce(jsonb_agg(to_jsonb(t)), '[]'::jsonb) as data from (${sql}) t`, userId);
 	const [account, meta, signIn, passkeys, sessions] = await Promise.all([
 		one(`select id, name, email, image, "emailVerified" as email_verified, "createdAt" as created_at from "user" where id = $1`),
-		one("select role, username, premium, banned_at, ban_reason from fracital_user_meta where user_id = $1"),
+		one("select role, username, premium, premium_until, banned_at, ban_reason from fracital_user_meta where user_id = $1"),
 		many(`select "providerId" as provider, "accountId" as account, scope, "createdAt" as connected_at from account where "userId" = $1`),
 		many(`select name, "deviceType" as device_type, "createdAt" as created_at from passkey where "userId" = $1`),
 		many(`select "createdAt" as signed_in_at, "expiresAt" as expires_at, "ipAddress" as ip_address, "userAgent" as user_agent from session where "userId" = $1`),
@@ -63,6 +63,7 @@ export async function buildExport(pool: Pool, userId: string): Promise<Record<st
 		rows(pool, table("artist_members"), userId),
 		rows(pool, table("artist_claims"), userId),
 	]);
+	const [streak, promoWins] = await Promise.all([one("select current, best, last_day from fracital_streaks where user_id = $1"), rows(pool, table("fracital_promo_winners"), userId)]);
 	return {
 		about: `Everything Fracital stored about your account, as of its deletion. Kept for ${EXPORT_DAYS} days after deletion, then erased.`,
 		exported_at: new Date().toISOString(),
@@ -82,6 +83,8 @@ export async function buildExport(pool: Pool, userId: string): Promise<Record<st
 		plays,
 		artist_pages: artistPages,
 		artist_claims: artistClaims,
+		streak,
+		promo_wins: promoWins,
 	};
 }
 

@@ -30,6 +30,10 @@ import { setStatStore } from "./music-stats";
 import { clientNegotiated } from "./api-crypto";
 import { authOrigin, handoffPlugin, hubOrigin, ownOrigin, registerHubRoutes } from "./cross-site";
 import { lbFeedback, lbListenCount, lbLookupRecording, lbLoved, lbRecent, lbRevoked, lbSubmit, lbTemporary, lbTopAlbums, lbTopArtists, lbTopTracks, lbValidateToken, type ListenTrack } from "./listenbrainz";
+import { migrateSocial, registerSocialRoutes } from "./social";
+import { migrateComments, registerCommentRoutes } from "./comments";
+import { migrateProfiles, registerProfileRoutes } from "./profiles";
+import { migrateStreaks, registerStreakRoutes } from "./streaks";
 import { discordPresenceEnabled, hasPresenceScope, migratePresence, readPresence, sendPresence, writePresence, type NowPlaying } from "./discord-presence";
 import { discordBotStatus, discordBotToken, discordPresenceFor } from "./discord-bot";
 import { migratePlaylists, registerPlaylistRoutes } from "./playlists";
@@ -367,6 +371,10 @@ function init() {
 			)`);
 			await migratePresence(pool);
 			await migratePlaylists(pool);
+			await migrateSocial(pool);
+			await migrateComments(pool);
+			await migrateProfiles(pool);
+			await migrateStreaks(pool);
 			// Deleted accounts' downloadable copies are erased after 30 days.
 			await migrateExports(pool);
 			setInterval(() => void purgeExpiredExports(pool), 6 * 60 * 60 * 1000).unref();
@@ -589,6 +597,10 @@ else setTimeout(() => location.replace("/"), 1500);
 	app.use("/api/me/*", requireUser);
 	registerArtistRoutes(app, { init, requireUser });
 	registerPlaylistRoutes(app);
+	registerSocialRoutes(app);
+	registerCommentRoutes(app, { init });
+	registerProfileRoutes(app, { init });
+	registerStreakRoutes(app);
 
 	type Ctx = { get: <K extends keyof Env["Variables"]>(k: K) => Env["Variables"][K] };
 

@@ -101,6 +101,8 @@ export async function migrateArtistTables(pool: Pool) {
 		create index if not exists music_play_events_listener on music_play_events (listener, at desc);
 		alter table fracital_user_meta add column if not exists username text;
 		alter table fracital_user_meta add column if not exists premium boolean not null default false;
+		-- Premium for a while (the streak promo's reward), on top of the admin's on/off premium.
+		alter table fracital_user_meta add column if not exists premium_until timestamptz;
 		create unique index if not exists fracital_user_meta_username on fracital_user_meta (lower(username));
 	`);
 }
@@ -119,7 +121,10 @@ const adminEmails = () =>
 		.filter(Boolean);
 
 export async function userMeta(pool: Pool, user: { id: string; email: string }) {
-	const { rows } = await pool.query<{ role: string; banned_at: Date | null; ban_reason: string | null; username: string | null; premium: boolean }>("select role, banned_at, ban_reason, username, premium from fracital_user_meta where user_id = $1", [user.id]);
+	const { rows } = await pool.query<{ role: string; banned_at: Date | null; ban_reason: string | null; username: string | null; premium: boolean }>(
+		"select role, banned_at, ban_reason, username, premium or coalesce(premium_until > now(), false) premium from fracital_user_meta where user_id = $1",
+		[user.id],
+	);
 	const meta = rows[0];
 	return {
 		isAdmin: meta?.role === "admin" || adminEmails().includes(user.email.toLowerCase()),
@@ -190,11 +195,11 @@ const profileInput = z.object({
 	announcement: z.string().max(500).nullable().optional(),
 });
 
-const IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
+export const IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
 const FONT_TYPES = new Set(["font/woff2", "font/woff", "font/ttf", "font/otf", "application/font-woff", "application/x-font-ttf", "application/x-font-opentype"]);
 
 /** Sniffs the real file type from magic bytes (the client-sent type isn't trusted). */
-function sniff(bytes: Buffer): string | null {
+export function sniff(bytes: Buffer): string | null {
 	const hex = bytes.subarray(0, 12).toString("hex");
 	if (hex.startsWith("89504e47")) return "image/png";
 	if (hex.startsWith("ffd8ff")) return "image/jpeg";
@@ -645,7 +650,7 @@ export function registerArtistRoutes(app: Hono<Env>, { init, requireUser }: Deps
 	app.get("/api/admin/users", async c => {
 		const q = (c.req.query("q") || "").trim();
 		const { rows } = await c.get("pool").query(
-			`select u.id, u.name, u.email, u.image, u."createdAt" created_at, m.role, m.banned_at, m.ban_reason, m.username, coalesce(m.premium, false) premium,
+			`select u.id, u.name, u.email, u.image, u."createdAt" created_at, m.role, m.banned_at, m.ban_reason, m.username, coalesce(m.premium, false) premium, m.premium_until,
 				(select count(*) from artist_members am where am.user_id = u.id)::int pages,
 				(select count(*) from artist_claims ac where ac.user_id = u.id)::int claims,
 				(select max(s."updatedAt") from session s where s."userId" = u.id) last_seen
@@ -669,6 +674,8 @@ export function registerArtistRoutes(app: Hono<Env>, { init, requireUser }: Deps
 				banReason: r.ban_reason,
 				username: r.username,
 				premium: r.premium,
+				// Time-limited premium (the streak promo), shown apart from the on/off grant.
+				premiumUntil: r.premium_until && new Date(r.premium_until) > new Date() ? r.premium_until : null,
 				pages: r.pages,
 				claims: r.claims,
 			})),

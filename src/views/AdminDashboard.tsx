@@ -1,13 +1,16 @@
 import { CheckBadgeIcon, CheckIcon, MagnifyingGlassIcon, NoSymbolIcon, ShieldCheckIcon, TrashIcon, XMarkIcon } from "@heroicons/react/24/solid";
 import { createId } from "@paralleldrive/cuid2";
 import { useEffect, useState } from "react";
-import { admin, type AdminClaim, type AdminUser } from "../libs/artistPanel";
+import { admin, type AdminClaim, type AdminPromo, type AdminPromoWinner, type AdminUser } from "../libs/artistPanel";
+import { HolyText } from "../components/common/HolyText";
+import { HolyDynamic, HolyRich } from "../components/common/HolyRich";
 import { getMe } from "../libs/auth";
 import { formatCount, searchTracks, type MusicArtist } from "../libs/music-service";
 import { useSettingsStore, useTabsStore } from "../store";
 import { StatCard } from "./ArtistPanel";
+import { commentAge, comments as commentsApi, type ReportedComment } from "../libs/comments";
 
-type Tab = "overview" | "claims" | "artists" | "users";
+type Tab = "overview" | "claims" | "artists" | "users" | "promo" | "comments";
 
 const openTab = (url: string, title: string) => useTabsStore.getState().newTab({ id: createId(), url, displayUrl: url, title, icon: null, current: true });
 const ago = (d: string | null) => {
@@ -22,7 +25,7 @@ const ago = (d: string | null) => {
 export const AdminDashboard = ({ query }: { query?: string }) => {
 	const dark = useSettingsStore(s => s.settings.brightness) !== "light";
 	const initial = (new URLSearchParams(query || "").get("tab") as Tab) || "overview";
-	const [tab, setTab] = useState<Tab>(["overview", "claims", "artists", "users"].includes(initial) ? initial : "overview");
+	const [tab, setTab] = useState<Tab>(["overview", "claims", "artists", "users", "promo", "comments"].includes(initial) ? initial : "overview");
 	const [allowed, setAllowed] = useState<boolean | undefined>(undefined);
 
 	useEffect(() => {
@@ -50,7 +53,7 @@ export const AdminDashboard = ({ query }: { query?: string }) => {
 						<ShieldCheckIcon className="size-8" /> Admin Dashboard
 					</h1>
 					<div className="flex gap-1.5">
-						{(["overview", "claims", "artists", "users"] as Tab[]).map(t => (
+						{(["overview", "claims", "artists", "users", "promo", "comments"] as Tab[]).map(t => (
 							<button key={t} className={`${chip(tab === t)} capitalize`} onClick={() => setTab(t)}>
 								{t}
 							</button>
@@ -61,6 +64,8 @@ export const AdminDashboard = ({ query }: { query?: string }) => {
 				{tab === "claims" && <Claims dark={dark} chip={chip} />}
 				{tab === "artists" && <Artists dark={dark} />}
 				{tab === "users" && <Users dark={dark} />}
+				{tab === "promo" && <Promo dark={dark} />}
+				{tab === "comments" && <ReportedComments dark={dark} />}
 			</div>
 		</div>
 	);
@@ -406,6 +411,11 @@ const Users = ({ dark }: { dark: boolean }) => {
 									{u.name}
 									{u.role === "admin" && <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-[#3d91ff]/20 text-[#6aaaff]">ADMIN</span>}
 									{u.premium && <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-yellow-500/20 text-yellow-300">PREMIUM</span>}
+									{u.premiumUntil && (
+										<HolyRich className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-orange-500/20 text-orange-300">
+											PROMO PREMIUM UNTIL <HolyDynamic>{new Date(u.premiumUntil).toLocaleDateString()}</HolyDynamic>
+										</HolyRich>
+									)}
 									{u.banned && <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-500/20 text-red-400">BANNED</span>}
 								</span>
 								<span className="text-xs text-(--text-tertiary)">
@@ -448,6 +458,150 @@ const Users = ({ dark }: { dark: boolean }) => {
 						</div>
 					))}
 				</Panel>
+			)}
+		</div>
+	);
+};
+
+/** The streak promo: start or stop it, watch the slots fill, and take a slot back (an alt account, say). */
+const Promo = ({ dark }: { dark: boolean }) => {
+	const [data, setData] = useState<{ promo: AdminPromo; winners: AdminPromoWinner[] } | null>(null);
+	const [error, setError] = useState("");
+	const load = () =>
+		void admin
+			.promo()
+			.then(setData)
+			.catch(e => setError(String((e as Error).message)));
+	useEffect(load, []);
+	const act = (work: Promise<unknown>) =>
+		void work
+			.then(load)
+			.catch(e => setError(String((e as Error).message)));
+
+	if (!data) return <Panel dark={dark}>{error ? <span className="text-red-400">{error}</span> : <HolyText className="text-(--text-tertiary)" text="Loading…" />}</Panel>;
+	const { promo, winners } = data;
+	const state = promo.active ? "Running" : promo.filled ? "Filled" : promo.startsAt ? "Stopped" : "Not started";
+	return (
+		<div className="flex flex-col gap-4">
+			<Panel dark={dark} className="flex flex-col gap-3">
+				<div className="flex flex-wrap items-center justify-between gap-3">
+					<div className="flex flex-col gap-1">
+						<HolyRich className="text-lg font-bold">
+							Streak promo: <HolyDynamic>{state}</HolyDynamic>
+						</HolyRich>
+						<HolyRich className="text-sm text-(--text-tertiary)">
+							First <HolyDynamic>{promo.slots}</HolyDynamic> accounts to a <HolyDynamic>{promo.days}</HolyDynamic>-day streak (10 minutes a day, days end at midnight US Eastern) get <HolyDynamic>{promo.rewardDays}</HolyDynamic> days of premium. Only days since the start count.
+						</HolyRich>
+						{promo.startsAt && (
+							<HolyRich className="text-xs text-(--text-tertiary)">
+								Started <HolyDynamic>{new Date(promo.startsAt).toLocaleString()}</HolyDynamic>
+								{promo.endsAt && (
+									<>
+										{" "}
+										· ended <HolyDynamic>{new Date(promo.endsAt).toLocaleString()}</HolyDynamic>
+									</>
+								)}
+							</HolyRich>
+						)}
+					</div>
+					<div className="flex items-center gap-3">
+						<HolyRich className="text-2xl font-black">
+							<HolyDynamic>{winners.length}</HolyDynamic>/<HolyDynamic>{promo.slots}</HolyDynamic>
+						</HolyRich>
+						{promo.active ? (
+							<Btn kind="danger" onClick={() => act(admin.setPromo("stop"))}>
+								<HolyText text="Stop" />
+							</Btn>
+						) : (
+							<Btn kind="good" onClick={() => confirm(promo.startsAt ? "Restart the promo? Progress counts again from now; current winners keep their premium." : "Start the promo now?") && act(admin.setPromo("start"))}>
+								<HolyText text={promo.startsAt ? "Restart" : "Start"} />
+							</Btn>
+						)}
+					</div>
+				</div>
+				{error && <span className="text-sm text-red-400">{error}</span>}
+			</Panel>
+			<Panel dark={dark} className="flex flex-col gap-1">
+				{winners.length === 0 ? (
+					<HolyText className="text-sm text-(--text-tertiary)" text="No winners yet." />
+				) : (
+					winners.map(w => (
+						<div key={w.userId} className="flex flex-wrap items-center gap-3 p-2 rounded-xl">
+							<span className="w-7 text-center font-black text-(--text-tertiary)">#{w.rank}</span>
+							{/* The account's own name, handle and email: data values. */}
+							<div className="flex flex-col flex-1 min-w-40">
+								<span className="font-semibold">
+									{w.name}
+									{w.username && <span className="ml-1.5 text-xs text-(--text-tertiary)">@{w.username}</span>}
+								</span>
+								<span className="text-xs text-(--text-tertiary)">{w.email}</span>
+							</div>
+							<HolyRich className="text-xs text-(--text-secondary)">
+								Won <HolyDynamic>{ago(w.wonAt)}</HolyDynamic> · streak <HolyDynamic>{w.streak}</HolyDynamic> · premium until <HolyDynamic>{w.premiumUntil ? new Date(w.premiumUntil).toLocaleDateString() : "—"}</HolyDynamic>
+							</HolyRich>
+							<Btn kind="danger" onClick={() => confirm(`Take ${w.name}'s slot back and end their promo premium?`) && act(admin.revokePromo(w.userId))}>
+								<HolyText text="Revoke" />
+							</Btn>
+						</div>
+					))
+				)}
+			</Panel>
+		</div>
+	);
+};
+
+/** Reported song and album comments, most reported first: delete the comment, or dismiss its reports. */
+const ReportedComments = ({ dark }: { dark: boolean }) => {
+	const [reports, setReports] = useState<ReportedComment[] | null>(null);
+	const [error, setError] = useState("");
+	const load = () =>
+		commentsApi
+			.reports()
+			.then(r => setReports(r.reports))
+			.catch(e => setError(e.message));
+	useEffect(() => {
+		void load();
+	}, []);
+	const act = (run: Promise<unknown>) => run.then(() => load()).catch(e => setError(e.message));
+
+	return (
+		<div className="flex flex-col gap-3">
+			<Err e={error} />
+			{reports === null ? (
+				<HolyText as="p" className="text-sm text-(--text-tertiary)" text="Loading…" />
+			) : reports.length === 0 ? (
+				<Panel dark={dark}>
+					<HolyText as="p" className="text-sm text-(--text-tertiary)" text="No reported comments." />
+				</Panel>
+			) : (
+				reports.map(r => (
+					<Panel key={r.id} dark={dark} className="flex flex-col gap-2">
+						<div className="flex flex-wrap items-center gap-2 text-xs text-(--text-tertiary)">
+							{/* The author, what it's on and when: data values. */}
+							<span className="font-semibold text-(--text-primary)">{r.user.username ? `@${r.user.username}` : r.user.name}</span>
+							<span>
+								{r.kind} · {r.target.replace("|", " – ")}
+							</span>
+							<span>{commentAge(r.at)}</span>
+							<span className="ml-auto rounded-full bg-red-500/15 px-2 py-0.5 font-semibold text-red-400">
+								{r.reports} <HolyText text={r.reports === 1 ? "report" : "reports"} />
+							</span>
+						</div>
+						{/* The comment and the reasons given: user content. */}
+						<p className="whitespace-pre-wrap break-words text-sm">{r.body}</p>
+						{r.reasons.length > 0 && <p className="text-xs text-(--text-tertiary)">{r.reasons.join(" · ")}</p>}
+						<div className="flex gap-2">
+							<Btn kind="danger" onClick={() => void act(commentsApi.remove(r.id))}>
+								<TrashIcon className="size-3.5" />
+								<HolyText text="Delete comment" />
+							</Btn>
+							<Btn onClick={() => void act(commentsApi.dismiss(r.id))}>
+								<CheckIcon className="size-3.5" />
+								<HolyText text="Dismiss reports" />
+							</Btn>
+						</div>
+					</Panel>
+				))
 			)}
 		</div>
 	);

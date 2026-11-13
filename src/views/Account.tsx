@@ -1,19 +1,23 @@
-import { ArrowLeftStartOnRectangleIcon, ArrowPathIcon, CheckCircleIcon, ComputerDesktopIcon, CubeTransparentIcon, ExclamationTriangleIcon, FingerPrintIcon, KeyIcon, MusicalNoteIcon, SpeakerWaveIcon, UserCircleIcon, VideoCameraIcon } from "@heroicons/react/24/solid";
+import type { IconDefinition } from "@fortawesome/fontawesome-svg-core";
 import { faDiscord, faGithub, faGoogle, faLastfm, faMicrosoft } from "@fortawesome/free-brands-svg-icons";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import type { IconDefinition } from "@fortawesome/fontawesome-svg-core";
+import { ArrowLeftStartOnRectangleIcon, ArrowPathIcon, CheckCircleIcon, ComputerDesktopIcon, CubeTransparentIcon, ExclamationTriangleIcon, FingerPrintIcon, KeyIcon, MusicalNoteIcon, SpeakerWaveIcon, UserCircleIcon, VideoCameraIcon } from "@heroicons/react/24/solid";
 import { createId } from "@paralleldrive/cuid2";
 import { useEffect, useRef, useState } from "react";
-import { Input } from "../components/Input";
 import { HolyText } from "../components/common/HolyText";
-import { useHolyAttr } from "../libs/holy-attr";
+import { Input } from "../components/Input";
+import { ProfileSettings } from "../components/ProfileSettings";
+import { StreakCard } from "../components/StreakBadge";
 import {
+	type AuthOptions,
 	addPasskey,
+	changeAccountPassword,
 	confirmAccountDeletion,
 	connectDiscordPresence,
 	connectLastfm,
 	connectListenbrainz,
 	connectSocial,
+	type DiscordActivityState,
 	deletePasskey,
 	disconnectLastfm,
 	disconnectListenbrainz,
@@ -24,16 +28,18 @@ import {
 	importLastfmLoved,
 	importListenbrainzLoved,
 	listPasskeys,
+	type Me,
 	oauthUsable,
+	type PasskeyInfo,
 	passkeysUsable,
 	refreshLastfm,
 	refreshMe,
 	requestAccountDeletion,
 	requestPasswordReset,
 	resetPassword,
-	setAccountPassword,
-	changeAccountPassword,
+	type SocialProvider,
 	sendVerificationEmail,
+	setAccountPassword,
 	setDiscordActivityShown,
 	setDiscordPresence,
 	signIn,
@@ -43,13 +49,9 @@ import {
 	terbiumAuth,
 	updateProfile,
 	uploadAvatar,
-	type AuthOptions,
-	type DiscordActivityState,
-	type Me,
-	type PasskeyInfo,
-	type SocialProvider,
 } from "../libs/auth";
 import { CROSS_SITE_EVENT, crossSiteStatus, linkCrossSite, unlinkCrossSite } from "../libs/crossSite";
+import { useHolyAttr } from "../libs/holy-attr";
 import { formatCount } from "../libs/music-service";
 import { useSavedStore } from "../libs/savedLibrary";
 import { pendingScrobbles } from "../libs/scrobbler";
@@ -385,6 +387,8 @@ const Manage = ({ me, notice, onChange, onDeleted }: { me: Me; notice?: string; 
 					</div>
 				</div>
 
+				<StreakCard />
+
 				{notice === "verify-error" && !error && !info && <Banner kind="error">{NOTICES["verify-error"].text}</Banner>}
 				{error && <Banner kind="error">{error}</Banner>}
 				{info && <Banner kind="ok">{info}</Banner>}
@@ -407,6 +411,8 @@ const Manage = ({ me, notice, onChange, onDeleted }: { me: Me; notice?: string; 
 				)}
 
 				<ProfileEditor me={me} onChange={onChange} />
+
+				<ProfileSettings user={{ id: me.user.id, name: me.user.name, username: me.username ?? null }} />
 
 				{me.discordActivity && <DiscordActivityCard me={me} options={options} busy={busy} run={run} />}
 

@@ -64,12 +64,18 @@ const guardBody = (body: ReadableStream<Uint8Array>, abort: () => void, idleMs: 
 	});
 };
 
+/** Asked before each request: a response to give instead of sending it, or null to send it. */
+export type RequestGate = (remote: URL, headers: RawHeaders) => TransferrableResponse | null;
+
 export class ResilientTransport implements ProxyTransport {
 	private inner: LibcurlTransport;
 	private h1Hosts = new Set<string>();
+	private gate?: RequestGate;
 
-	constructor(options: LibcurlClientOptions) {
-		this.inner = new LibcurlTransport(options);
+	constructor(options: LibcurlClientOptions & { gate?: RequestGate }) {
+		const { gate, ...libcurl } = options;
+		this.inner = new LibcurlTransport(libcurl);
+		this.gate = gate;
 	}
 
 	get ready() {
@@ -128,6 +134,8 @@ export class ResilientTransport implements ProxyTransport {
 	}
 
 	async request(remote: URL, method: string, body: BodyInit | null, headers: RawHeaders, signal: AbortSignal | undefined): Promise<TransferrableResponse> {
+		const answered = this.gate?.(remote, headers);
+		if (answered) return answered;
 		if (!this.inner.ready) await this.inner.init();
 		if (signal?.aborted) throw new DOMException("The operation was aborted.", "AbortError");
 

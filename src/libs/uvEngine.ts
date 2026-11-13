@@ -1,6 +1,7 @@
 import { BareMuxConnection, type BareHeaders, type BareTransport } from "@mercuryworkshop/bare-mux";
 import type { ProxyTransport, RawHeaders } from "@mercuryworkshop/proxy-transports";
-import { ResilientTransport } from "./resilientTransport";
+import { type RequestGate, ResilientTransport } from "./resilientTransport";
+import { requestVerdict, verdictResponse } from "../extensions/runtime";
 import XOR from "./XOR";
 import { wispURL } from "../types";
 
@@ -77,13 +78,25 @@ class BareAdapter implements BareTransport {
 	}
 }
 
+/**
+ * UV's requests reach the extensions here, in the page's transport: UV's own hooks run in the service worker, which
+ * the extensions don't. Only the URL and headers are known, so the requesting page comes from the Referer when sent.
+ */
+const uvGate: RequestGate = (remote, headers) => {
+	const referer = headers.find(([name]) => name.toLowerCase() === "referer")?.[1];
+	const accept = headers.find(([name]) => name.toLowerCase() === "accept")?.[1] ?? "";
+	// A navigation asks for HTML; anything else is a resource (its exact kind isn't known here).
+	const verdict = requestVerdict({ url: remote.href, pageUrl: referer, destination: accept.startsWith("text/html") ? "document" : undefined });
+	return verdict ? verdictResponse(verdict) : null;
+};
+
 let boot: Promise<void> | null = null;
 
 /** Starts UV's transport once per page; tabs on UV wait for it before loading. */
 export const bootUv = () => {
 	boot ??= (async () => {
 		const connection = new BareMuxConnection(MUX_WORKER);
-		await connection.setRemoteTransport(new BareAdapter(new ResilientTransport({ wisp: wispURL })), "relay");
+		await connection.setRemoteTransport(new BareAdapter(new ResilientTransport({ wisp: wispURL, gate: uvGate })), "relay");
 	})().catch(error => {
 		boot = null;
 		throw error;

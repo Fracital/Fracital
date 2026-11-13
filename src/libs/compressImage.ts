@@ -19,6 +19,8 @@ export const IMAGE_PRESETS = {
 	banner: { maxDimension: 2400, maxBytes: 4 * 1024 * 1024 },
 	photo: { maxDimension: 1600, maxBytes: 4 * 1024 * 1024 },
 	logo: { maxDimension: 1200, maxBytes: 4 * 1024 * 1024 },
+	/** A user profile's banner: shown at most ~1000px wide (on the profile page), so this is plenty. */
+	profileBanner: { maxDimension: 1920, maxBytes: 1.5 * 1024 * 1024 },
 } satisfies Record<string, CompressOptions>;
 
 const run = (file: Blob, opts: Compressor.Options) =>
@@ -44,7 +46,7 @@ export async function compressImage(file: File, { maxDimension, maxBytes }: Comp
 				maxHeight: dimension,
 				mimeType,
 				// Always re-encode (Compressor otherwise keeps PNGs under 5MB as PNG).
-				convertSize: Infinity,
+				convertSize: Number.POSITIVE_INFINITY,
 				checkOrientation: true,
 			});
 		} catch {

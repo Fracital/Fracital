@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import type { TabProps } from "../components/Tab";
-import { useTabsStore } from "../store";
+import { usePanelsStore, useSettingsStore, useTabsStore } from "../store";
+import { TAB_VIEW_SETTING } from "../types";
 import { aboutPages, getPageFromUrl, getQueryFromUrl } from "../libs/aboutPages";
 
 interface ViewProps {
@@ -13,6 +14,10 @@ export const View = ({ children, id }: ViewProps) => {
 	const currentTab = tabs.find(tab => tab.current === true);
 	const updateTab = useTabsStore(state => state.updateTab);
 	const lastUrlRef = useRef<string>("");
+	// The open tab view shows every tab's page in its card.
+	const tabView = useSettingsStore(state => state.settings[TAB_VIEW_SETTING] === true);
+	const tabViewOpen = usePanelsStore(state => state.tabViewOpen);
+	const previewing = tabView && tabViewOpen;
 
 	useEffect(() => {
 		if (!id) return;
@@ -43,7 +48,7 @@ export const View = ({ children, id }: ViewProps) => {
 				"absolute inset-0 duration-150" +
 				" " +
 				`
-            ${currentTab ? (currentTab.id !== id ? "opacity-0 translate-y-2 pointer-events-none inset-shadow-(--inset-shadow-primary)" : "") : ""}
+            ${currentTab && currentTab.id !== id && !previewing ? "opacity-0 translate-y-2 pointer-events-none inset-shadow-(--inset-shadow-primary)" : ""}
         `
 			}
 		>

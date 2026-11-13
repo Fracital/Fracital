@@ -13,6 +13,7 @@ import { acceptedRelayPath, RELAY_OPTIONS } from "./src/server/relay-gate";
 import { musicApi } from "./src/server/music-api";
 import { shieldPlugin } from "./src/server/shield/vite-plugin";
 import { buildObfuscatorPlugin } from "./src/server/build-obfuscator-plugin";
+import { emojiData } from "./src/server/emoji-data";
 
 // The second proxy engine (stomp) ships under this neutral directory, which is
 // also its service worker's scope. The file names are told to the engine at
@@ -141,6 +142,8 @@ export default defineConfig({
 		react(),
 		tailwindcss(),
 		cloakRouting(),
+		// The comment box's emoji, built from emojibase-data (see the plugin).
+		emojiData(),
 		// Compile every compilable chunk to encrypted VM bytecode. Compile mode is
 		// the default; SHIELD_MODE=manifest is a local debug opt-out, never
 		// shipped. Vendor-only chunks (React, parsers) stay native for main-thread

@@ -106,10 +106,28 @@ async function discord<T>(path: string, accessToken: string, body: unknown): Pro
 
 const clip = (s: string, max: number) => (s.length > max ? `${s.slice(0, max - 1)}…` : s);
 
+/**
+ * The song's and artist's page in Fracital's music library, which the status's two lines link to: on the
+ * main site (BETTER_AUTH_URL), never a decoy host. App.tsx opens `?music=` links.
+ */
+function musicLink(query: Record<string, string>) {
+	const base = process.env.BETTER_AUTH_URL?.trim();
+	if (!base) return undefined;
+	try {
+		const url = new URL("/", base);
+		url.searchParams.set("music", new URLSearchParams(query).toString());
+		return url.href.length <= 256 ? url.href : undefined;
+	} catch {
+		return undefined;
+	}
+}
+
 function activity(song: NowPlaying) {
 	const now = Date.now();
 	const start = now - Math.max(0, song.position ?? 0) * 1000;
 	const large = artworkUrl(song.artwork);
+	const songLink = musicLink({ track: song.title, by: song.artist });
+	const artistLink = musicLink({ artistName: song.artist.split(", ")[0] });
 	return {
 		type: 2, // Listening
 		name: "Fracital",
@@ -118,6 +136,8 @@ function activity(song: NowPlaying) {
 		status_display_type: 2, // "Listening to <details>" in the member list
 		details: clip(song.title, 128),
 		state: clip(song.artist, 128),
+		...(songLink ? { details_url: songLink } : {}),
+		...(artistLink ? { state_url: artistLink } : {}),
 		timestamps: song.duration ? { start, end: start + song.duration * 1000 } : { start },
 		...(large ? { assets: { large_image: large, ...(song.album ? { large_text: clip(song.album, 128) } : {}) } } : {}),
 	};

@@ -1,21 +1,23 @@
-import { type ReactNode } from "react";
+import { ChatBubbleLeftRightIcon, CheckBadgeIcon, Cog6ToothIcon, DocumentIcon, FolderIcon, GlobeAltIcon, MusicalNoteIcon, PlayCircleIcon, PlayIcon, PuzzlePieceIcon, ShieldCheckIcon, SignalIcon, UserCircleIcon } from "@heroicons/react/24/solid";
 import { createId } from "@paralleldrive/cuid2";
+import type { ReactNode } from "react";
 import { useMusicStore, useTabsStore } from "../store";
-import { nowPlayingTitle } from "./playback";
-import { Cog6ToothIcon, MusicalNoteIcon, FolderIcon, UserCircleIcon, PlayIcon, PlayCircleIcon, GlobeAltIcon, DocumentIcon, SignalIcon, CheckBadgeIcon, ShieldCheckIcon, ChatBubbleLeftRightIcon } from "@heroicons/react/24/solid";
-
+import { Account } from "../views/Account";
+import { AdminDashboard } from "../views/AdminDashboard";
+import { ArtistPanel } from "../views/ArtistPanel";
+import Chat from "../views/Chat";
+import { DigitalLibrary } from "../views/DigitalLibrary";
+import Extensions from "../views/Extensions";
+import Files from "../views/Files/Files";
+import Games from "../views/Games";
 import Home from "../views/Home";
-import Settings from "../views/Settings";
 import { MusicLibrary } from "../views/Music/MusicLibrary";
 import { MusicPlayer, NowPlayingTabIcon } from "../views/Music/MusicPlayer";
-import Files from "../views/Files/Files";
-import { Account } from "../views/Account";
-import { ArtistPanel } from "../views/ArtistPanel";
-import { AdminDashboard } from "../views/AdminDashboard";
-import Games from "../views/Games";
+import Profile from "../views/Profile";
+import Settings from "../views/Settings";
+import Social from "../views/Social";
 import { TextEditor } from "../views/TextEditor";
-import { DigitalLibrary } from "../views/DigitalLibrary";
-import Chat from "../views/Chat";
+import { nowPlayingTitle } from "./playback";
 
 export interface AboutPage {
 	name: string;
@@ -107,6 +109,30 @@ export const aboutPages: Record<string, AboutPage> = {
 		component: Chat,
 		icon: <ChatBubbleLeftRightIcon className="size-5" />,
 		title: "Chat",
+	},
+	extensions: {
+		name: "extensions",
+		component: Extensions,
+		icon: <PuzzlePieceIcon className="size-5" />,
+		title: "Extensions",
+	},
+	social: {
+		name: "social",
+		component: Social,
+		icon: <ChatBubbleLeftRightIcon className="size-5" />,
+		title: "Social",
+	},
+	// Someone's profile: about:user?<username or account id>.
+	user: {
+		name: "user",
+		component: Profile,
+		icon: <UserCircleIcon className="size-5" />,
+		title: "Profile",
+		titleFor: query => {
+			const handle = decodeURIComponent(query ?? "").trim();
+			return handle && !/^[A-Za-z0-9]{20,}$/.test(handle) ? `@${handle.replace(/^@/, "")}` : "Profile";
+		},
+		hasQuery: true,
 	},
 	account: {
 		name: "account",

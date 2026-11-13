@@ -1,20 +1,31 @@
 import { create } from "zustand";
 import { normalizePath } from "./views/Files/pathUtils";
 import type { TabProps } from "./components/Tab";
-import type { Track } from "./types";
+import { GROUPS_ON_TOP_SETTING, type Track } from "./types";
 import { createId } from "@paralleldrive/cuid2";
 import { normalizeAboutUrl } from "./libs/aboutAlias";
+
+/** A name for a new group: one past the highest "Group N" there is, so closing one never repeats a name. */
+export const nextGroupName = (groups: { name: string }[]) => {
+	const highest = Math.max(0, ...groups.map(group => Number(/^Group (\d+)$/.exec(group.name)?.[1] ?? 0)));
+	return `Group ${highest + 1}`;
+};
 
 export const usePanelsStore = create<{
 	panelsOpen: boolean;
 	current: "tabs" | "quickplayer";
 	setCurrent: (panel: "tabs" | "quickplayer") => void;
 	setPanelsOpen: (open: boolean) => void;
+	/** The tab view (opened from the top bar), which holds the tabs while the tab view setting is on. */
+	tabViewOpen: boolean;
+	setTabViewOpen: (open: boolean) => void;
 }>()(set => ({
 	panelsOpen: false,
 	current: "tabs",
 	setCurrent: (panel: "tabs" | "quickplayer") => set({ current: panel }),
 	setPanelsOpen: (open: boolean) => set({ panelsOpen: open }),
+	tabViewOpen: false,
+	setTabViewOpen: (open: boolean) => set({ tabViewOpen: open }),
 }));
 
 // Kept apart from the tabs store so loading state is never persisted with saved tabs.
@@ -64,6 +75,61 @@ const normalizeTabChanges = (rawChanges: Partial<TabProps>): Partial<TabProps> =
 };
 
 const baseId = createId();
+
+/*
+ * The top level of the tab list: groups and tabs in no group, in one order, so a loose tab can sit between groups.
+ * `layout` holds their keys ("g:<group id>", "t:<tab id>"). The tabs inside a group keep the `tabs` array's order.
+ * The actions below keep it in step; topLevel() repairs whatever they missed (a saved list from before, a tab added
+ * some other way), so nothing goes missing from the list.
+ */
+export type TopItem = { kind: "group"; id: string } | { kind: "tab"; id: string };
+export const groupKey = (id: string) => `g:${id}`;
+export const tabKey = (id: string) => `t:${id}`;
+
+type LayoutState = { tabs: TabProps[]; groups: { id: string }[]; layout: string[] };
+
+/** The layout with anything stale dropped and anything missing added at the end (groups, then loose tabs in `tabs` order). */
+export const fixLayout = ({ tabs, groups, layout }: LayoutState): string[] => {
+	const valid = new Set([...groups.map(group => groupKey(group.id)), ...tabs.filter(tab => !tab.groupId || !groups.some(group => group.id === tab.groupId)).map(tab => tabKey(tab.id))]);
+	const seen = new Set<string>();
+	const kept = layout.filter(key => valid.has(key) && !seen.has(key) && seen.add(key));
+	for (const key of valid) if (!seen.has(key)) kept.push(key);
+	return kept;
+};
+
+/** "Keep groups on top": groups show first, then the loose tabs, each in their own order from the layout. */
+const groupsOnTop = () => useSettingsStore.getState().settings[GROUPS_ON_TOP_SETTING] === true;
+
+/** The layout as shown: as it is, or with the groups first when they're kept on top. */
+const shownLayout = (state: LayoutState) => {
+	const layout = fixLayout(state);
+	return groupsOnTop() ? [...layout.filter(key => key.startsWith("g:")), ...layout.filter(key => key.startsWith("t:"))] : layout;
+};
+
+/**
+ * With groups kept on top, an order taken from the screen (groups first) only says how the groups go among
+ * themselves and the loose tabs among themselves: they fill the layout's group places and tab places in that order,
+ * so the mixed order comes back unchanged when the option is turned off.
+ */
+const keepPlaces = (layout: string[], order: string[]) => {
+	const groups = order.filter(key => key.startsWith("g:"));
+	const loose = order.filter(key => key.startsWith("t:"));
+	return layout.map(key => (key.startsWith("g:") ? (groups.shift() ?? key) : (loose.shift() ?? key)));
+};
+
+/** The top level in the order shown: each group, and each tab in no group. */
+export const topLevel = (state: LayoutState): TopItem[] => shownLayout(state).map(key => ({ kind: key.startsWith("g:") ? "group" : "tab", id: key.slice(2) }));
+
+/** Every tab in the order the list shows them: each group's tabs where the group stands, loose tabs where they stand. */
+export const tabsInOrder = (state: LayoutState): TabProps[] => topLevel(state).flatMap(item => (item.kind === "group" ? state.tabs.filter(tab => tab.groupId === item.id) : state.tabs.filter(tab => tab.id === item.id)));
+
+/** `key` moved to `index` (counted without it); appended when the index is past the end. */
+const placeKey = (layout: string[], key: string, index: number) => {
+	const rest = layout.filter(k => k !== key);
+	rest.splice(Math.max(0, Math.min(index, rest.length)), 0, key);
+	return rest;
+};
+
 export const useTabsStore = create<{
 	tabs: TabProps[];
 	groups: { id: string; name: string; icon?: string; accent?: string }[];
@@ -86,8 +152,20 @@ export const useTabsStore = create<{
 	moveTabRelative: (draggedId: string, targetId: string, placeBefore: boolean) => void;
 	closeGroup: (id: string) => void;
 	updateGroup: (id: string, changes: Partial<{ id: string; name: string; icon?: string; accent?: string }>) => void;
+	/** Whether the user has put the groups in their own order (the tab view then keeps it instead of sorting by size). */
+	groupsOrdered: boolean;
+	/** Puts the groups in this order (by id; any not listed keep their place at the end) and marks it as the user's. */
+	reorderGroups: (ids: string[]) => void;
+	/** The top level's order: group and loose tab keys (see `layout` above). */
+	layout: string[];
+	/** Sets the top level's order as shown: these keys first, in this order, then any not listed in their old order. */
+	setTopOrder: (keys: string[]) => void;
+	/** Takes a tab out of any group and puts it at `index` of the top level as shown (counted without it; past the end = last). */
+	placeLoose: (tabId: string, index: number) => void;
 }>()((set, get) => ({
 	groups: [],
+	layout: [tabKey(baseId)],
+	groupsOrdered: false,
 	tabs: [
 		{
 			id: baseId,
@@ -124,6 +202,8 @@ export const useTabsStore = create<{
 		const tabWithId: TabProps = { ...props, id, current: true, history: initialHistory, historyIndex: 0 } as TabProps;
 		set(state => ({
 			tabs: state.tabs.map(tab => ({ ...tab, current: false })).concat(tabWithId as TabProps & { current: boolean }),
+			// A new loose tab goes last; one opened into a group goes there.
+			layout: tabWithId.groupId ? state.layout : [...state.layout.filter(key => key !== tabKey(id)), tabKey(id)],
 		}));
 	},
 	closeTab: (id: string) => {
@@ -140,14 +220,23 @@ export const useTabsStore = create<{
 
 			return {
 				tabs: newTabs,
+				layout: state.layout.filter(key => key !== tabKey(id)),
 			};
 		});
 	},
 	updateTab: (id: string, rawChanges: Partial<TabProps>) => {
 		const changes = normalizeTabChanges(rawChanges);
-		set(state => ({
-			tabs: state.tabs.map(tab => (tab.id === id ? { ...tab, ...changes } : tab)),
-		}));
+		set(state => {
+			const tabs = state.tabs.map(tab => (tab.id === id ? { ...tab, ...changes } : tab));
+			const before = state.tabs.find(tab => tab.id === id);
+			if (!before || !("groupId" in changes) || before.groupId === changes.groupId) return { tabs };
+			const key = tabKey(id);
+			// Into a group: it leaves the top level. Out of one: it stands just after the group it left.
+			if (changes.groupId) return { tabs, layout: state.layout.filter(k => k !== key) };
+			const rest = state.layout.filter(k => k !== key);
+			const after = before.groupId ? rest.indexOf(groupKey(before.groupId)) : -1;
+			return { tabs, layout: after === -1 ? [...rest, key] : placeKey(rest, key, after + 1) };
+		});
 	},
 	// A navigation the user asked for (address bar, quick link, back/forward):
 	// the same writes as updateTab plus a new navNonce, so a proxied tab runs it
@@ -225,12 +314,18 @@ export const useTabsStore = create<{
 			if (!placeBefore) to = to + 1;
 
 			tabs.splice(to, 0, item);
-			return { tabs };
+			// Two loose tabs: the top level follows, so the dragged one lands beside the target there too.
+			const target = tabs.find(t => t.id === targetId);
+			if (item.groupId || target?.groupId) return { tabs };
+			const layout = fixLayout({ ...state, tabs }).filter(k => k !== tabKey(draggedId));
+			const at = layout.indexOf(tabKey(targetId));
+			return { tabs, layout: at === -1 ? state.layout : placeKey(layout, tabKey(draggedId), placeBefore ? at : at + 1) };
 		}),
 	newGroup: (id: string | null, name: string, icon?: string) =>
-		set(state => ({
-			groups: [...state.groups, { id: id ?? createId(), name, icon }],
-		})),
+		set(state => {
+			const groupId = id ?? createId();
+			return { groups: [...state.groups, { id: groupId, name, icon }], layout: [...state.layout, groupKey(groupId)] };
+		}),
 	addTabToGroup: (groupId: string, tab: TabProps) =>
 		set(state => {
 			const tabId = tab.id ?? createId();
@@ -242,17 +337,64 @@ export const useTabsStore = create<{
 
 			return {
 				tabs: updatedTabs,
+				layout: state.layout.filter(key => key !== tabKey(tabId)),
 			};
 		}),
 	closeGroup: (id: string) =>
-		set(state => ({
-			groups: state.groups.filter(group => group.id !== id),
-			tabs: state.tabs.map(tab => (tab.groupId === id ? { ...tab, groupId: undefined } : tab)),
-		})),
+		set(state => {
+			// The tabs it kept stand where the group stood, in their order.
+			const freed = state.tabs.filter(tab => tab.groupId === id).map(tab => tabKey(tab.id));
+			const layout = fixLayout(state);
+			const at = layout.indexOf(groupKey(id));
+			const rest = layout.filter(key => key !== groupKey(id) && !freed.includes(key));
+			if (at !== -1) rest.splice(Math.min(at, rest.length), 0, ...freed);
+			else rest.push(...freed);
+			return {
+				groups: state.groups.filter(group => group.id !== id),
+				tabs: state.tabs.map(tab => (tab.groupId === id ? { ...tab, groupId: undefined } : tab)),
+				layout: rest,
+			};
+		}),
 	updateGroup: (id: string, changes: Partial<{ id: string; name: string; icon?: string }>) =>
 		set(state => ({
 			groups: state.groups.map(group => (group.id === id ? { ...group, ...changes } : group)),
 		})),
+	reorderGroups: (ids: string[]) =>
+		set(state => {
+			const listed = ids.map(id => state.groups.find(group => group.id === id)).filter(group => !!group);
+			const groups = [...listed, ...state.groups.filter(group => !ids.includes(group.id))];
+			// The groups take each other's places on the top level; loose tabs stay put.
+			const layout = fixLayout(state);
+			const queue = groups.map(group => groupKey(group.id));
+			return { groups, groupsOrdered: true, layout: layout.map(key => (key.startsWith("g:") ? (queue.shift() ?? key) : key)) };
+		}),
+	setTopOrder: (keys: string[]) =>
+		set(state => {
+			const layout = fixLayout(state);
+			const listed = keys.filter(key => layout.includes(key));
+			const wanted = [...listed, ...layout.filter(key => !listed.includes(key))];
+			const order = groupsOnTop() ? keepPlaces(layout, wanted) : wanted;
+			// The groups array follows, so anything that still reads it sees the same order.
+			const groups = order.filter(key => key.startsWith("g:")).map(key => state.groups.find(group => groupKey(group.id) === key)!);
+			return { layout: order, groups, groupsOrdered: true };
+		}),
+	placeLoose: (tabId: string, index: number) => {
+		const tab = get().tabs.find(t => t.id === tabId);
+		if (!tab) return;
+		if (tab.groupId) get().updateTab(tabId, { groupId: undefined });
+		set(state => {
+			const key = tabKey(tabId);
+			if (!groupsOnTop()) return { layout: placeKey(fixLayout(state), key, index) };
+			// Shown as groups then loose tabs: the index past the groups says which loose tab it goes before.
+			const layout = fixLayout(state).filter(k => k !== key);
+			const groupCount = layout.filter(k => k.startsWith("g:")).length;
+			const loose = layout.filter(k => k.startsWith("t:"));
+			const nth = Math.max(0, index - groupCount);
+			const before = loose[nth];
+			if (!before) return { layout: [...layout, key] };
+			return { layout: placeKey(layout, key, layout.indexOf(before)) };
+		});
+	},
 }));
 
 export const useSettingsStore = create<{
@@ -606,11 +748,13 @@ if (typeof window !== "undefined") {
 	if (persistOn()) {
 		try {
 			const savedTabs = JSON.parse(localStorage.getItem(PERSIST_TABS_KEY) || "null");
-			if (savedTabs?.tabs?.length)
-				useTabsStore.setState({
-					tabs: savedTabs.tabs.map((t: TabProps) => ({ ...t, url: normalizeAboutUrl(t.url), displayUrl: normalizeAboutUrl(t.displayUrl) })),
-					groups: savedTabs.groups ?? [],
-				});
+			if (savedTabs?.tabs?.length) {
+				const tabs = savedTabs.tabs.map((t: TabProps) => ({ ...t, url: normalizeAboutUrl(t.url), displayUrl: normalizeAboutUrl(t.displayUrl) }));
+				const groups = savedTabs.groups ?? [];
+				// A snapshot from before the top-level order has none: groups first, then loose tabs, as it showed then.
+				const layout = fixLayout({ tabs, groups, layout: Array.isArray(savedTabs.layout) ? savedTabs.layout : [] });
+				useTabsStore.setState({ tabs, groups, groupsOrdered: savedTabs.groupsOrdered === true, layout });
+			}
 		} catch {
 			/* corrupted snapshot — start fresh */
 		}
@@ -634,7 +778,7 @@ if (typeof window !== "undefined") {
 	useTabsStore.subscribe(state => {
 		if (!persistOn()) return;
 		try {
-			localStorage.setItem(PERSIST_TABS_KEY, serialize({ tabs: state.tabs, groups: state.groups }));
+			localStorage.setItem(PERSIST_TABS_KEY, serialize({ tabs: state.tabs, groups: state.groups, groupsOrdered: state.groupsOrdered, layout: state.layout }));
 		} catch {
 			/* storage full/unavailable */
 		}

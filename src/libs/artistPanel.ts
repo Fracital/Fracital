@@ -201,8 +201,32 @@ export interface AdminUser {
 	banReason: string | null;
 	username: string | null;
 	premium: boolean;
+	/** Time-limited premium (the streak promo), while it lasts. */
+	premiumUntil: string | null;
 	pages: number;
 	claims: number;
+}
+
+/** The streak promo (src/server/streaks.ts): the first `slots` accounts to a `days`-day streak get `rewardDays` of premium. */
+export interface AdminPromo {
+	active: boolean;
+	startsAt: string | null;
+	endsAt: string | null;
+	filled: boolean;
+	slots: number;
+	days: number;
+	rewardDays: number;
+}
+
+export interface AdminPromoWinner {
+	userId: string;
+	rank: number;
+	wonAt: string;
+	name: string;
+	email: string;
+	username: string | null;
+	premiumUntil: string | null;
+	streak: number;
 }
 
 export const admin = {
@@ -229,6 +253,9 @@ export const admin = {
 	users: (q: string) => meFetch<{ users: AdminUser[] }>(`/api/admin/users?q=${encodeURIComponent(q)}`),
 	updateUser: (id: string, change: { role?: "admin" | "user"; banned?: boolean; reason?: string; premium?: boolean }) => meFetch(`/api/admin/users/${id}`, { method: "POST", body: JSON.stringify(change) }),
 	/** Deletes the account and its data; the owner can download a copy for 30 days (the link is emailed when the account has an email). */
+	promo: () => meFetch<{ promo: AdminPromo; winners: AdminPromoWinner[] }>("/api/admin/promo"),
+	setPromo: (action: "start" | "stop") => meFetch("/api/admin/promo", { method: "POST", body: JSON.stringify({ action }) }),
+	revokePromo: (userId: string) => meFetch(`/api/admin/promo/winners/${encodeURIComponent(userId)}`, { method: "DELETE" }),
 	deleteUser: (id: string) => meFetch<{ download: string; expires: string; emailed: boolean }>(`/api/admin/users/${encodeURIComponent(id)}`, { method: "DELETE" }),
 };
 

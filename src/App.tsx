@@ -1,37 +1,41 @@
+import { ChevronLeftIcon, ChevronRightIcon, Cog6ToothIcon, XMarkIcon } from "@heroicons/react/24/solid";
 import { createId } from "@paralleldrive/cuid2";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
+import { useLocation } from "react-router-dom";
+import { Api } from "./Api";
 import { AD_UNITS, AdBanner, RevSlot, TabsAd, useShowAds } from "./components/AdBanner";
 import { MusicAdBreak } from "./components/MusicAdBreak";
-import { lazy, Suspense, useEffect, useRef, useState } from "react";
-import { RectangleStackIcon, PlusIcon, Cog6ToothIcon, ChevronLeftIcon, ChevronRightIcon, XMarkIcon } from "@heroicons/react/24/solid";
-import type { detailProps } from "./libs/eventBus";
-import { useLocation } from "react-router-dom";
-
-import { Api } from "./Api";
-
-import Shell from "./gui/Shell";
+import { ProfileCardHost } from "./components/ProfileCard";
+import { StreakWinNotice } from "./components/StreakBadge";
 import { Tab } from "./components/Tab";
+import Shell from "./gui/Shell";
+import { NewGroupButton, NewTabButton } from "./gui/tabBatch";
+import { appRoot } from "./libs/cloak";
+import { scrollParent } from "./libs/dragFeel";
+import type { detailProps } from "./libs/eventBus";
 
 const QuickPlayer = lazy(() => import("./gui/QuickPlayer").then(module => ({ default: module.QuickPlayer })));
 const Home = lazy(() => import("./views/Home"));
 const ExternalSite = lazy(() => import("./views/ExternalSite"));
-import StompSite from "./views/StompSite";
-import { bootStomp, useStompStore } from "./libs/stompEngine";
 
 import { Controller } from "@mercuryworkshop/scramjet-controller";
-import { ResilientTransport } from "./libs/resilientTransport";
-
-import { useMusicStore, usePanelsStore, useSettingsStore, useTabsStore } from "./store";
-import { init, quickLinks } from "./libs/init";
-import { initTheme } from "./libs/theme";
-import { applyMotionSetting, MOTION_SETTING } from "./libs/motion";
-import { startGameSaveSync } from "./libs/gameSaves";
-import { View } from "./gui/View";
+import { ModalProvider } from "./components/Modal/ModalContext";
 import { SpinnerLoader } from "./components/SsrLoader";
 import TabGroup from "./components/TabGroup";
-import { ModalProvider } from "./components/Modal/ModalContext";
-import { EXPERIMENTAL_PROXIES_SETTING, getProxy, isProxyEngine, isWebOS, SettingsPath, wispURL, type ProxyEngine } from "./types";
-import { aboutPages, getPageFromUrl, getQueryFromUrl } from "./libs/aboutPages";
+import { startExtensions } from "./extensions/runtime";
+import { TabView } from "./gui/TabView";
+import { View } from "./gui/View";
+import { aboutPages, getPageFromUrl, getQueryFromUrl, openLibraryPage } from "./libs/aboutPages";
+import { startGameSaveSync } from "./libs/gameSaves";
+import { init, quickLinks } from "./libs/init";
+import { applyMotionSetting, MOTION_SETTING } from "./libs/motion";
 import { isPlayerUrl, togglePlay } from "./libs/playback";
+import { ResilientTransport } from "./libs/resilientTransport";
+import { bootStomp, useStompStore } from "./libs/stompEngine";
+import { initTheme } from "./libs/theme";
+import { groupKey, tabKey, tabsInOrder, topLevel, useMusicStore, usePanelsStore, useSettingsStore, useTabsStore } from "./store";
+import { EXPERIMENTAL_PROXIES_SETTING, getProxy, isProxyEngine, isWebOS, type ProxyEngine, SettingsPath, TAB_VIEW_SETTING, wispURL } from "./types";
+import StompSite from "./views/StompSite";
 
 declare global {
 	interface Window {
@@ -200,6 +204,7 @@ const App = () => {
 
 	const tabs = useTabsStore(state => state.tabs);
 	const groups = useTabsStore(state => state.groups);
+	const layout = useTabsStore(state => state.layout);
 	const currentTab = tabs.find(tab => tab.current === true);
 	const setCurrentTab = useTabsStore(state => state.setCurrentTab);
 	const panelsOpen = usePanelsStore(state => state.panelsOpen);
@@ -208,6 +213,14 @@ const App = () => {
 	const panelClickOpen = useSettingsStore(state => (["anywhere", "except-tabs", "off"].includes(state.settings["panel-click-open"]) ? state.settings["panel-click-open"] : "except-tabs")) as "anywhere" | "except-tabs" | "off";
 	const rail = !panelsOpen && settings["compact-tabs"] === true;
 	const peek = !panelsOpen && settings["compact-tabs"] !== true;
+	/** The tab view setting: the tabs move from the side panel into the tab view, opened from the top bar. */
+	const tabView = settings[TAB_VIEW_SETTING] === true;
+	const tabViewOpen = usePanelsStore(state => state.tabViewOpen);
+	/** While the tab view is open every tab's page shows, scaled into its card. */
+	const previewing = tabView && tabViewOpen;
+	const hidden = (id: string) => !!currentTab && currentTab.id !== id && !previewing;
+	/** The box around a tab's page; the tab view moves and scales it (see TabView). */
+	const frameClass = (id: string) => `absolute inset-0 ${hidden(id) ? "pointer-events-none" : ""}`;
 	// Rail containers use rounded-3xl, not rounded-full: on the 40px rail 24px is clamped to a full pill, and
 	// unlike rounded-full it animates smoothly from the open panel's rounded-2xl.
 	const playerView = useMusicStore(state => state.playerView);
@@ -216,7 +229,6 @@ const App = () => {
 	const playerTabOpen = isPlayerUrl(currentTab?.url);
 	const hasMusic = useMusicStore(state => !!state.currentTrack || state.queue.length > 0);
 
-	const newGroup = useTabsStore(state => state.newGroup);
 	const newTab = useTabsStore(state => state.newTab);
 	const closeTab = useTabsStore(state => state.closeTab);
 	const updateTab = useTabsStore(state => state.updateTab);
@@ -240,7 +252,20 @@ const App = () => {
 		void bootstrapPromise;
 	}, []);
 
-	// Team invite links (fracital.xyz/?artist-invite=CODE) open the Artists panel.
+	useEffect(() => {
+		const music = new URLSearchParams(window.location.search).get("music");
+		if (!music || music.length > 600) return;
+		const given = new URLSearchParams(music);
+		const query = new URLSearchParams();
+		for (const key of ["track", "by", "artistName"]) {
+			const value = given.get(key)?.trim();
+			if (value) query.set(key, value.slice(0, 200));
+		}
+		if (!query.has("track") && !query.has("artistName")) return;
+		window.history.replaceState(null, "", window.location.pathname);
+		openLibraryPage(query.toString(), query.get("track") || query.get("artistName") || "Music");
+	}, []);
+
 	useEffect(() => {
 		const code = new URLSearchParams(window.location.search).get("artist-invite");
 		if (!code || !/^[\w-]{6,40}$/.test(code)) return;
@@ -250,7 +275,6 @@ const App = () => {
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, []);
 
-	// Links from account emails land on /?account=verified or /?account=reset&token=… (or &error=…).
 	useEffect(() => {
 		const params = new URLSearchParams(window.location.search);
 		const kind = params.get("account");
@@ -330,6 +354,9 @@ const App = () => {
 	useEffect(() => {
 		applyMotionSetting(settings[MOTION_SETTING]);
 	}, [settings[MOTION_SETTING]]);
+
+	// Extensions (about:extensions) run in proxied pages; this starts the ones that are on and follows their settings.
+	useEffect(() => startExtensions(), []);
 
 	useEffect(() => {
 		const getSettings = async () => {
@@ -412,17 +439,52 @@ const App = () => {
 		setPlatform(detectedPlatform);
 	}, []);
 
-	const nextTab = () => {
-		const currentIndex = tabs.findIndex(tab => tab.current);
-		if (currentIndex !== -1) {
-			setCurrentTab(tabs[(currentIndex + 1) % tabs.length].id);
+	/** The tabs in the order the side panel shows them: each group's tabs where the group stands, loose tabs where they stand. */
+	const shownTabs = () => tabsInOrder(useTabsStore.getState());
+	/**
+	 * Shift+arrows: to the nearest tab on screen in that direction (the tab view lays tabs out in rows and groups side
+	 * by side; the side panel is one column). With none that way, the next or previous tab in the order shown, wrapping.
+	 */
+	const moveTab = (dir: "up" | "down" | "left" | "right") => {
+		const spots = [...appRoot().querySelectorAll<HTMLElement>("[data-tab-spot]")].map(el => ({ id: el.dataset.tabSpot ?? "", el, r: el.getBoundingClientRect() })).filter(s => s.r.width > 0 && s.r.height > 0 && s.el.checkVisibility({ visibilityProperty: true, opacityProperty: true }));
+		const current = tabs.find(tab => tab.current);
+		const here = spots.find(s => s.id === current?.id);
+		const forward = dir === "down" || dir === "right";
+		// Nothing on screen to go by (the panels are closed, or the tab is in a collapsed group): the order shown.
+		const order = here ? spots.map(s => s.id) : shownTabs().map(tab => tab.id);
+		const index = order.indexOf(current?.id ?? "");
+		if (index === -1 || order.length < 2) return;
+		let target = order[(index + (forward ? 1 : -1) + order.length) % order.length];
+		if (here) {
+			const cx = here.r.left + here.r.width / 2;
+			const cy = here.r.top + here.r.height / 2;
+			let best = Number.POSITIVE_INFINITY;
+			for (const s of spots) {
+				if (s.id === here.id) continue;
+				const dx = s.r.left + s.r.width / 2 - cx;
+				const dy = s.r.top + s.r.height / 2 - cy;
+				const ahead = dir === "left" ? -dx : dir === "right" ? dx : dir === "up" ? -dy : dy;
+				// Ahead by at least a few px: a tab in the same column (or row) isn't "to the side" of this one.
+				if (ahead <= 4) continue;
+				const aside = dir === "left" || dir === "right" ? Math.abs(dy) : Math.abs(dx);
+				// Straight ahead beats close but off to the side.
+				const score = ahead + aside * 2;
+				if (score < best) {
+					best = score;
+					target = s.id;
+				}
+			}
 		}
-	};
-
-	const prevTab = () => {
-		const currentIndex = tabs.findIndex(tab => tab.current);
-		if (currentIndex !== -1) {
-			setCurrentTab(tabs[(currentIndex - 1 + tabs.length) % tabs.length].id);
+		setCurrentTab(target);
+		// Bring it into view in its own list only. scrollIntoView also scrolls the overflow-hidden layout around it, which
+		// slid the whole app sideways when the collapsed side panel's tab was off the edge.
+		const spot = spots.find(s => s.id === target)?.el;
+		const list = scrollParent(spot ?? null);
+		if (spot && list) {
+			const r = spot.getBoundingClientRect();
+			const box = list.getBoundingClientRect();
+			if (r.top < box.top) list.scrollTop -= box.top - r.top + 8;
+			else if (r.bottom > box.bottom) list.scrollTop += r.bottom - box.bottom + 8;
 		}
 	};
 
@@ -436,9 +498,6 @@ const App = () => {
 		}
 	}, [location.pathname]);
 
-	// The shipped shell's title is neutralized at build time; restore the
-	// brand title once the app boots. The literal is encrypted in the
-	// bundle, so the brand never appears in shipped plaintext.
 	useEffect(() => {
 		document.title = "Fracital";
 	}, []);
@@ -528,12 +587,16 @@ const App = () => {
 					});
 				}
 			}
-			if (e.shiftKey && e.key.toLowerCase() === "arrowup") {
+			// Shift+arrows select text while typing; only switch tabs elsewhere.
+			const root = appRoot();
+			const focused = ("activeElement" in root ? root.activeElement : null) ?? document.activeElement;
+			const typing = focused instanceof HTMLElement && (focused.isContentEditable || !!focused.closest("input, textarea, select, [contenteditable], [role=textbox], [role=combobox]"));
+			if (typing) return;
+			const ARROWS: Record<string, "up" | "down" | "left" | "right"> = { arrowup: "up", arrowdown: "down", arrowleft: "left", arrowright: "right" };
+			const dir = ARROWS[e.key.toLowerCase()];
+			if (e.shiftKey && dir && !e.ctrlKey && !e.altKey && !e.metaKey) {
 				e.preventDefault();
-				prevTab();
-			} else if (e.shiftKey && e.key.toLowerCase() === "arrowdown") {
-				e.preventDefault();
-				nextTab();
+				moveTab(dir);
 			}
 		};
 		window.addEventListener("keydown", handleKeys);
@@ -543,10 +606,134 @@ const App = () => {
 		};
 	});
 
+	// There is always a tab: closing the last one opens a new one.
+	useEffect(() => {
+		if (tabs.length > 0) return;
+		newTab({
+			id: createId(),
+			title: "New Tab",
+			url: "about:newtab",
+			current: true,
+			displayUrl: "about:newtab",
+		});
+	}, [tabs.length]);
+
+	// Turning the tab view setting off closes the view, so it doesn't reopen when it is turned back on.
+	useEffect(() => {
+		if (!tabView) usePanelsStore.getState().setTabViewOpen(false);
+	}, [tabView]);
+
+	/** The side panel's tab list and its new tab/group buttons. */
+	const renderTabList = (listRail: boolean, listPeek: boolean, adEnabled: boolean) => (
+		<>
+			<div
+				className={`relative flex w-full flex-1 min-h-0 overflow-auto flex-col items-stretch duration-200 ${listRail ? "gap-1 p-1 [scrollbar-width:none]" : "gap-2 p-2"}`}
+				onDragOver={e => e.preventDefault()}
+				onDrop={e => {
+					e.preventDefault();
+					const draggedId = e.dataTransfer.getData("text/tab-id");
+					if (!draggedId) return;
+					/** Out of any group, at the top-level spot under the pointer: after every item whose middle is above it. */
+					const container = e.currentTarget;
+					const placeAtPointer = () => {
+						const items = [...container.querySelectorAll<HTMLElement>(":scope > [data-top-item]")].filter(item => item.dataset.topItem !== tabKey(draggedId));
+						const index = items.filter(item => {
+							const r = item.getBoundingClientRect();
+							return r.top + r.height / 2 < e.clientY;
+						}).length;
+						useTabsStore.getState().placeLoose(draggedId, index);
+					};
+
+					// The app's root, so this finds the panel inside the cloak's shadow root too.
+					const el = appRoot().elementFromPoint(e.clientX, e.clientY) as HTMLElement | null;
+					if (!el) {
+						placeAtPointer();
+						return;
+					}
+
+					const tabEl = el.closest("[data-url][id]") as HTMLElement | null;
+					if (tabEl && tabEl.id) {
+						const targetId = tabEl.id;
+						if (targetId === draggedId) return;
+						const targetTab = tabs.find(t => t.id === targetId);
+						const targetGroupId = targetTab?.groupId;
+						const rect = tabEl.getBoundingClientRect();
+						const y = e.clientY - rect.top;
+						const placeBefore = y < rect.height / 2;
+						updateTab(draggedId, { groupId: targetGroupId });
+						useTabsStore.getState().moveTabRelative(draggedId, targetId, placeBefore);
+						return;
+					}
+
+					const groupHeader = el.closest("[data-group-id]") as HTMLElement | null;
+					const groupWrapper = el.closest("[data-group-wrapper]") as HTMLElement | null;
+					const gid = groupHeader?.getAttribute("data-group-id") || groupWrapper?.getAttribute("data-group-wrapper");
+					if (gid) {
+						updateTab(draggedId, { groupId: gid });
+						const groupTabs = useTabsStore.getState().tabs.filter(t => t.groupId === gid && t.id !== draggedId);
+						if (groupTabs.length > 0) {
+							const lastId = groupTabs[groupTabs.length - 1].id;
+							useTabsStore.getState().moveTabRelative(draggedId, lastId, false);
+						}
+						return;
+					}
+
+					placeAtPointer();
+				}}
+			>
+				{/* Groups and loose tabs in one order; each top-level item is marked for the drops and the group drag. */}
+				{topLevel({ tabs, groups, layout }).map(item => {
+					if (item.kind === "group") {
+						const group = groups.find(g => g.id === item.id);
+						return group ? <TabGroup key={groupKey(group.id)} id={group.id} name={group.name} icon={group.icon} /> : null;
+					}
+					const tab = tabs.find(t => t.id === item.id);
+					return tab ? <Tab title={tab.title} url={tab.url} id={tab.id} icon={tab.icon} displayUrl={tab.url} topKey={tabKey(tab.id)} key={tabKey(tab.id)} /> : null;
+				})}
+				{tabs.length === 0 && (
+					<span
+						className={
+							"absolute left-1/2 top-1/2 -translate-1/2 w-max font-semibold text-lg duration-150" +
+							" " +
+							`
+								${tabs.length < 0 ? "opacity-0" : ""}
+							`
+						}
+					>
+						No tabs open
+					</span>
+				)}
+				<TabsAd enabled={adEnabled} />
+			</div>
+			<div
+				className={
+					(listRail
+						? "flex w-[calc(100%-0.5rem)] m-1 p-0 rounded-3xl justify-center [&_button:not(:first-child)]:hidden [&_button]:p-1.5 [&_button]:rounded-3xl"
+						: `flex min-max-1 w-[calc(100%-1rem)] m-2 p-1 rounded-xl items-start justify-between gap-1 ${listPeek && tabsLeft ? "flex-row-reverse [&>div]:flex-row-reverse" : ""}`) +
+					" " +
+					`
+	                                    ${settings.brightness === "dark" ? "bg-[#ffffff10]" : "bg-[#00000025]"}
+	                                `
+				}
+			>
+				<div className="flex gap-1">
+					<NewTabButton title={platform.includes("Mac") ? "New Tab ⌃ + T" : "New Tab: Alt + T"} />
+					{/* Hidden in the icon rail, which keeps only the new tab button. */}
+					<NewGroupButton title={platform.includes("Mac") ? "New Group ⌃ + T" : "New Group: Alt + T"} className={listRail ? "hidden!" : ""} />
+				</div>
+				<div className="flex gap-0.5 items-center h-full" />
+			</div>
+		</>
+	);
+
 	return (
 		<ModalProvider>
-			<div className="relative flex flex-col h-screen w-full gap-2.5 p-3 overflow-hidden">
+			{/* clip, not hidden: the collapsed side panel reaches past the window edge, and an overflow-hidden box can still be
+			    scrolled (by focus moving into a page, scrollIntoView), which slid the whole app sideways. A clipped box can't. */}
+			<div className="relative flex flex-col h-screen w-full gap-2.5 p-3 overflow-clip">
 				<Shell />
+				<StreakWinNotice />
+				<ProfileCardHost />
 				<div className="flex flex-col flex-1 min-h-0">
 					<div id="main" className={`relative flex flex-1 min-h-0 gap-2.5 ${tabsLeft ? "flex-row-reverse" : ""}`}>
 						{/* Ad panel (hidden for premium accounts and on narrow windows) */}
@@ -561,7 +748,7 @@ const App = () => {
 
 											if (!pageName || !aboutPages[pageName]) {
 												return (
-													<div key={item.id}>
+													<div key={item.id} data-tab-frame={item.id} className={frameClass(item.id)}>
 														{currentTab && (
 															<View key={viewKey} id={item.id}>
 																<Home
@@ -570,7 +757,7 @@ const App = () => {
 																		"absolute inset-0 duration-150" +
 																		" " +
 																		`
-																${currentTab ? (currentTab.id !== item.id ? "opacity-0 translate-y-2 pointer-events-none" : "") : ""}
+																${hidden(item.id) ? "opacity-0 translate-y-2 pointer-events-none" : ""}
 															`
 																	}
 																/>
@@ -587,7 +774,7 @@ const App = () => {
 
 											if (pageName === "newtab") {
 												return (
-													<div key={item.id}>
+													<div key={item.id} data-tab-frame={item.id} className={frameClass(item.id)}>
 														{currentTab && (
 															<View key={viewKey} id={item.id}>
 																<PageComponent
@@ -596,7 +783,7 @@ const App = () => {
 																		"absolute inset-0 duration-150" +
 																		" " +
 																		`
-															${currentTab ? (currentTab.id !== item.id ? "opacity-0 translate-y-2 pointer-events-none" : "") : ""}
+															${hidden(item.id) ? "opacity-0 translate-y-2 pointer-events-none" : ""}
 														`
 																	}
 																	query={query}
@@ -609,7 +796,7 @@ const App = () => {
 											}
 
 											return (
-												<div key={item.id}>
+												<div key={item.id} data-tab-frame={item.id} className={frameClass(item.id)}>
 													<View key={viewKey} id={item.id}>
 														<PageComponent
 															key={viewKey}
@@ -618,54 +805,57 @@ const App = () => {
 																"absolute inset-0 duration-150" +
 																" " +
 																`
-														${currentTab ? (currentTab.id !== item.id ? "opacity-0 translate-y-2 pointer-events-none" : "") : ""}
+														${hidden(item.id) ? "opacity-0 translate-y-2 pointer-events-none" : ""}
 													`
 															}
 														/>
 													</View>
 												</div>
 											);
-										} else if (stompActive) {
+										}
+										if (stompActive) {
 											// The engine's view waits for its own controller; no url gate needed.
 											return (
-												<StompSite
-													id={item.id}
-													current={currentTab?.id === item.id}
-													key={`st-${item.id}`}
-													url={item.url}
-													navNonce={item.navNonce}
-													className={
-														"absolute inset-0" +
-														" " +
-														`
-												${currentTab ? (currentTab.id !== item.id ? "opacity-0 pointer-events-none" : "") : ""}
-                                            `
-													}
-												/>
+												<div key={`st-${item.id}`} data-tab-frame={item.id} className={frameClass(item.id)}>
+													<StompSite
+														id={item.id}
+														current={!hidden(item.id)}
+														url={item.url}
+														navNonce={item.navNonce}
+														className={
+															"absolute inset-0" +
+															" " +
+															`
+													${hidden(item.id) ? "opacity-0 pointer-events-none" : ""}
+	                                            `
+														}
+													/>
+												</div>
 											);
-										} else {
-											return (
+										}
+										return (
+											<div key={proxy === "uv" ? `uv-${item.id}` : item.id} data-tab-frame={item.id} className={frameClass(item.id)}>
 												<ExternalSite
 													id={item.id}
-													current={currentTab?.id === item.id}
-													key={proxy === "uv" ? `uv-${item.id}` : item.id}
+													current={!hidden(item.id)}
 													engine={proxy === "uv" ? "uv" : "sj"}
 													url={proxyReady && (proxy !== "uv" || uvReady) ? item.url : undefined}
 													className={
 														"absolute inset-0" +
 														" " +
 														`
-												${currentTab ? (currentTab.id !== item.id ? "opacity-0 pointer-events-none" : "") : ""}
-                                            `
+													${hidden(item.id) ? "opacity-0 pointer-events-none" : ""}
+	                                            `
 													}
 												/>
-											);
-										}
+											</div>
+										);
 									})
 								) : (
 									<Home />
 								)}
 							</Suspense>
+							{tabView && <TabView />}
 						</div>
 						<div
 							className={
@@ -674,6 +864,7 @@ const App = () => {
 								`
                             ${panelsOpen ? "w-78" : "w-10"}
                             ${peek && tabsLeft ? "items-end" : ""}
+                            ${tabView && (playerTabOpen || !hasMusic) ? "hidden" : ""}
 						`
 							}
 						>
@@ -683,7 +874,7 @@ const App = () => {
 									" " +
 									`
                                 ${panelsOpen ? "px-2.5 justify-between" : "px-2 justify-center"}
-                                ${rail ? "rounded-3xl" : "rounded-2xl"}
+                                ${rail ? "rounded-3xl" : "rounded-xl"}
                             `
 								}
 								title={panelsOpen ? "Close Panels" : "Open Panels"}
@@ -717,157 +908,29 @@ const App = () => {
 									</>
 								)}
 							</div>
-							{/* tabs panel */}
-							<div
-								ref={tabsRef}
-								className={
-									"flex flex-col flex-1 min-h-0 bg-(--secondary) inset-shadow-(--inset-shadow-primary) overflow-hidden duration-150" +
-									" " +
-									`
-                                ${peek ? "w-50" : "w-full"}
-                                ${rail ? "rounded-3xl" : "rounded-2xl"}
-                            `
-								}
-								// Open on click (capture), not mousedown: widening on mousedown moved the button out from
-								// under the cursor before mouseup, so collapsed items never got their click.
-								onClickCapture={e => {
-									if (panelsOpen || panelClickOpen === "off") return;
-									if (panelClickOpen === "except-tabs" && (e.target as Element).closest?.("[data-url][id]")) return;
-									setPanelsOpen(true);
-								}}
-							>
+							{/* tabs panel (the tab view shows the tabs instead while the tab view setting is on) */}
+							{!tabView && (
 								<div
-									className={`relative flex w-full flex-1 min-h-0 overflow-auto flex-col items-stretch duration-200 ${rail ? "gap-1 p-1 [scrollbar-width:none]" : "gap-2 p-2"}`}
-									onDragOver={e => {
-										e.preventDefault();
-										const el = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null;
-										const tabEl = el?.closest("[data-url][id]") as HTMLElement | null;
-										if (tabEl && tabEl.id) {
-											const rect = tabEl.getBoundingClientRect();
-											return;
-										}
-										const groupHeader = el?.closest("[data-group-id]") as HTMLElement | null;
-										if (groupHeader) {
-											return;
-										}
-										const groupWrapper = el?.closest("[data-group-wrapper]") as HTMLElement | null;
-										if (groupWrapper) {
-											return;
-										}
-									}}
-									onDrop={e => {
-										e.preventDefault();
-										const draggedId = e.dataTransfer.getData("text/tab-id");
-										if (!draggedId) return;
-
-										const el = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null;
-										if (!el) {
-											updateTab(draggedId, { groupId: undefined });
-											return;
-										}
-
-										const tabEl = el.closest("[data-url][id]") as HTMLElement | null;
-										if (tabEl && tabEl.id) {
-											const targetId = tabEl.id;
-											if (targetId === draggedId) return;
-											const targetTab = tabs.find(t => t.id === targetId);
-											const targetGroupId = targetTab?.groupId;
-											const rect = tabEl.getBoundingClientRect();
-											const y = e.clientY - rect.top;
-											const placeBefore = y < rect.height / 2;
-											updateTab(draggedId, { groupId: targetGroupId });
-											useTabsStore.getState().moveTabRelative(draggedId, targetId, placeBefore);
-											return;
-										}
-
-										const groupHeader = el.closest("[data-group-id]") as HTMLElement | null;
-										const groupWrapper = el.closest("[data-group-wrapper]") as HTMLElement | null;
-										const gid = groupHeader?.getAttribute("data-group-id") || groupWrapper?.getAttribute("data-group-wrapper");
-										if (gid) {
-											updateTab(draggedId, { groupId: gid });
-											const groupTabs = tabs.filter(t => t.groupId === gid);
-											if (groupTabs.length > 0) {
-												const lastId = groupTabs[groupTabs.length - 1].id;
-												useTabsStore.getState().moveTabRelative(draggedId, lastId, false);
-											}
-											return;
-										}
-
-										updateTab(draggedId, { groupId: undefined });
-									}}
-								>
-									{groups.length > 0 && groups.map(group => <TabGroup key={group.id} id={group.id} name={group.name} icon={group.icon} />)}
-									{(() => {
-										const ungrouped = tabs.filter(t => !t.groupId);
-										if (tabs.length === 0) {
-											newTab({
-												id: createId(),
-												title: "New Tab",
-												url: "about:newtab",
-												current: true,
-												displayUrl: "about:newtab",
-											});
-											return (
-												<span
-													className={
-														"absolute left-1/2 top-1/2 -translate-1/2 w-max font-semibold text-lg duration-150" +
-														" " +
-														`
-													${tabs.length < 0 ? "opacity-0" : ""}
-												`
-													}
-												>
-													No tabs open
-												</span>
-											);
-										}
-
-										return ungrouped.length > 0 ? ungrouped.map(item => <Tab title={item.title} url={item.url} id={item.id} icon={item.icon} displayUrl={item.url} key={item.id} />) : null;
-									})()}
-									<TabsAd enabled={panelsOpen} />
-								</div>
-								<div
+									ref={tabsRef}
 									className={
-										(rail
-											? "flex w-[calc(100%-0.5rem)] m-1 p-0 rounded-3xl justify-center [&_button:not(:first-child)]:hidden [&_button]:p-1.5 [&_button]:rounded-3xl"
-											: `flex min-max-1 w-[calc(100%-1rem)] m-2 p-1 rounded-xl items-start justify-between gap-1 ${peek && tabsLeft ? "flex-row-reverse [&>div]:flex-row-reverse" : ""}`) +
+										"flex flex-col flex-1 min-h-0 bg-(--secondary) inset-shadow-(--inset-shadow-primary) overflow-hidden duration-150" +
 										" " +
 										`
-                                    ${settings.brightness === "dark" ? "bg-[#ffffff10]" : "bg-[#00000025]"}
-                                `
+	                                ${peek ? "w-50" : "w-full"}
+	                                ${rail ? "rounded-3xl" : "rounded-2xl"}
+	                            `
 									}
+									// Open on click (capture), not mousedown: widening on mousedown moved the button out from
+									// under the cursor before mouseup, so collapsed items never got their click.
+									onClickCapture={e => {
+										if (panelsOpen || panelClickOpen === "off") return;
+										if (panelClickOpen === "except-tabs" && (e.target as Element).closest?.("[data-url][id]")) return;
+										setPanelsOpen(true);
+									}}
 								>
-									<div className="flex gap-1">
-										<button
-											title={platform.includes("Mac") ? "New Tab ⌃ + T" : "New Tab: Alt + T"}
-											className="flex items-center justify-center p-2 hover:bg-[#ffffff10] text-(--text-secondary) hover:text-(--text-primary) rounded-lg cursor-pointer duration-200"
-											onClick={() => {
-												newTab({
-													id: createId(),
-													title: "New Tab",
-													url: "about:newtab",
-													current: true,
-													displayUrl: "about:newtab",
-												});
-											}}
-										>
-											<PlusIcon className="size-5 stroke-current stroke-1 duration-150" />
-										</button>
-										<button
-											title={platform.includes("Mac") ? "New Group ⌃ + T" : "New Group: Alt + T"}
-											className="flex items-center justify-center p-2 hover:bg-[#ffffff10] text-(--text-secondary) hover:text-(--text-primary) rounded-lg cursor-pointer duration-200"
-											onClick={() => {
-												const groupId = createId();
-												newGroup(groupId, `Group ${groups.length + 1}`);
-											}}
-										>
-											<RectangleStackIcon className="size-4.5 duration-150" />
-											<PlusIcon className="size-3 stroke-current stroke-1 duration-150" />
-										</button>
-									</div>
-									<div className="flex gap-0.5 items-center h-full"></div>
+									{renderTabList(rail, peek, panelsOpen)}
 								</div>
-							</div>
+							)}
 							<QuickPlayer
 								className={`
                                 ${rail ? "flex-none" : playerView === "bigplayer" ? "flex-[1.3]" : "flex-1"} min-h-0

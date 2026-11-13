@@ -4,6 +4,7 @@ import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { createId } from "@paralleldrive/cuid2";
 import { useEffect, useState } from "react";
 import { Shelf } from "../components/Shelf";
+import { ArtistLinks, TitleLink } from "../components/ArtistLinks";
 import { HolyText } from "../components/common/HolyText";
 import { PlayCount } from "../components/PlayCount";
 import { connectLastfm, getMe, type Me } from "../libs/auth";
@@ -32,6 +33,8 @@ interface Props {
 	onOpenArtist: (name: string) => void;
 	onOpenAlbum: (title: string, artist: string) => void;
 	onOpenAlbumId: (id: string) => void;
+	/** A song's title opens its album. */
+	onOpenSongAlbum?: (track: LibraryTrack) => void;
 	onOpenPlaylist: (id: string) => void;
 	onSongMenu: (e: React.MouseEvent, track: LibraryTrack) => void;
 }
@@ -56,7 +59,7 @@ interface Data {
 }
 
 /** The user's music (My Music) or their personal Browse feed, from Last.fm listening and saved music. */
-export const YourLibrary = ({ mode, dark, onPlayList, onOpenArtist, onOpenAlbum, onOpenAlbumId, onOpenPlaylist, onSongMenu }: Props) => {
+export const YourLibrary = ({ mode, dark, onPlayList, onOpenArtist, onOpenAlbum, onOpenAlbumId, onOpenPlaylist, onSongMenu, onOpenSongAlbum }: Props) => {
 	const username = useLastfmStore(s => s.username);
 	const service = useLastfmStore(s => s.service);
 	const loved = useLastfmStore(s => s.loved);
@@ -215,19 +218,14 @@ export const YourLibrary = ({ mode, dark, onPlayList, onOpenArtist, onOpenAlbum,
 				{loved[songKey(track.title, track.artist)] && <HeartIcon className="absolute top-1.5 right-1.5 size-4 text-[#ff3b5c] drop-shadow" />}
 			</div>
 			<div className="flex flex-col min-w-0 leading-tight">
-				<span title={track.title} className="text-xs font-semibold truncate">
-					{track.title}
-				</span>
-				<span
-					title={track.artist}
-					className="text-[11px] text-(--text-tertiary) truncate hover:underline"
-					onClick={e => {
-						e.stopPropagation();
-						onOpenArtist(track.artist);
-					}}
-				>
-					{track.artist}
-				</span>
+				{onOpenSongAlbum ? (
+					<TitleLink title={track.title} onOpen={() => onOpenSongAlbum(track)} className="text-xs font-semibold truncate" />
+				) : (
+					<span title={track.title} className="text-xs font-semibold truncate">
+						{track.title}
+					</span>
+				)}
+				<ArtistLinks credit={track.artist} onOpen={onOpenArtist} className="text-[11px] text-(--text-tertiary) truncate" />
 				<span className="text-[10px] text-(--text-tertiary) truncate">
 					{meta}
 					<PlayCount title={track.title} artist={track.artist} skeleton={false} prefix={meta ? " · " : ""} />
@@ -263,7 +261,7 @@ export const YourLibrary = ({ mode, dark, onPlayList, onOpenArtist, onOpenAlbum,
 				<span title={a.title} className="text-xs font-semibold line-clamp-2">
 					{a.title}
 				</span>
-				<span className="text-[11px] text-(--text-tertiary) truncate">{a.artist}</span>
+				<ArtistLinks credit={a.artist} onOpen={onOpenArtist} className="text-[11px] text-(--text-tertiary) truncate" />
 				{!!a.userPlays && <span className="text-[10px] text-(--text-tertiary)">{formatCount(a.userPlays)} plays</span>}
 			</div>
 		</div>
@@ -352,7 +350,7 @@ export const YourLibrary = ({ mode, dark, onPlayList, onOpenArtist, onOpenAlbum,
 				<span title={cleanAlbumTitle(a.title)} className="text-xs font-semibold line-clamp-2">
 					{cleanAlbumTitle(a.title)}
 				</span>
-				<span className="text-[11px] text-(--text-tertiary) truncate">{a.artist}</span>
+				<ArtistLinks credit={a.artist} onOpen={onOpenArtist} className="text-[11px] text-(--text-tertiary) truncate" />
 				{a.releaseDate && <span className="text-[10px] text-(--text-tertiary)">{new Date(a.releaseDate).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}</span>}
 			</div>
 		</div>
@@ -456,8 +454,8 @@ export const YourLibrary = ({ mode, dark, onPlayList, onOpenArtist, onOpenAlbum,
 								<span className="w-5 text-right text-sm font-semibold text-(--text-tertiary) tabular-nums">{i + 1}</span>
 								{t.artwork ? <img src={t.artwork} alt="" className="size-10 rounded object-cover bg-(--tertiary)" loading="lazy" /> : <div className="size-10 rounded bg-(--tertiary)" />}
 								<div className="flex flex-col flex-1 min-w-0 leading-tight">
-									<span className="text-sm font-semibold truncate">{t.title}</span>
-									<span className="text-xs text-(--text-tertiary) truncate">{t.artist}</span>
+									{onOpenSongAlbum ? <TitleLink title={t.title} onOpen={() => onOpenSongAlbum(t)} className="text-sm font-semibold truncate" /> : <span className="text-sm font-semibold truncate">{t.title}</span>}
+									<ArtistLinks credit={t.artist} onOpen={onOpenArtist} className="text-xs text-(--text-tertiary) truncate" />
 								</div>
 								<div className="flex flex-col items-end leading-tight">
 									<PlayCount title={t.title} artist={t.artist} className="text-xs font-semibold text-(--text-secondary)" />

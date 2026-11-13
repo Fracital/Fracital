@@ -1,4 +1,6 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useLayoutEffect, useState, useRef } from "react";
+import { MusicComments } from "../components/MusicComments";
+import { ArtistLinks, TitleLink } from "../components/ArtistLinks";
 import { createPortal } from "react-dom";
 import { ChevronLeftIcon, ChevronRightIcon, XMarkIcon } from "@heroicons/react/24/solid";
 import { useMusicStore, useSettingsStore, useTabsStore } from "../store";
@@ -92,36 +94,89 @@ const LinkIcon = ({ kind, small }: { kind: ArtistLinkKind; small?: boolean }) =>
  * A one-line heading that shrinks its font size (max → min px) to fit its container, so wide
  * custom fonts and long names show in full; only truncates if it still overflows at min.
  */
+/**
+ * Whether a one-line heading's text is wider than its box. Fractional: scrollWidth and clientWidth round to whole
+ * pixels, so text a fraction of a pixel too wide counted as fitting while the ellipsis already cut it.
+ */
+const overflows = (el: HTMLElement) => {
+	const range = document.createRange();
+	range.selectNodeContents(el);
+	const text = range.getBoundingClientRect().width;
+	const box = el.getBoundingClientRect().width;
+	const css = getComputedStyle(el);
+	const inner = box - (Number.parseFloat(css.paddingLeft) || 0) - (Number.parseFloat(css.paddingRight) || 0) - (Number.parseFloat(css.borderLeftWidth) || 0) - (Number.parseFloat(css.borderRightWidth) || 0);
+	return text > inner + 0.01;
+};
+
 const FitTitle = ({ children, className = "", style, max, min }: { children: React.ReactNode; className?: string; style?: React.CSSProperties; max: number; min: number }) => {
 	const ref = useRef<HTMLHeadingElement>(null);
 	const [size, setSize] = useState(max);
-	useEffect(() => {
+	// Before paint, so the name never shows a frame at the wrong size.
+	useLayoutEffect(() => {
 		const el = ref.current;
-		if (!el) return;
-		const fit = () => {
-			if (!el.clientWidth) return; // hidden tab — wait for a real layout
-			let s = max;
-			el.style.fontSize = `${s}px`;
-			while (s > min && el.scrollWidth > el.clientWidth) {
-				s -= 1;
-				el.style.fontSize = `${s}px`;
+		const row = el?.parentElement;
+		if (!el || !row) return;
+		/**
+		 * Measured against the row, never against the heading's own current size: sizing it changes its height and
+		 * its truncation, and fitting to that flipped between too big (cut off) and fitted on some widths.
+		 */
+		let lastWidth = -1;
+		const fit = (force = false) => {
+			const width = row.clientWidth;
+			if (!width || (!force && width === lastWidth)) return; // hidden tab, or only the height changed
+			lastWidth = width;
+			const rowStyle = getComputedStyle(row);
+			const gap = Number.parseFloat(rowStyle.columnGap) || 0;
+			const others = [...row.children].filter(c => c !== el).reduce((sum, c) => sum + (c as HTMLElement).offsetWidth + gap, 0);
+			const room = width - (Number.parseFloat(rowStyle.paddingLeft) || 0) - (Number.parseFloat(rowStyle.paddingRight) || 0) - others;
+			// The name's full width at the largest size (text width grows in step with the font size).
+			const prev = { fontSize: el.style.fontSize, width: el.style.width, flex: el.style.flex };
+			el.style.fontSize = `${max}px`;
+			el.style.width = "max-content";
+			el.style.flex = "none";
+			const natural = el.scrollWidth;
+			el.style.fontSize = prev.fontSize;
+			el.style.width = prev.width;
+			el.style.flex = prev.flex;
+			let next = natural <= room ? max : Math.max(min, Math.floor((max * room) / natural));
+			// The estimate can be a pixel or two off (text doesn't scale exactly with the size): check the name as it
+			// really lays out in the row, and step down while it's still cut off.
+			el.style.fontSize = `${next}px`;
+			while (next > min && overflows(el)) {
+				next -= 1;
+				el.style.fontSize = `${next}px`;
 			}
-			setSize(s);
+			el.style.fontSize = prev.fontSize;
+			setSize(current => (current === next ? current : next));
 		};
-		fit();
-		const ro = new ResizeObserver(fit);
-		if (el.parentElement) ro.observe(el.parentElement);
-		// Re-fit when this exact font finishes loading (a swapped-in custom font changes the width).
-		if (style?.fontFamily) void document.fonts.load(`${max}px ${style.fontFamily}`, String(children)).then(fit, () => {});
-		void document.fonts.ready.then(fit);
-		document.fonts.addEventListener?.("loadingdone", fit);
+		fit(true);
+		const ro = new ResizeObserver(() => fit());
+		ro.observe(row);
+		// The logo and badge beside it take their width when they load or appear: the room changes with them.
+		const besides = new ResizeObserver(() => fit(true));
+		for (const other of row.children) if (other !== el) besides.observe(other);
+		const added = new MutationObserver(() => {
+			besides.disconnect();
+			for (const other of row.children) if (other !== el) besides.observe(other);
+			fit(true);
+		});
+		added.observe(row, { childList: true });
+		// A font that finishes loading changes the name's width: measure again.
+		const refit = () => fit(true);
+		if (style?.fontFamily) void document.fonts.load(`${max}px ${style.fontFamily}`, String(children)).then(refit, () => {});
+		void document.fonts.ready.then(refit);
+		document.fonts.addEventListener?.("loadingdone", refit);
 		return () => {
 			ro.disconnect();
-			document.fonts.removeEventListener?.("loadingdone", fit);
+			besides.disconnect();
+			added.disconnect();
+			document.fonts.removeEventListener?.("loadingdone", refit);
 		};
 	}, [children, max, min, style?.fontFamily]);
 	return (
-		<h1 ref={ref} className={`min-w-0 truncate ${className}`} style={{ ...style, fontSize: size }}>
+		// The clip box (truncate) gets room around the line, so descenders, accents and the last letter's overhang aren't
+		// cut off by a 1em line height; the negative margin keeps the row as tall as before.
+		<h1 ref={ref} className={`min-w-0 truncate ${className}`} style={{ ...style, fontSize: size, paddingBlock: "0.14em", marginBlock: "-0.14em", paddingInlineEnd: "0.06em" }}>
 			{children}
 		</h1>
 	);
@@ -249,6 +304,15 @@ interface DigitalLibraryProps {
 	showMyMusic?: boolean;
 }
 
+/** What a link opens on: its page's skeleton shows from the first frame, before the page starts loading it. */
+const startingView = (query: string | undefined): { opening: "album" | "artist" | "playlist" | null; search: boolean } => {
+	const params = new URLSearchParams(query || "");
+	if (params.get("artist") || params.get("artistName")) return { opening: "artist", search: false };
+	if (params.get("playlist") && params.get("playlist") !== "liked") return { opening: "playlist", search: false };
+	if (params.get("album") || params.get("track")) return { opening: "album", search: false };
+	return { opening: null, search: !!params.get("q")?.trim() };
+};
+
 export const DigitalLibrary = ({ query, urlPage = "library", urlPrefix, nav, override, showOverride = false, onBrowse, myMusic, showMyMusic = false }: DigitalLibraryProps) => {
 	const overrideShown = !!override && showOverride;
 	const settings = useSettingsStore(state => state.settings);
@@ -259,7 +323,8 @@ export const DigitalLibrary = ({ query, urlPage = "library", urlPrefix, nav, ove
 	const queueNext = useMusicStore(state => state.queueNext);
 	const configured = !!getMusicApiConfig()?.baseUrl;
 
-	const [page, setPage] = useState<Page>("home");
+	// A link straight to a page (a refresh, a quick player link) starts on that page's skeleton, not the home page's.
+	const [page, setPage] = useState<Page>(() => (startingView(query).search ? "search" : "home"));
 	const [searchQuery, setSearchQuery] = useState("");
 	const [tracks, setTracks] = useState<MusicTrack[]>([]);
 	const [albums, setAlbums] = useState<MusicAlbum[]>([]);
@@ -268,8 +333,8 @@ export const DigitalLibrary = ({ query, urlPage = "library", urlPrefix, nav, ove
 	const [chartAlbums, setChartAlbums] = useState<MusicAlbum[]>([]);
 	const [chartsLoaded, setChartsLoaded] = useState(false);
 	/** What's being opened, so its page shows a skeleton until it arrives. */
-	const [opening, setOpening] = useState<"album" | "artist" | "playlist" | null>(null);
-	const [loading, setLoading] = useState(false);
+	const [opening, setOpening] = useState<"album" | "artist" | "playlist" | null>(() => startingView(query).opening);
+	const [loading, setLoading] = useState(() => startingView(query).search);
 	const [error, setError] = useState<string | null>(null);
 	const [albumDetail, setAlbumDetail] = useState<AlbumDetail | null>(null);
 	/** Release details, bio and credits for the open album (keyed by album id; loads after the tracks). */
@@ -623,6 +688,8 @@ export const DigitalLibrary = ({ query, urlPage = "library", urlPrefix, nav, ove
 
 	// Loading placeholders shaped like what's on the way: track rows, cards and a page header.
 	const bone = `animate-pulse rounded-md ${brightness === "dark" ? "bg-[#ffffff12]" : "bg-[#0000000f]"}`;
+	/** A bone with its own rounding (a cover, a circle, a card): `bone`'s rounded-md would win over the one given. */
+	const shape = `animate-pulse ${brightness === "dark" ? "bg-[#ffffff12]" : "bg-[#0000000f]"}`;
 
 	const SkeletonHeading = () => <div className={`${bone} h-5 w-40 mx-1`} />;
 
@@ -647,7 +714,7 @@ export const DigitalLibrary = ({ query, urlPage = "library", urlPrefix, nav, ove
 		<div className="grid gap-x-1 overflow-hidden" style={{ gridTemplateColumns: `repeat(auto-fill,minmax(${min}px,1fr))`, gridTemplateRows: "auto", gridAutoRows: 0 }} aria-hidden="true">
 			{Array.from({ length: count }, (_, i) => (
 				<div key={i} className={`flex flex-col gap-2 p-2 ${round ? "items-center" : ""}`}>
-					<div className={`${bone} ${round ? "rounded-full w-4/5" : "w-full"} aspect-square`} />
+					<div className={`${shape} ${round ? "rounded-full w-4/5" : "w-full"} aspect-square`} />
 					<div className={`${bone} h-3.5 ${round ? "w-3/5" : "w-4/5"}`} />
 					{!round && <div className={`${bone} h-3 w-1/2`} />}
 				</div>
@@ -655,17 +722,117 @@ export const DigitalLibrary = ({ query, urlPage = "library", urlPrefix, nav, ove
 		</div>
 	);
 
-	/** An album, artist or playlist page on its way: the header, then its tracks. */
-	const SkeletonDetail = ({ round = false }: { round?: boolean }) => (
-		<div className="flex flex-col gap-6" aria-hidden="true">
-			<div className="flex items-end gap-5 pt-2">
-				<div className={`${bone} ${round ? "rounded-full" : "rounded-lg"} size-40 shrink-0`} />
-				<div className="flex flex-col gap-3 flex-1 min-w-0 pb-2">
-					<div className={`${bone} h-3 w-20`} />
-					<div className={`${bone} h-8 w-2/3`} />
-					<div className={`${bone} h-3.5 w-1/3`} />
-					<div className={`${bone} h-9 w-28 rounded-full mt-1`} />
+	/** A rounded panel like the album page's About and details cards, with a heading and a few lines. */
+	const SkeletonPanel = ({ lines = 2 }: { lines?: number }) => (
+		<div className={`flex flex-col gap-3 p-4 rounded-2xl ${brightness === "dark" ? "bg-[#ffffff0a]" : "bg-[#00000006]"}`}>
+			<div className={`${bone} h-4 w-24`} />
+			{Array.from({ length: lines }, (_, i) => (
+				<div key={i} className={`${bone} h-3`} style={{ width: `${90 - i * 25}%` }} />
+			))}
+		</div>
+	);
+
+	/** A shelf of release tiles, like the artist page's Albums and Singles. */
+	const SkeletonShelf = ({ round = false }: { round?: boolean }) => (
+		<div className="flex flex-col gap-2">
+			<SkeletonHeading />
+			<div className="flex gap-1 overflow-hidden">
+				{Array.from({ length: 8 }, (_, i) => (
+					<div key={i} className={`flex flex-col gap-1.5 shrink-0 p-1.5 ${round ? "w-28 items-center" : "w-32"}`}>
+						<div className={`${shape} ${round ? "size-24 rounded-full" : "w-full aspect-square"}`} />
+						<div className={`${bone} h-3 ${round ? "w-3/5" : "w-4/5"}`} />
+						{!round && <div className={`${bone} h-2.5 w-1/3`} />}
+					</div>
+				))}
+			</div>
+		</div>
+	);
+
+	/** An album page on its way: cover and title, About, the play buttons, its songs, then the release details. */
+	const SkeletonAlbum = () => (
+		<div className="flex flex-col gap-4" aria-hidden="true">
+			<div className="flex items-end gap-5">
+				<div className={`${shape} size-44 shrink-0 rounded-xl`} />
+				<div className="flex flex-col gap-2 flex-1 min-w-0">
+					<div className={`${bone} h-3 w-14`} />
+					<div className={`${bone} h-8 w-3/5`} />
+					<div className={`${bone} h-4 w-32`} />
+					<div className={`${bone} h-3 w-48`} />
 				</div>
+			</div>
+			<SkeletonPanel lines={2} />
+			<div className="flex items-center gap-2">
+				{[20, 28, 32, 32, 22].map((w, i) => (
+					<div key={i} className={`${shape} h-9 rounded-lg`} style={{ width: `${w * 4}px` }} />
+				))}
+			</div>
+			<SkeletonTracks count={10} />
+			<div className="grid gap-3 md:grid-cols-2 items-start">
+				<SkeletonPanel lines={4} />
+				<SkeletonPanel lines={3} />
+			</div>
+		</div>
+	);
+
+	/** An artist page on its way: the photo header with name and bio, top songs, then the release shelves. */
+	const SkeletonArtist = () => {
+		const dark = brightness === "dark";
+		return (
+			<div className="flex flex-col gap-3" aria-hidden="true">
+				<div className={`@container p-1.5 rounded-[1.4rem] ${dark ? "bg-[#ffffff0a] ring-1 ring-[#ffffff14]" : "bg-[#00000006] ring-1 ring-[#00000010]"}`}>
+					<div className="flex gap-1.5 h-60 @3xl:h-64">
+						<div className={`${shape} flex flex-col gap-2 flex-[1.9] min-w-0 rounded-2xl p-4`}>
+							<div className={`${bone} h-10 w-1/2`} />
+							<div className={`${bone} h-3.5 w-11/12`} />
+							<div className={`${bone} h-3.5 w-3/4`} />
+							<div className={`${bone} h-3 w-24`} />
+						</div>
+						<div className={`${shape} hidden @3xl:block flex-[0.85] min-w-0 rounded-2xl`} />
+						<div className="hidden @3xl:flex flex-col gap-1.5 flex-[0.5] min-w-0">
+							<div className={`${shape} flex-1 min-h-0 rounded-2xl`} />
+							<div className={`${shape} w-full aspect-square shrink-0 rounded-full`} />
+						</div>
+						<div className={`${shape} hidden @3xl:block flex-[1.35] min-w-0 rounded-2xl`} />
+						<div className="flex flex-col items-center justify-center w-11 shrink-0">
+							<div className={`${shape} size-10 rounded-full`} />
+						</div>
+					</div>
+				</div>
+				<div className="flex flex-col gap-2.5">
+					{Array.from({ length: 6 }, (_, i) => (
+						<div key={i} className={`flex items-center gap-3 h-15 px-4 rounded-xl ${dark ? "bg-[#ffffff14]" : "bg-[#0000000a]"}`}>
+							<div className={`${bone} size-9 shrink-0`} />
+							<div className="flex flex-col gap-1.5 flex-1 min-w-0">
+								<div className={`${bone} h-3.5`} style={{ width: `${30 + ((i * 37) % 30)}%` }} />
+								<div className={`${bone} h-3 w-20`} />
+							</div>
+							<div className={`${bone} h-3.5 w-16 shrink-0`} />
+						</div>
+					))}
+				</div>
+				<div className="flex flex-col gap-4 mt-1">
+					<SkeletonShelf />
+					<SkeletonShelf />
+					<SkeletonShelf round />
+				</div>
+			</div>
+		);
+	};
+
+	/** A playlist on its way: its cover and name, the play buttons, then its songs. */
+	const SkeletonPlaylist = () => (
+		<div className="flex flex-col gap-4" aria-hidden="true">
+			<div className="flex flex-wrap items-end gap-5 px-1">
+				<div className={`${shape} size-36 shrink-0 rounded-xl`} />
+				<div className="flex flex-col gap-2 flex-1 min-w-0">
+					<div className={`${bone} h-3 w-16`} />
+					<div className={`${bone} h-8 w-1/2`} />
+					<div className={`${bone} h-3 w-28`} />
+				</div>
+			</div>
+			<div className="flex items-center gap-2 px-1">
+				<div className={`${shape} h-8 w-24 rounded-full`} />
+				<div className={`${shape} h-8 w-28 rounded-full`} />
 			</div>
 			<SkeletonTracks count={10} />
 		</div>
@@ -766,6 +933,11 @@ export const DigitalLibrary = ({ query, urlPage = "library", urlPrefix, nav, ove
 		</div>
 	);
 
+	/** A song's title opens its album (found by name when the song doesn't say which). */
+	const openSongAlbum = (track: MusicTrack) => void (track.albumId ? openAlbum(track.albumId) : openAlbumForTrack(track.title, track.artist));
+	/** A song's artist: by id for a solo credit, by name for each collaborator. */
+	const openSongArtist = (track: MusicTrack, name: string, index: number, count: number) => void (index === 0 && count === 1 && track.artistId ? openArtist(track.artistId) : openArtistByName(name));
+
 	const AlbumCard = ({ album, showMeta }: { album: MusicAlbum; showMeta?: boolean }) => {
 		const year = album.releaseDate ? new Date(album.releaseDate).getFullYear() : null;
 		const kind = album.type === "single" ? "Single" : album.type === "ep" ? "EP" : "Album";
@@ -776,9 +948,11 @@ export const DigitalLibrary = ({ query, urlPage = "library", urlPrefix, nav, ove
 					<span title={cleanAlbumTitle(album.title)} className="text-sm font-medium truncate">
 						{cleanAlbumTitle(album.title)}
 					</span>
-					<span title={showMeta ? undefined : album.artist} className="text-xs text-(--text-tertiary) truncate">
-						{showMeta ? [year, kind].filter(Boolean).join(" · ") : album.artist}
-					</span>
+					{showMeta ? (
+						<span className="text-xs text-(--text-tertiary) truncate">{[year, kind].filter(Boolean).join(" · ")}</span>
+					) : (
+						<ArtistLinks credit={album.artist} onOpen={(name, i, count) => (i === 0 && count === 1 && album.artistId ? openArtist(album.artistId) : openArtistByName(name))} className="text-xs text-(--text-tertiary) truncate" />
+					)}
 				</div>
 			</div>
 		);
@@ -853,11 +1027,11 @@ export const DigitalLibrary = ({ query, urlPage = "library", urlPrefix, nav, ove
 						</div>
 					</div>
 					<div className="flex flex-col min-w-0">
-						<span title={track.title} className="flex items-center gap-1.5 text-sm font-semibold leading-tight truncate">
-							<span className="truncate">{track.title}</span>
+						<span className="flex items-center gap-1.5 text-sm font-semibold leading-tight truncate">
+							<TitleLink title={track.title} onOpen={() => openSongAlbum(track)} className="truncate" />
 							{track.explicit && <span className="shrink-0 text-[9px] px-1 py-0.5 rounded-[3px] bg-(--text-tertiary) text-(--secondary) font-bold leading-none">E</span>}
 						</span>
-						<span className="text-xs text-(--text-tertiary) leading-tight truncate">{track.artist}</span>
+						<ArtistLinks credit={track.artist} onOpen={(name, i, count) => openSongArtist(track, name, i, count)} className="text-xs text-(--text-tertiary) leading-tight truncate" />
 					</div>
 				</div>
 				<span className="text-sm font-semibold text-(--text-secondary)">
@@ -926,7 +1100,7 @@ export const DigitalLibrary = ({ query, urlPage = "library", urlPrefix, nav, ove
 
 	const HomePage = () => (
 		<div className="flex flex-col gap-6">
-			<YourLibrary mode="browse" dark={brightness === "dark"} onPlayList={playListFrom} onOpenArtist={openArtistByName} onOpenAlbum={openAlbumByName} onOpenAlbumId={openAlbum} onOpenPlaylist={openPlaylist} onSongMenu={openSongMenu} />
+			<YourLibrary mode="browse" dark={brightness === "dark"} onPlayList={playListFrom} onOpenArtist={openArtistByName} onOpenAlbum={openAlbumByName} onOpenAlbumId={openAlbum} onOpenPlaylist={openPlaylist} onSongMenu={openSongMenu} onOpenSongAlbum={openSongAlbum} />
 			{!chartsLoaded && (
 				<>
 					<div className="flex flex-col gap-2">
@@ -979,7 +1153,17 @@ export const DigitalLibrary = ({ query, urlPage = "library", urlPrefix, nav, ove
 		};
 	const MyMusicPage = () => (
 		<div className="flex flex-col gap-6">
-			<YourLibrary mode="library" dark={brightness === "dark"} onPlayList={playListFrom} onOpenArtist={viaBrowse(openArtistByName)} onOpenAlbum={viaBrowse(openAlbumByName)} onOpenAlbumId={viaBrowse(openAlbum)} onOpenPlaylist={viaBrowse(openPlaylist)} onSongMenu={openSongMenu} />
+			<YourLibrary
+				mode="library"
+				dark={brightness === "dark"}
+				onPlayList={playListFrom}
+				onOpenArtist={viaBrowse(openArtistByName)}
+				onOpenAlbum={viaBrowse(openAlbumByName)}
+				onOpenAlbumId={viaBrowse(openAlbum)}
+				onOpenPlaylist={viaBrowse(openPlaylist)}
+				onSongMenu={openSongMenu}
+				onOpenSongAlbum={viaBrowse(openSongAlbum)}
+			/>
 			{myMusic}
 		</div>
 	);
@@ -1083,6 +1267,10 @@ export const DigitalLibrary = ({ query, urlPage = "library", urlPrefix, nav, ove
 					<div className="flex flex-col gap-2">
 						<SkeletonHeading />
 						<SkeletonCards count={6} round min={110} />
+					</div>
+					<div className="flex flex-col gap-2">
+						<SkeletonHeading />
+						<SkeletonCards count={6} />
 					</div>
 					<div className="flex flex-col gap-2">
 						<SkeletonHeading />
@@ -1331,6 +1519,10 @@ export const DigitalLibrary = ({ query, urlPage = "library", urlPrefix, nav, ove
 						)}
 					</div>
 				)}
+
+				<section className={card}>
+					<MusicComments album={{ title: album.title, artist: album.artist }} dark={dark} />
+				</section>
 
 				{artZoom && zoomSrc && <ArtworkLightbox src={zoomSrc} title={cleanAlbumTitle(album.title)} onClose={() => setArtZoom(false)} />}
 			</div>
@@ -1714,7 +1906,9 @@ export const DigitalLibrary = ({ query, urlPage = "library", urlPrefix, nav, ove
 			<div className={`flex-1 overflow-auto px-4 pb-4 ${overrideShown ? "hidden" : ""}`}>
 				{/* Called (not <HomePage />) so Your Library keeps its state across re-renders. */}
 				{showMyMusic && MyMusicPage()}
-				{!showMyMusic && opening && <SkeletonDetail round={opening === "artist"} />}
+				{!showMyMusic && opening === "album" && <SkeletonAlbum />}
+				{!showMyMusic && opening === "artist" && <SkeletonArtist />}
+				{!showMyMusic && opening === "playlist" && <SkeletonPlaylist />}
 				{!showMyMusic && !opening && page === "home" && HomePage()}
 				{!showMyMusic && !opening && page === "search" && <SearchPage />}
 				{!showMyMusic && !opening && page === "album" && AlbumPage()}

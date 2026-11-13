@@ -10,6 +10,7 @@ import {
 	FilmIcon,
 	ForwardIcon,
 	InformationCircleIcon,
+	ChatBubbleOvalLeftIcon,
 	MusicalNoteIcon,
 	PauseIcon,
 	PhotoIcon,
@@ -34,6 +35,7 @@ import { HolyLink } from "../../components/common/HolyLink";
 import { HolyText } from "../../components/common/HolyText";
 import { useHolyAttr } from "../../libs/holy-attr";
 import { reducedMotion } from "../../libs/motion";
+import { MusicComments } from "../../components/MusicComments";
 
 interface MusicPlayerProps {
 	query?: string;
@@ -824,7 +826,6 @@ const MusicVideo = ({ track, videoId, seconds, onUnplayable, className }: { trac
 			follow();
 		};
 
-		// The embed only reports to a page that says it's listening; repeat until it answers.
 		let greeting = 0;
 		const greet = () => frame.contentWindow?.postMessage(JSON.stringify({ event: "listening", id: 1, channel: "widget" }), YT_ORIGIN);
 		const onLoad = () => {
@@ -832,7 +833,7 @@ const MusicVideo = ({ track, videoId, seconds, onUnplayable, className }: { trac
 			greet();
 			greeting = window.setInterval(greet, 250);
 		};
-		// Something started the song itself (a retry, media keys): the video still has the floor.
+
 		const onSongPlay = () => {
 			if (role !== "own") return follow();
 			audio?.pause();
@@ -840,7 +841,6 @@ const MusicVideo = ({ track, videoId, seconds, onUnplayable, className }: { trac
 		};
 		const onSongSeeked = () => follow(true);
 		const onSongPause = () => follow();
-		// The embed goes quiet while paused: keep checking the two stay together.
 		const watch = window.setInterval(follow, 500);
 		frame.addEventListener("load", onLoad);
 		window.addEventListener("message", onMessage);
@@ -864,7 +864,6 @@ const MusicVideo = ({ track, videoId, seconds, onUnplayable, className }: { trac
 			unsubscribe();
 			if (role !== "own") return;
 			setPlaybackOwner(null);
-			// On to another song: it starts by itself.
 			if (!audio || useMusicStore.getState().currentTrack?.id !== trackId) return;
 			const total = songLength();
 			if (total && length) audio.currentTime = Math.max(0, Math.min((time / length) * total, total - 1));
@@ -881,7 +880,6 @@ const MusicVideo = ({ track, videoId, seconds, onUnplayable, className }: { trac
 				src={`${YT_ORIGIN}/embed/${videoId}?${params}`}
 				title={`${track.title} music video`}
 				allow="autoplay; encrypted-media; picture-in-picture"
-				// YouTube refuses to play embeds that send no referrer.
 				referrerPolicy="strict-origin-when-cross-origin"
 				tabIndex={-1}
 				className="absolute inset-0 size-full pointer-events-none"
@@ -891,7 +889,6 @@ const MusicVideo = ({ track, videoId, seconds, onUnplayable, className }: { trac
 	);
 };
 
-/** Shown over the video until it starts (and while the lookup runs): the blurred cover with a spinner. */
 const VideoPoster = ({ track, className }: { track: Track; className?: string }) => (
 	<div className={`absolute inset-0 flex items-center justify-center pointer-events-none ${className ?? ""}`}>
 		{track.cover && <img src={track.cover} alt="" className="absolute inset-0 size-full object-cover scale-110 blur-2xl opacity-80" />}
@@ -899,7 +896,6 @@ const VideoPoster = ({ track, className }: { track: Track; className?: string })
 	</div>
 );
 
-/** The Now Playing tab's icon: the song's cover. */
 export const NowPlayingTabIcon = ({ cover }: { cover: string }) => <img src={cover} alt="" className="size-5 shrink-0 rounded object-cover" />;
 
 export const MusicPlayer = ({ query, className, onClose }: MusicPlayerProps) => {
@@ -929,7 +925,6 @@ export const MusicPlayer = ({ query, className, onClose }: MusicPlayerProps) => 
 		if (tab) updateTab(tab.id, { url: playerUrl(target), displayUrl: playerUrl(target) });
 	};
 
-	// The Now Playing tab shows the song: its title and cover.
 	useEffect(() => {
 		const { tabs, updateTab } = useTabsStore.getState();
 		const icon = currentTrack?.cover ? <NowPlayingTabIcon cover={currentTrack.cover} /> : <MusicalNoteIcon className="size-5" />;
@@ -944,10 +939,7 @@ export const MusicPlayer = ({ query, className, onClose }: MusicPlayerProps) => 
 	};
 
 	const showVisualizer = settings["big-player-visualizer"] === true && settings["disable-visualizers"] !== true;
-	// Video mode shows the cover for songs without a music video.
 	const shown: PlayerMode = mode === "video" && !video.videoId && !video.loading ? "cover" : mode;
-	// The panel next to the album (video, queue, lyrics, credits, info). It keeps its last content while it
-	// slides shut, so closing animates instead of emptying first.
 	const panelOpen = shown !== "cover";
 	const [panel, setPanel] = useState<Exclude<PlayerMode, "cover">>(shown === "cover" ? "queue" : shown);
 	if (shown !== "cover" && shown !== panel) setPanel(shown);
@@ -955,13 +947,15 @@ export const MusicPlayer = ({ query, className, onClose }: MusicPlayerProps) => 
 	const iconButton = `flex items-center justify-center p-2 rounded-full text-(--text-primary) opacity-85 hover:opacity-100 cursor-pointer duration-150 ${dark ? "hover:bg-[#ffffff15]" : "hover:bg-[#00000010]"}`;
 	const transportButton = `flex items-center justify-center cursor-pointer hover:scale-110 active:scale-95 duration-150 ${dark ? "text-[#ffffffca] hover:text-[#ffffff] drop-shadow-[0_2px_10px_#00000040]" : "text-[#3A3535] hover:text-[#000000] drop-shadow-[0_2px_10px_#ffffff80]"}`;
 	const segment = (on: boolean) =>
-		`flex items-center justify-center size-9 @lg:size-10 rounded-full cursor-pointer duration-150 disabled:opacity-35 disabled:cursor-default ${
-			on ? `text-(--text-primary) ${dark ? "bg-[#ffffff2b] shadow-[inset_0_0_0_1px_#ffffff4d,0_2px_8px_#00000030]" : "bg-[#ffffffb0] shadow-[inset_0_0_0_1px_#00000014,0_2px_8px_#00000018]"}` : "text-(--text-secondary) enabled:hover:text-(--text-primary)"
+		`flex items-center justify-center rounded-full cursor-pointer duration-150 disabled:opacity-35 disabled:cursor-default ${
+			// The open view's button is the big one; the rest sit smaller beside it.
+			on ? `size-9 @lg:size-10 text-(--text-primary) ${dark ? "bg-[#ffffff2b] shadow-[inset_0_0_0_1px_#ffffff4d,0_2px_8px_#00000030]" : "bg-[#ffffffb0] shadow-[inset_0_0_0_1px_#00000014,0_2px_8px_#00000018]"}` : "size-8 @lg:size-9 [&>svg]:size-4.5 text-(--text-secondary) enabled:hover:text-(--text-primary)"
 		}`;
 	const roundButton = `flex items-center justify-center size-9 rounded-full text-(--text-secondary) hover:text-(--text-primary) cursor-pointer duration-150 ${glass}`;
 	const linkable = isLinkable(currentTrack);
 	const openLibrary = () => (onClose ? onClose() : void import("../../libs/aboutPages").then(m => m.openLibraryPage("")));
 	const { ref: infoButtonRef, placeholder: infoButtonTitle } = useHolyAttr({ title: "Song information" });
+	const { ref: commentsButtonRef, placeholder: commentsButtonTitle } = useHolyAttr({ title: "Comments" });
 
 	const trackInfo = (track: Track, align: "center" | "left") => {
 		const album = track.album && !/^unknown/i.test(track.album) ? cleanAlbumTitle(track.album) : null;
@@ -1037,6 +1031,9 @@ export const MusicPlayer = ({ query, className, onClose }: MusicPlayerProps) => 
 							<button title="Lyrics" aria-pressed={shown === "lyrics"} className={segment(shown === "lyrics")} onClick={() => changeMode("lyrics")}>
 								<ChatBubbleBottomCenterTextIcon className="size-5" />
 							</button>
+							<button ref={commentsButtonRef} {...commentsButtonTitle} aria-pressed={shown === "comments"} className={segment(shown === "comments")} onClick={() => changeMode("comments")}>
+								<ChatBubbleOvalLeftIcon className="size-5" />
+							</button>
 							<button ref={infoButtonRef} {...infoButtonTitle} aria-pressed={shown === "info"} className={segment(shown === "info")} onClick={() => changeMode("info")}>
 								<InformationCircleIcon className="size-5" />
 							</button>
@@ -1092,7 +1089,19 @@ export const MusicPlayer = ({ query, className, onClose }: MusicPlayerProps) => 
 									</div>
 								) : (
 									<div className={`size-full rounded-3xl border ${dark ? "border-[#ffffff40] bg-[#ffffff12]" : "border-[#00000020] bg-[#ffffff40]"} backdrop-blur-sm overflow-hidden`}>
-										{panel === "lyrics" ? <LyricsPanel track={currentTrack} /> : panel === "credits" ? <CreditsPanel track={currentTrack} /> : panel === "info" ? <InfoPanel track={currentTrack} /> : <QueuePanel />}
+										{panel === "lyrics" ? (
+											<LyricsPanel track={currentTrack} />
+										) : panel === "credits" ? (
+											<CreditsPanel track={currentTrack} />
+										) : panel === "info" ? (
+											<InfoPanel track={currentTrack} />
+										) : panel === "comments" ? (
+											<div className="size-full overflow-y-auto p-5 @lg:p-6">
+												<MusicComments track={currentTrack} dark={dark} />
+											</div>
+										) : (
+											<QueuePanel />
+										)}
 									</div>
 								)}
 							</div>
