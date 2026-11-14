@@ -95,16 +95,30 @@ function trackedKeys(game: SaveGame): string[] {
 	return [...keys];
 }
 
+// Ruffle keys a SharedObject by the page's hostname (`fracit.al//papasfreezeria_1`), so a save made on one
+// host is invisible on another. Snapshots carry Flash keys with the hostname swapped for this placeholder,
+// and a restore puts back this page's hostname.
+const HOST = "{host}";
+const isHostedFlashKey = (game: SaveGame, k: string, v: string) => game.type === "flash" && isFlashSave(v) && k.includes("/");
+const keyHost = (k: string) => k.slice(0, k.indexOf("/"));
+const rehost = (k: string, host: string) => host + k.slice(k.indexOf("/"));
+
 function collect(game: SaveGame): Snapshot {
 	const ls: Record<string, string> = {};
 	for (const k of trackedKeys(game).sort()) {
 		const v = localStorage.getItem(k);
-		if (v !== null) ls[k] = v;
+		if (v === null) continue;
+		if (!isHostedFlashKey(game, k, v)) ls[k] = v;
+		// A copy under another hostname is one Ruffle never reads here (left by restores before HOST existed).
+		else if (keyHost(k) === location.hostname) ls[rehost(k, HOST)] = v;
 	}
 	return { v: 1, ls };
 }
 
-/** cyrb53 over the sorted entries; only used to tell snapshots apart. */
+/**
+ * cyrb53 over the sorted entries; only used to tell snapshots apart. "h2-" marks snapshots with HOST keys: an
+ * unmarked hash is from before them and can't be compared with one taken now.
+ */
 function hashSnapshot(snap: Snapshot): string {
 	const str = JSON.stringify(Object.entries(snap.ls).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)));
 	let h1 = 0xdeadbeef;
@@ -116,14 +130,21 @@ function hashSnapshot(snap: Snapshot): string {
 	}
 	h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
 	h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
-	return `${(h2 >>> 0).toString(16).padStart(8, "0")}${(h1 >>> 0).toString(16).padStart(8, "0")}`;
+	return `h2-${(h2 >>> 0).toString(16).padStart(8, "0")}${(h1 >>> 0).toString(16).padStart(8, "0")}`;
 }
 
 function applySnapshot(game: SaveGame, snap: Snapshot) {
-	const incoming = Object.keys(snap.ls).filter(k => !isAppKey(k));
-	for (const k of trackedKeys(game)) if (!(k in snap.ls)) localStorage.removeItem(k);
-	for (const k of incoming) localStorage.setItem(k, snap.ls[k]);
-	addToIndex(gameSaveKey(game.title), incoming);
+	const incoming = new Map<string, string>();
+	for (const [k, v] of Object.entries(snap.ls)) {
+		if (isAppKey(k)) continue;
+		// HOST keys, and the real hostnames that older snapshots carry, both land on this page's hostname.
+		const local = isHostedFlashKey(game, k, v) ? rehost(k, location.hostname) : k;
+		// Older snapshots can hold one save under two hostnames; keep the bigger (further along) one.
+		if ((incoming.get(local)?.length ?? -1) < v.length) incoming.set(local, v);
+	}
+	for (const k of trackedKeys(game)) if (!incoming.has(k)) localStorage.removeItem(k);
+	for (const [k, v] of incoming) localStorage.setItem(k, v);
+	addToIndex(gameSaveKey(game.title), [...incoming.keys()]);
 }
 
 // ============================================================
@@ -184,13 +205,15 @@ export function syncGame(game: SaveGame, mode: SyncMode = "auto", opts: { remote
 			const local = collect(game);
 			const localHash = hashSnapshot(local);
 			const empty = Object.keys(local.ls).length === 0;
-			const base = states[key]?.hash;
+			// The last synced state, unless it was recorded before HOST keys: then it's unknown, so the first sync
+			// restores onto an empty device and otherwise asks, rather than overwriting either side.
+			const base = states[key]?.hash.startsWith("h2-") ? states[key].hash : undefined;
 
-			const upload = async (): Promise<GameSaveInfo> => {
-				const data = JSON.stringify(local);
+			const upload = async (snap = local, hash = localHash): Promise<GameSaveInfo> => {
+				const data = JSON.stringify(snap);
 				if (data.length > MAX_BYTES) return setInfo(key, { status: "error", error: "This save is too large to back up" });
-				const res = await meFetch<{ updatedAt: string }>(`/api/me/game-saves/${key}`, { method: "PUT", body: JSON.stringify({ title: game.title, hash: localHash, data }), keepalive: opts.keepalive && data.length < 60_000 });
-				remember(localHash);
+				const res = await meFetch<{ updatedAt: string }>(`/api/me/game-saves/${key}`, { method: "PUT", body: JSON.stringify({ title: game.title, hash, data }), keepalive: opts.keepalive && data.length < 60_000 });
+				remember(hash);
 				return setInfo(key, { status: "synced", updatedAt: res.updatedAt });
 			};
 			const restore = async (): Promise<GameSaveInfo> => {
@@ -198,7 +221,11 @@ export function syncGame(game: SaveGame, mode: SyncMode = "auto", opts: { remote
 				const snap = JSON.parse(res.data) as Snapshot;
 				if (snap?.v !== 1 || typeof snap.ls !== "object" || !snap.ls) throw new Error("Unreadable cloud save");
 				applySnapshot(game, snap);
-				remember(hashSnapshot(collect(game)));
+				const restored = collect(game);
+				const hash = hashSnapshot(restored);
+				// A cloud save from before HOST keys reads back with a new hash: store it again in the new form.
+				if (remote && remote.hash !== hash) return await upload(restored, hash);
+				remember(hash);
 				return setInfo(key, { status: "synced", updatedAt: res.updatedAt });
 			};
 
