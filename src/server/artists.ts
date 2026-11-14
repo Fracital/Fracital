@@ -152,10 +152,7 @@ export async function assignBaseUsername(pool: Pool, userId: string, name: strin
 	const candidates = [...(stem === base ? [base] : []), ...Array.from({ length: 5 }, () => stem + digits(4)), ...Array.from({ length: 5 }, () => stem + digits(8))];
 	for (const candidate of candidates) {
 		try {
-			const { rows } = await pool.query<{ username: string | null }>(
-				"insert into fracital_user_meta (user_id, username) values ($1, $2) on conflict (user_id) do update set username = coalesce(fracital_user_meta.username, excluded.username) returning username",
-				[userId, candidate],
-			);
+			const { rows } = await pool.query<{ username: string | null }>("insert into fracital_user_meta (user_id, username) values ($1, $2) on conflict (user_id) do update set username = coalesce(fracital_user_meta.username, excluded.username) returning username", [userId, candidate]);
 			return rows[0]?.username ?? null;
 		} catch (err) {
 			// Taken (the unique index on lower(username)): try the next one.
