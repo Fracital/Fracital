@@ -1,8 +1,8 @@
-import { useState, useEffect } from "react";
-import { XMarkIcon, CheckIcon, ArrowDownTrayIcon, MagnifyingGlassIcon } from "@heroicons/react/24/solid";
-import { GamesPath } from "../types";
-import { useSettingsStore } from "../store";
+import { ArrowDownTrayIcon, CheckIcon, MagnifyingGlassIcon, XMarkIcon } from "@heroicons/react/24/solid";
 import { createId } from "@paralleldrive/cuid2";
+import { useEffect, useState } from "react";
+import { useSettingsStore } from "../store";
+import { GamesPath } from "../types";
 
 interface StoreGame {
 	id: string;
@@ -14,6 +14,8 @@ interface StoreGame {
 	tags?: string[];
 	swfUrl?: string;
 	filesUrl?: string;
+	// A single-file HTML5 game: saved as index.html, no zip.
+	htmlUrl?: string;
 	gameFile?: string;
 	source: "base" | "store";
 	storeName?: string;
@@ -24,6 +26,10 @@ interface GameStore {
 	name: string;
 	url: string;
 	description?: string;
+	// Turns a catalog that is not in the store.json shape into store games.
+	parse?: (data: any) => Omit<StoreGame, "source" | "storeName">[];
+	// Fixes up a single-file game's HTML before it is saved.
+	patchHtml?: (html: string) => string;
 }
 
 interface GameInstallerProps {
@@ -33,10 +39,42 @@ interface GameInstallerProps {
 const GAME_STORES: GameStore[] = [
 	{
 		name: "Official Store",
-		url: "https://raw.githubusercontent.com/NovaAppsInc/fracital-games/main/store.json",
+		url: "https://raw.githubusercontent.com/Fracital/g/main/store.json",
 		description: "Official Fracital game store",
 	},
+	{
+		name: "gn-math",
+		url: "https://raw.githubusercontent.com/gn-math/assets/main/zones.json",
+		description: "Community catalog of single-file HTML5 games",
+		parse: parseGnMath,
+		patchHtml: patchGnMathHtml,
+	},
 ];
+
+// gn-math's zones.json is a flat list whose URLs carry {COVER_URL}/{HTML_URL} placeholders.
+// Entries that link elsewhere (its Discord invite) and its non-game "tools" are skipped.
+function parseGnMath(zones: any) {
+	if (!Array.isArray(zones)) return [];
+	const base = "https://raw.githubusercontent.com/gn-math";
+	return zones
+		.filter((zone: any) => typeof zone.url === "string" && zone.url.startsWith("{HTML_URL}/") && !zone.special?.includes("tools"))
+		.map((zone: any) => ({
+			id: `gn-${zone.id}`,
+			title: zone.name,
+			description: "",
+			type: "html5" as const,
+			author: zone.author,
+			tags: zone.special || [],
+			thumbnail: zone.cover?.replace("{COVER_URL}", `${base}/covers/main`),
+			htmlUrl: zone.url.replace("{HTML_URL}", `${base}/html/main`),
+		}));
+}
+
+// About 40 of gn-math's Flash pages size the player with a stylesheet from a GitHub account
+// that no longer exists, so the player collapses to nothing; this stands in for it.
+function patchGnMathHtml(html: string) {
+	return html.replace(/<link[^>]*cdn\.jsdelivr\.net\/gh\/AndreajnRcm4\/[^>]*>/gi, "<style>html,body{margin:0;height:100%;overflow:hidden}</style>");
+}
 
 const discoverBaseGames = async (): Promise<StoreGame[]> => {
 	const games: StoreGame[] = [];
@@ -125,12 +163,13 @@ export const GameInstaller = ({ onComplete }: GameInstallerProps) => {
 						const response = await fetch(store.url);
 						if (response.ok) {
 							const storeData = await response.json();
-							const storeGames = (storeData.games || []).map((game: any) => ({
+							const storeGames = (store.parse ? store.parse(storeData) : storeData.games || []).map((game: any) => ({
 								...game,
 								source: "store",
 								storeName: store.name,
 							}));
-							allGames.push(...storeGames);
+							// A game the app already bundles (or another store listed) shows once: the first copy wins.
+							allGames.push(...storeGames.filter((game: StoreGame) => !allGames.some(g => g.id === game.id || g.title === game.title)));
 						}
 					} catch (err) {
 						console.error(`Failed to load store ${store.name}:`, err);
@@ -167,7 +206,7 @@ export const GameInstaller = ({ onComplete }: GameInstallerProps) => {
 				if (!response.ok) throw new Error(`Failed to fetch ${game.title}`);
 
 				const reader = response.body?.getReader();
-				const contentLength = parseInt(response.headers.get("Content-Length") || "0");
+				const contentLength = Number.parseInt(response.headers.get("Content-Length") || "0");
 				let receivedLength = 0;
 				const chunks: Uint8Array[] = [];
 
@@ -190,6 +229,13 @@ export const GameInstaller = ({ onComplete }: GameInstallerProps) => {
 				}
 
 				await window.fr.fs.promises.writeFile(`${folderPath}/game.swf`, window.fr.buffer.from(allChunks.buffer));
+			} else if (game.type === "html5" && game.htmlUrl) {
+				const response = await fetch(game.htmlUrl);
+				if (!response.ok) throw new Error(`Failed to fetch ${game.title}`);
+				setProgress(prev => ({ ...prev, [game.id]: 50 }));
+				const html = await response.text();
+				const patchHtml = GAME_STORES.find(store => store.name === game.storeName)?.patchHtml;
+				await window.fr.fs.promises.writeFile(`${folderPath}/index.html`, patchHtml ? patchHtml(html) : html);
 			} else if (game.type === "html5" && game.filesUrl) {
 				const response = await fetch(game.filesUrl);
 				if (!response.ok) throw new Error(`Failed to fetch ${game.title}`);
@@ -318,7 +364,7 @@ export const GameInstaller = ({ onComplete }: GameInstallerProps) => {
 											</span>
 											{game.thumbnail ? (
 												<div className="relative w-full h-full bg-(--primary) flex items-center justify-center">
-													<img src={game.thumbnail} alt={game.title} className="w-full h-full object-cover" />
+													<img src={game.thumbnail} alt={game.title} loading="lazy" className="w-full h-full object-cover" />
 												</div>
 											) : (
 												<div className="flex items-center justify-center w-full h-full">
