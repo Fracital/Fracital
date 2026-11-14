@@ -1,4 +1,4 @@
-import { BookmarkIcon, BookOpenIcon, ChevronDownIcon, FireIcon, PlusIcon, RectangleStackIcon, SpeakerWaveIcon, SpeakerXMarkIcon, XMarkIcon } from "@heroicons/react/24/solid";
+import { ChevronDownIcon, ClockIcon, PlusIcon, RectangleStackIcon, SpeakerWaveIcon, SpeakerXMarkIcon, XMarkIcon } from "@heroicons/react/24/solid";
 import { createId } from "@paralleldrive/cuid2";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -14,6 +14,7 @@ import { toggleMute } from "../libs/playback";
 import { groupKey, nextGroupName, tabKey, topLevel, usePanelsStore, useSettingsStore, useTabAudioStore, useTabsStore } from "../store";
 import { GROUPS_ON_TOP_SETTING } from "../types";
 import { addGroups, addTabs, BatchAdd, moveToEnd, useMoreOnHold, useOpenLinks } from "./tabBatch";
+import { ProfileStrip } from "./TabProfiles";
 
 /*
  * Each tab's page stays where App mounts it (a [data-tab-frame] box filling the page area). While the view is
@@ -583,11 +584,10 @@ export const TabView = () => {
 	return (
 		<div ref={rootRef} role="dialog" aria-hidden={!open} className={`absolute inset-0 z-30 flex flex-col bg-(--secondary) duration-150 ${open ? "" : "opacity-0 pointer-events-none invisible"}`}>
 			<div className="flex shrink-0 items-center justify-between gap-3 p-3 pb-2">
-				{/* Not wired up yet: these pages don't exist. */}
 				<div className="flex min-w-0 items-center gap-4 overflow-x-auto [scrollbar-width:none]">
-					<HeaderLink icon={<BookmarkIcon className="size-5" />} text="Bookmarks" />
-					<HeaderLink icon={<BookOpenIcon className="size-5" />} text="History" />
-					<HeaderLink icon={<FireIcon className="size-5" />} text="Recommended" />
+					<HeaderLink icon={<ClockIcon className="size-5" />} text="History" onClick={openHistory} />
+					<span className="h-6 w-px shrink-0 bg-[#ffffff20]" aria-hidden="true" />
+					<ProfileStrip />
 				</div>
 				<div className="flex shrink-0 items-center gap-1.5">
 					<div className={SPLIT_BUTTON}>
@@ -699,8 +699,19 @@ const SPLIT_MAIN = "flex items-center justify-center h-full pl-2 pr-1 rounded-l-
 const SPLIT_MORE = "flex items-center justify-center h-full pl-0.5 pr-2 rounded-r-xl hover:text-(--text-primary) cursor-pointer duration-150";
 const ICON_BUTTON = "flex shrink-0 items-center justify-center rounded-full cursor-pointer duration-150";
 
-const HeaderLink = ({ icon, text }: { icon: React.ReactNode; text: string }) => (
-	<button type="button" className="flex shrink-0 items-center gap-1.5 text-lg font-semibold text-(--text-secondary) hover:text-(--text-primary) cursor-pointer duration-150">
+/** Leaves the tab view for a page: its open tab if there is one, else a new tab. */
+const showPage = (url: string, title: string) => {
+	const { tabs, setCurrentTab, newTab } = useTabsStore.getState();
+	const existing = tabs.find(t => t.url === url);
+	if (existing) setCurrentTab(existing.id);
+	else newTab({ id: createId(), url, displayUrl: url, title, icon: null, current: true });
+	usePanelsStore.getState().setTabViewOpen(false);
+};
+
+const openHistory = () => showPage("about:history", "History");
+
+const HeaderLink = ({ icon, text, onClick }: { icon: React.ReactNode; text: string; onClick: () => void }) => (
+	<button type="button" className="flex shrink-0 items-center gap-1.5 text-lg font-semibold text-(--text-secondary) hover:text-(--text-primary) cursor-pointer duration-150" onClick={onClick}>
 		{icon}
 		<HolyText className="max-sm:hidden" text={text} />
 	</button>

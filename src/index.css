@@ -1,4 +1,7 @@
 @import "tailwindcss";
+/* Font Awesome's base styles, in the base layer so size and color utilities on its icons win (App.tsx turns off its own
+   unlayered copy, which overrode them: every icon came out 1em). Here they also reach the cloak's shadow root. */
+@import "@fortawesome/fontawesome-svg-core/styles.css" layer(base);
 
 @font-face {
   font-family: Inter;

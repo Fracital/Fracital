@@ -170,6 +170,21 @@ const claimPromo = (pool: Pool, userId: string) =>
 		return true;
 	});
 
+/**
+ * The running promo for anyone, signed out too (the home page's notice): its terms and the spots left. `id` changes
+ * each time it's started, so a notice dismissed for one run shows again for the next. null while none runs.
+ */
+export const publicPromo = async (pool: Pool) => {
+	const { rows } = await pool.query<{ starts_at: Date; slots: number; days: number; reward_days: number; winners: number }>(
+		`select p.starts_at, p.slots, p.days, p.reward_days, (select count(*) from fracital_promo_winners w where w.promo_id = p.id)::int winners
+		from fracital_promos p where p.id = $1 and p.active`,
+		[PROMO_ID],
+	);
+	const p = rows[0];
+	if (!p) return null;
+	return { id: `${PROMO_ID}:${p.starts_at.getTime()}`, need: p.days, rewardDays: p.reward_days, slots: p.slots, slotsLeft: Math.max(0, p.slots - p.winners) };
+};
+
 export function registerStreakRoutes(app: Hono<Env>) {
 	app.get("/api/me/streak", async c => c.json(stateJson(await loadState(c.get("pool"), c.get("user").id))));
 

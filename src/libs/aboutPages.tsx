@@ -1,23 +1,29 @@
-import { ChatBubbleLeftRightIcon, CheckBadgeIcon, Cog6ToothIcon, DocumentIcon, FolderIcon, GlobeAltIcon, MusicalNoteIcon, PlayCircleIcon, PlayIcon, PuzzlePieceIcon, ShieldCheckIcon, SignalIcon, UserCircleIcon } from "@heroicons/react/24/solid";
+import { ChatBubbleLeftRightIcon, CheckBadgeIcon, ClockIcon, Cog6ToothIcon, DocumentIcon, FolderIcon, GlobeAltIcon, MusicalNoteIcon, NoSymbolIcon, PlayCircleIcon, PlayIcon, PuzzlePieceIcon, ShieldCheckIcon, SignalIcon, UserCircleIcon } from "@heroicons/react/24/solid";
 import { createId } from "@paralleldrive/cuid2";
-import type { ReactNode } from "react";
+import { lazy, type ReactNode } from "react";
+import { NowPlayingTabIcon } from "../components/NowPlayingTabIcon";
 import { useMusicStore, useTabsStore } from "../store";
-import { Account } from "../views/Account";
-import { AdminDashboard } from "../views/AdminDashboard";
-import { ArtistPanel } from "../views/ArtistPanel";
-import Chat from "../views/Chat";
-import { DigitalLibrary } from "../views/DigitalLibrary";
-import Extensions from "../views/Extensions";
-import Files from "../views/Files/Files";
-import Games from "../views/Games";
 import Home from "../views/Home";
-import { MusicLibrary } from "../views/Music/MusicLibrary";
-import { MusicPlayer, NowPlayingTabIcon } from "../views/Music/MusicPlayer";
-import Profile from "../views/Profile";
-import Settings from "../views/Settings";
-import Social from "../views/Social";
-import { TextEditor } from "../views/TextEditor";
 import { nowPlayingTitle } from "./playback";
+
+// Every page but the new tab page loads the first time it's opened, not with the app (App.tsx gives each its own
+// Suspense). Pages that export by name are picked out of their module.
+const Account = lazy(() => import("../views/Account").then(m => ({ default: m.Account })));
+const AdminDashboard = lazy(() => import("../views/AdminDashboard").then(m => ({ default: m.AdminDashboard })));
+const ArtistPanel = lazy(() => import("../views/ArtistPanel").then(m => ({ default: m.ArtistPanel })));
+const Blocked = lazy(() => import("../views/Blocked"));
+const Chat = lazy(() => import("../views/Chat"));
+const DigitalLibrary = lazy(() => import("../views/DigitalLibrary").then(m => ({ default: m.DigitalLibrary })));
+const Extensions = lazy(() => import("../views/Extensions"));
+const Files = lazy(() => import("../views/Files/Files"));
+const Games = lazy(() => import("../views/Games"));
+const History = lazy(() => import("../views/History"));
+const MusicLibrary = lazy(() => import("../views/Music/MusicLibrary").then(m => ({ default: m.MusicLibrary })));
+const MusicPlayer = lazy(() => import("../views/Music/MusicPlayer").then(m => ({ default: m.MusicPlayer })));
+const Profile = lazy(() => import("../views/Profile"));
+const Settings = lazy(() => import("../views/Settings"));
+const Social = lazy(() => import("../views/Social"));
+const TextEditor = lazy(() => import("../views/TextEditor").then(m => ({ default: m.TextEditor })));
 
 export interface AboutPage {
 	name: string;
@@ -109,6 +115,20 @@ export const aboutPages: Record<string, AboutPage> = {
 		component: Chat,
 		icon: <ChatBubbleLeftRightIcon className="size-5" />,
 		title: "Chat",
+	},
+	// Where a tab goes when the active tab profile blocks a site (profileRules.ts).
+	blocked: {
+		name: "blocked",
+		component: Blocked,
+		icon: <NoSymbolIcon className="size-5" />,
+		title: "Blocked",
+		hasQuery: true,
+	},
+	history: {
+		name: "history",
+		component: History,
+		icon: <ClockIcon className="size-5" />,
+		title: "History",
 	},
 	extensions: {
 		name: "extensions",

@@ -1,9 +1,11 @@
-import { create } from "zustand";
-import { normalizePath } from "./views/Files/pathUtils";
-import type { TabProps } from "./components/Tab";
-import { GROUPS_ON_TOP_SETTING, type Track } from "./types";
 import { createId } from "@paralleldrive/cuid2";
+import { create } from "zustand";
+import type { TabProps } from "./components/Tab";
 import { normalizeAboutUrl } from "./libs/aboutAlias";
+import { bootSettings, readBootLayout, writeBootLayout } from "./libs/bootCache";
+import { recordVisit } from "./libs/browsingHistory";
+import { GROUPS_ON_TOP_SETTING, type Track } from "./types";
+import { normalizePath } from "./views/Files/pathUtils";
 
 /** A name for a new group: one past the highest "Group N" there is, so closing one never repeats a name. */
 export const nextGroupName = (groups: { name: string }[]) => {
@@ -278,6 +280,7 @@ export const useTabsStore = create<{
 		const currentIndex = (tab as any)?.historyIndex ?? 0;
 
 		entry = { ...entry, url: normalizeAboutUrl(entry.url), displayUrl: normalizeAboutUrl(entry.displayUrl) };
+		recordVisit(id, entry);
 		const newHistory = [...currentHistory.slice(0, currentIndex + 1), entry];
 		const newIndex = newHistory.length - 1;
 
@@ -292,6 +295,7 @@ export const useTabsStore = create<{
 		const currentIndex = (tab as any)?.historyIndex ?? 0;
 		if (!currentHistory[currentIndex]) return get().pushHistory(id, entry);
 		entry = { ...entry, url: normalizeAboutUrl(entry.url), displayUrl: normalizeAboutUrl(entry.displayUrl) };
+		recordVisit(id, entry);
 		const newHistory = currentHistory.map((e: unknown, i: number) => (i === currentIndex ? entry : e));
 		set(state => ({
 			tabs: state.tabs.map(t => (t.id === id ? ({ ...t, history: newHistory } as unknown as TabProps) : t)),
@@ -397,12 +401,21 @@ export const useTabsStore = create<{
 	},
 }));
 
+/** The tab layout settings as they were last time (bootCache), until settings.json is read. */
+const bootLayout = readBootLayout();
+
 export const useSettingsStore = create<{
 	settings: Record<string, any>;
+	/** settings.json has been read (or failed to, and the defaults are in). */
+	loaded: boolean;
+	/** The tab layout settings are known: settings.json has been read, or last time's copy stands in for them. */
+	layoutReady: boolean;
 	setSettings: (key: string, value: any) => void;
 	getSettings: (key: string) => any;
 }>((set, get) => ({
-	settings: {},
+	settings: bootSettings(),
+	loaded: false,
+	layoutReady: !!bootLayout,
 	setSettings: (key, value) =>
 		set(state => ({
 			settings: {
@@ -415,6 +428,11 @@ export const useSettingsStore = create<{
 		return settings[key] !== undefined ? settings[key] : null;
 	},
 }));
+
+// Keep the copy current once the real settings are in (not before: the copy itself would be written back).
+useSettingsStore.subscribe(state => {
+	if (state.loaded) writeBootLayout(state.settings);
+});
 
 export const useSetupStore = create<{
 	step: number;

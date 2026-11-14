@@ -1,9 +1,9 @@
-import { useEffect, useState, useRef } from "react";
-import { createPortal } from "react-dom";
 import { ChevronRightIcon } from "@heroicons/react/24/solid";
-import { useSettingsStore } from "../store";
-import { handleImg } from "../libs/imgHandler";
+import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { portalTarget } from "../libs/cloak";
+import { handleImg } from "../libs/imgHandler";
+import { useSettingsStore } from "../store";
 
 export interface MenuItem {
 	// allow rich titles (React nodes) so menu entries can include headers or formatted text
@@ -209,7 +209,7 @@ export const ContextMenu = ({ items, position, onClose, align = "start" }: MenuP
 											))}
 										</div>
 									) : (
-										<div className="flex flex-col min-w-[200px] max-w-72 max-h-[min(24rem,calc(100vh-1rem))] overflow-y-auto p-1.5 bg-(--secondary) inset-shadow-(--inset-shadow-primary) rounded-xl shadow-lg">
+										<div className="flex flex-col min-w-[200px] max-w-72 max-h-[min(24rem,calc(100dvh-1rem))] overflow-y-auto p-1.5 bg-(--secondary) inset-shadow-(--inset-shadow-primary) rounded-xl shadow-lg">
 											{item.children.map((child, ci) =>
 												child.isHeader ? (
 													<div key={ci} className="px-3 py-2 text-xs font-semibold text-(--text-secondary)">

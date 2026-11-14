@@ -33,7 +33,7 @@ import { lbFeedback, lbListenCount, lbLookupRecording, lbLoved, lbRecent, lbRevo
 import { migrateSocial, registerSocialRoutes } from "./social";
 import { migrateComments, registerCommentRoutes } from "./comments";
 import { migrateProfiles, registerProfileRoutes } from "./profiles";
-import { migrateStreaks, registerStreakRoutes } from "./streaks";
+import { migrateStreaks, publicPromo, registerStreakRoutes } from "./streaks";
 import { discordPresenceEnabled, hasPresenceScope, migratePresence, readPresence, sendPresence, writePresence, type NowPlaying } from "./discord-presence";
 import { discordBotStatus, discordBotToken, discordPresenceFor } from "./discord-bot";
 import { migratePlaylists, registerPlaylistRoutes } from "./playlists";
@@ -582,6 +582,12 @@ else setTimeout(() => location.replace("/"), 1500);
 			// Off the auth host, OAuth runs there in a popup and hands the session back (cross-site.ts).
 			authHost: sealed && !redirectOk ? authOrigin() : null,
 		});
+	});
+
+	// The running promo (streaks.ts), for the home page's notice: public, so signed-out visitors hear about it too.
+	app.get("/api/promo", async c => {
+		const ctx = await init();
+		return c.json({ promo: ctx ? await publicPromo(ctx.pool).catch(() => null) : null });
 	});
 
 	app.on(["GET", "POST"], "/api/auth/*", async c => {

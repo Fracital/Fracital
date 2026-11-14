@@ -1,5 +1,6 @@
 import { useSettingsStore } from "../store";
 import { SettingsPath, StaticThemePath, ThemePath } from "../types";
+import { BOOT_THEME_ID, writeBootTheme } from "./bootCache";
 import { getCloakShadowRoot } from "./cloak";
 
 let styleElement: HTMLStyleElement | null = null;
@@ -52,21 +53,26 @@ export const loadTheme = async (name: string) => {
 		}
 
 		// On decoy hosts the theme goes straight into the shadow root, where :root never matches
-		// and a <head> copy would also restyle the decoy page.
+		// and a <head> copy would also restyle the decoy page. main.tsx may have put last time's there already.
 		const shadow = getCloakShadowRoot();
+		styleElement ??= (shadow ?? document).getElementById(BOOT_THEME_ID) as HTMLStyleElement | null;
 		if (!styleElement) {
 			styleElement = document.createElement("style");
-			styleElement.id = "theme-style";
+			styleElement.id = BOOT_THEME_ID;
 			(shadow ?? document.head).appendChild(styleElement);
 		}
 		styleElement.textContent = shadow ? themeBuffer.replace(/:root\b/g, ":host") : themeBuffer;
 		setSettings("theme", name);
 		setSettings("brightness", brightness);
+		writeBootTheme({ name, brightness, css: themeBuffer });
 
 		try {
+			// Only a change is written: at startup the theme comes from settings.json, which the updater may be writing.
 			const settings = JSON.parse(await window.fr.fs.promises.readFile(SettingsPath, "utf8"));
-			settings.theme = name;
-			await window.fr.fs.promises.writeFile(SettingsPath, JSON.stringify(settings, null, 4));
+			if (settings.theme !== name) {
+				settings.theme = name;
+				await window.fr.fs.promises.writeFile(SettingsPath, JSON.stringify(settings, null, 4));
+			}
 		} catch (error) {
 			console.warn("Failed to persist selected theme:", error);
 		}

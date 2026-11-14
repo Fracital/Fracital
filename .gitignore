@@ -22,6 +22,8 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+# *.sw? is for editor swap files; Flash games (.swf) are real assets.
+!*.swf
 .vite
 .env
 .env.bak*

@@ -29,6 +29,28 @@ export const init = async () => {
 	// Settings, themes and quick links are brought up to date here (see updater.ts). Built asset URLs carry
 	// content hashes, so this signature changes whenever a bundled game file does.
 	const { refreshGames, commitGames } = await runUpdater(Object.entries(flashGames).sort().join("|"));
+
+	// Mirror the persistent-tabs setting into localStorage so the stores can
+	// read it synchronously at module load (settings.json loads async).
+	try {
+		const saved = JSON.parse(await window.fr.fs.promises.readFile(SettingsPath, "utf8"));
+		window.localStorage.setItem("fracital:persist-tabs", String(saved["persistent-tabs"] === true));
+	} catch {
+		/* defaults apply */
+	}
+
+	// The bundled games are copied in the background: nothing else at startup needs them (the Games page follows
+	// the folder as files land). window.gamesReady settles once they're in.
+	window.gamesReady = copyBundledGames(flashGames, refreshGames, commitGames);
+	console.log("%cFracital%c: %cinit%c()", "color: #fb74fe", "color: #ff7b72", "color: #c7a1f2", "color: #79c0ff");
+};
+
+/**
+ * Copies the bundled Flash games into the virtual drive. Unless the bundle changed since the last full copy
+ * (refreshGames), a file that's already there is kept as is: a copy that failed partway never committed the bundle's
+ * signature, so the next boot refreshes everything anyway.
+ */
+const copyBundledGames = async (flashGames: Record<string, string>, refreshGames: boolean, commitGames: () => Promise<void>) => {
 	let copyFailed = false;
 
 	for (const [sourcePath, assetUrl] of Object.entries(flashGames)) {
@@ -52,7 +74,7 @@ export const init = async () => {
 		const extension = relativePath.split(".").pop()?.toLowerCase() ?? "";
 		const isText = textExtensions.includes(extension);
 		const exists = await fileExists(destinationPath);
-		if (exists && isText && !refreshGames) continue;
+		if (exists && !refreshGames) continue;
 
 		// A game that can't be fetched (or is cut off mid-download) is skipped; it must not stop the rest of init.
 		let text = "";
@@ -88,14 +110,4 @@ export const init = async () => {
 	}
 	// A failed copy leaves the old signature, so the next boot tries the refresh again.
 	if (!copyFailed) await commitGames();
-	console.log("%cFracital%c: %cinit%c()", "color: #fb74fe", "color: #ff7b72", "color: #c7a1f2", "color: #79c0ff");
-
-	// Mirror the persistent-tabs setting into localStorage so the stores can
-	// read it synchronously at module load (settings.json loads async).
-	try {
-		const saved = JSON.parse(await window.fr.fs.promises.readFile(SettingsPath, "utf8"));
-		window.localStorage.setItem("fracital:persist-tabs", String(saved["persistent-tabs"] === true));
-	} catch {
-		/* defaults apply */
-	}
 };

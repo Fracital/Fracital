@@ -1,7 +1,7 @@
 import { ChevronDownIcon } from "@heroicons/react/24/solid";
-import { useEffect, useRef, useState, type ReactNode } from "react";
-import { HolyText } from "./common/HolyText";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { useHolyAttr } from "../libs/holy-attr";
+import { HolyText } from "./common/HolyText";
 
 /**
  * Bars the user can collapse (the site's top bar, the game player's bar). In "hover" mode a bar is either kept
@@ -106,7 +106,23 @@ interface HoverRevealOptions {
 	setRevealed: (revealed: boolean) => void;
 }
 
-/** Reveals an auto-hidden bar while the pointer is within `threshold` px of its edge, or over the bar. */
+/** A touchscreen (no pointer that hovers): an auto-hidden bar can't come back by hovering, so it offers a handle to tap. */
+export const useNoHover = () => {
+	const query = "(hover: none)";
+	const [noHover, setNoHover] = useState(() => typeof window !== "undefined" && window.matchMedia(query).matches);
+	useEffect(() => {
+		const media = window.matchMedia(query);
+		const onChange = () => setNoHover(media.matches);
+		media.addEventListener("change", onChange);
+		return () => media.removeEventListener("change", onChange);
+	}, []);
+	return noHover;
+};
+
+/**
+ * Reveals an auto-hidden bar while the pointer is within `threshold` px of its edge, or over the bar. A tap (which
+ * moves no pointer first) counts the same: on the edge it reveals the bar, below the bar it hides it again.
+ */
 export const useHoverReveal = ({ enabled, threshold, target, frames, edge, barBottom, setRevealed }: HoverRevealOptions) => {
 	const opts = useRef({ target, frames, edge, barBottom, setRevealed });
 	useEffect(() => {
@@ -124,10 +140,13 @@ export const useHoverReveal = ({ enabled, threshold, target, frames, edge, barBo
 		};
 		const onMove = (e: Event) => at((e as PointerEvent).clientY);
 		const onLeave = (e: Event) => {
+			// A finger "leaves" after every tap (it stops existing when lifted), which would hide the bar it just revealed.
+			if ((e as PointerEvent).pointerType === "touch") return;
 			// On the document, pointerout fires between any two elements; only a null target means the pointer left the window.
 			if (!(el instanceof Document) || !(e as PointerEvent).relatedTarget) opts.current.setRevealed(false);
 		};
 		el.addEventListener("pointermove", onMove);
+		el.addEventListener("pointerdown", onMove);
 		el.addEventListener(el instanceof Document ? "pointerout" : "pointerleave", onLeave);
 
 		const watched = new WeakSet<Window>();
@@ -142,7 +161,11 @@ export const useHoverReveal = ({ enabled, threshold, target, frames, edge, barBo
 					watched.add(win);
 					const handler = (e: PointerEvent) => at(frame.getBoundingClientRect().top + e.clientY);
 					win.addEventListener("pointermove", handler);
-					cleanups.push(() => win.removeEventListener("pointermove", handler));
+					win.addEventListener("pointerdown", handler);
+					cleanups.push(() => {
+						win.removeEventListener("pointermove", handler);
+						win.removeEventListener("pointerdown", handler);
+					});
 				} catch {
 					// Cross-origin frame: only the area outside it can reveal the bar.
 				}
@@ -152,6 +175,7 @@ export const useHoverReveal = ({ enabled, threshold, target, frames, edge, barBo
 		const timer = window.setInterval(attachFrames, 1000);
 		return () => {
 			el.removeEventListener("pointermove", onMove);
+			el.removeEventListener("pointerdown", onMove);
 			el.removeEventListener(el instanceof Document ? "pointerout" : "pointerleave", onLeave);
 			window.clearInterval(timer);
 			for (const cleanup of cleanups) {

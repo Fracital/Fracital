@@ -11,6 +11,7 @@ import { urlFromInput } from "../libs/searchEngines";
 import { HolyText } from "../components/common/HolyText";
 import { HolyLink } from "../components/common/HolyLink";
 import { AD_UNITS, RevSlot } from "../components/AdBanner";
+import { PromoNotice } from "../components/StreakBadge";
 
 export interface linkProps {
 	title: string;
@@ -63,6 +64,7 @@ const Home = ({ className, active }: HomeProps) => {
 					<MagnifyingGlassIcon className="size-5 shrink-0 text-(--text-tertiary)" />
 					<input ref={searchRef} {...searchAttrs} name="q" type="text" autoComplete="off" spellCheck={false} className="w-full min-w-0 py-3 bg-transparent outline-none text-(--text-primary) font-semibold placeholder:text-(--text-tertiary)" />
 				</form>
+				<PromoNotice className="max-w-3xl" />
 				{chatOn && (
 					<button type="button" onClick={openChat} className="flex items-center gap-2 px-4 py-2 rounded-full bg-(--secondary) inset-shadow-(--inset-shadow-secondary) hover:inset-shadow-(--inset-shadow-accent) text-(--text-secondary) hover:text-(--text-primary) font-semibold duration-200">
 						<ChatBubbleLeftRightIcon className="size-5 shrink-0 text-accent" />

@@ -2,6 +2,7 @@ import { lazy, StrictMode, Suspense } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
 import { SsrLoader } from "./components/SsrLoader";
+import { applyBootTheme } from "./libs/bootCache";
 import { getCloakShadowRoot } from "./libs/cloak";
 import "./index.css";
 
@@ -16,6 +17,8 @@ function mount() {
 		requestAnimationFrame(mount);
 		return;
 	}
+	// Last time's theme, before the first render: the theme itself loads from Filer only once the app has started.
+	applyBootTheme(shadowRoot ?? null);
 	const app = (
 		<BrowserRouter>
 			<Suspense fallback={<SsrLoader />}>

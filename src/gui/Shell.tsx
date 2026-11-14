@@ -29,8 +29,10 @@ import {
 	LockOpenIcon,
 	CheckIcon,
 	ChatBubbleLeftRightIcon,
+	ClockIcon,
 } from "@heroicons/react/24/solid";
-import { BarOpenHandle, BarSettingsMenu, useCollapsibleBar, useHoverReveal } from "../components/CollapsibleBar";
+import { readBootAccount } from "../libs/bootCache";
+import { BarOpenHandle, BarSettingsMenu, useCollapsibleBar, useHoverReveal, useNoHover } from "../components/CollapsibleBar";
 import { useHolyAttr } from "../libs/holy-attr";
 import { appRoot } from "../libs/cloak";
 import { StarIcon as StarIconOutline } from "@heroicons/react/24/outline";
@@ -294,10 +296,27 @@ export const UserCard = ({ id, display, handle, avatar }: UserProps) => {
 
 /**
  * Below this bar width the right-hand buttons fold into one menu so the URL bar can fill the row (it only
- * caps its width on screens wide enough to show everything); below TINY_WIDTH the favorite star folds too.
+ * caps its width on screens wide enough to show everything); below TINY_WIDTH the home button and the favorite star
+ * fold into it too.
  */
 const COMPACT_WIDTH = 1180;
 const TINY_WIDTH = 600;
+
+/** The logo on the home button (and the menu's Home item, where the button folds into it on narrow screens). */
+const FracitalLogo = ({ className }: { className: string }) => (
+	<svg viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg" className={className}>
+		<circle cx="64" cy="64" r="64" className="fill-(--logo-primary)" />
+		<path
+			fillRule="evenodd"
+			clipRule="evenodd"
+			d="M64 0C99.3462 0 128 28.6538 128 64C128 99.3462 99.3462 128 64 128C28.6538 128 0 99.3462 0 64C0 28.6538 28.6538 0 64 0ZM64 7C32.5198 7 7 32.5198 7 64C7 95.4802 32.5198 121 64 121C95.4802 121 121 95.4802 121 64C121 32.5198 95.4802 7 64 7Z"
+			fill="white"
+			fillOpacity="0.5"
+		/>
+		<path d="M51 87V41H81V51.5H62.1278V59.75H78.9222L76.5 70.25H62.1278V85L51 87Z" className="fill-(--logo-secondary)" />
+	</svg>
+);
+
 const HOVER_PRESETS = [8, 24, 48, 96];
 
 const Shell = () => {
@@ -318,6 +337,7 @@ const Shell = () => {
 
 	const dark = settings.brightness !== "light";
 	const bar = useCollapsibleBar("shellBar");
+	const noHover = useNoHover();
 	const overlayRef = useRef<HTMLDivElement>(null);
 	useHoverReveal({
 		enabled: bar.autoHide,
@@ -354,7 +374,8 @@ const Shell = () => {
 	const { openModal } = useModal();
 	const [isFavorited, setIsFavorited] = useState<boolean>(false);
 	const [contextMenu, setContextMenu] = useState<null | { x: number; y: number; visible: boolean; items: MenuItem[]; align?: "start" | "end" }>(null);
-	const [accountinfo, setAccountinfo] = useState<{ id: string; display: string; handle: string; avatar: string | React.ReactNode } | null>(null);
+	// Last time's account (bootCache) until /account.json is read, so the bar doesn't start signed out.
+	const [accountinfo, setAccountinfo] = useState<{ id: string; display: string; handle: string; avatar: string | React.ReactNode } | null>(readBootAccount);
 
 	useEffect(() => {
 		const fetchAccountInfo = async () => {
@@ -446,6 +467,11 @@ const Shell = () => {
 
 	const setEngine = (engine: ProxyEngine) => window.dispatchEvent(new CustomEvent("proxy-change", { detail: { proxy: engine } }));
 
+	/** The current tab back to the new tab page. */
+	const goHome = () => {
+		if (currentTab) updateTab(currentTab.id, { url: "about:newtab", displayUrl: "about:newtab", title: "New Tab", icon: null });
+	};
+
 	const openPage = (url: string, title: string, icon: React.ReactNode = null) => newTab({ id: createId(), url, displayUrl: url, title, icon, current: true });
 
 	const rowRef = useRef<HTMLDivElement>(null);
@@ -492,6 +518,7 @@ const Shell = () => {
 	const compactMenu = (): MenuItem[] => {
 		const items: MenuItem[] = [];
 		if (tiny) {
+			items.push({ title: <HolyText text="Home" />, icon: <FracitalLogo className="size-5" />, onClick: goHome });
 			items.push({
 				title: <HolyText text={isFavorited ? "Remove from favorites" : "Add to favorites"} />,
 				icon: isFavorited ? <StarIconSolid className="size-5" /> : <StarIconOutline className="size-5" />,
@@ -527,6 +554,7 @@ const Shell = () => {
 			{ title: <HolyText text="Settings" />, icon: <Cog6ToothIcon className="size-5" />, onClick: () => openPage("about:settings", "Settings", <Cog6ToothIcon className="size-5" />) },
 			{ title: <HolyText text="File Manager" />, icon: <FolderIcon className="size-5" />, onClick: () => openPage("about:files", "File Manager", <FolderIcon className="size-4.5" />) },
 			{ title: <HolyText text="Games" />, icon: <PlayIcon className="size-5" />, onClick: () => openPage("about:games", "Games", <PlayIcon className="size-4.5" />) },
+			{ title: <HolyText text="History" />, icon: <ClockIcon className="size-5" />, onClick: () => openPage("about:history", "History", <ClockIcon className="size-4.5" />) },
 			{ title: <HolyText text="Extensions" />, icon: <PuzzlePieceIcon className="size-5" />, onClick: () => openPage("about:extensions", "Extensions", <PuzzlePieceIcon className="size-4.5" />) },
 			{ title: <HolyText text="Music" />, icon: <MusicalNoteIcon className="size-5" />, onClick: () => openLibraryPage("") },
 			{ title: <HolyText text="Chat" />, icon: <ChatBubbleLeftRightIcon className="size-5" />, onClick: () => openPage("about:chat", "Chat", <ChatBubbleLeftRightIcon className="size-4.5" />) },
@@ -615,31 +643,8 @@ const Shell = () => {
 		<div id="shell" ref={rowRef} className={"flex justify-between gap-2.5 p-1 duration-200"}>
 			<div className="flex flex-1 min-w-0 items-center justify-start gap-2.5">
 				<div className="relative flex items-center justify-center gap-1">
-					<button
-						className="group relative flex items-center justify-center mr-1 cursor-pointer"
-						title={`Home - Go to the homepage`}
-						onMouseDown={() => {
-							if (currentTab) {
-								updateTab(currentTab.id, {
-									url: "about:newtab",
-									displayUrl: "about:newtab",
-									title: "New Tab",
-									icon: null,
-								});
-							}
-						}}
-					>
-						<svg viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg" className="size-9 group-hover:-translate-y-1 group-hover:opacity-0 duration-150 pointer-events-none">
-							<circle cx="64" cy="64" r="64" className="fill-(--logo-primary)" />
-							<path
-								fillRule="evenodd"
-								clipRule="evenodd"
-								d="M64 0C99.3462 0 128 28.6538 128 64C128 99.3462 99.3462 128 64 128C28.6538 128 0 99.3462 0 64C0 28.6538 28.6538 0 64 0ZM64 7C32.5198 7 7 32.5198 7 64C7 95.4802 32.5198 121 64 121C95.4802 121 121 95.4802 121 64C121 32.5198 95.4802 7 64 7Z"
-								fill="white"
-								fillOpacity="0.5"
-							/>
-							<path d="M51 87V41H81V51.5H62.1278V59.75H78.9222L76.5 70.25H62.1278V85L51 87Z" className="fill-(--logo-secondary)" />
-						</svg>
+					<button className={`group relative flex items-center justify-center mr-1 cursor-pointer ${tiny ? "hidden" : ""}`} title={`Home - Go to the homepage`} onMouseDown={goHome}>
+						<FracitalLogo className="size-9 group-hover:-translate-y-1 group-hover:opacity-0 duration-150 pointer-events-none" />
 						<HomeIcon
 							className={
 								"absolute size-7 text-(--text-secondary) opacity-0 translate-y-1 group-hover:text-(--text-primary) group-hover:opacity-100 group-hover:translate-y-0 pointer-events-none duration-150" +
@@ -802,6 +807,11 @@ const Shell = () => {
 										title: "Music",
 										onClick: () => openLibraryPage(""),
 										icon: <MusicalNoteIcon className="size-4.5" />,
+									},
+									{
+										title: <HolyText text="History" />,
+										onClick: () => openPage("about:history", "History", <ClockIcon className="size-4.5" />),
+										icon: <ClockIcon className="size-4.5" />,
 									},
 									{
 										title: <HolyText text="Extensions" />,
@@ -998,6 +1008,8 @@ const Shell = () => {
 				</div>
 			)}
 			{bar.mode === "button" && !bar.open && <BarOpenHandle dark={dark} onOpen={() => bar.setOpen(true)} />}
+			{/* On a touchscreen nothing hovers near the top to bring an auto-hidden bar back: tap this instead. */}
+			{bar.autoHide && !bar.shown && noHover && <BarOpenHandle dark={dark} onOpen={() => bar.setRevealed(true)} />}
 		</>
 	);
 };

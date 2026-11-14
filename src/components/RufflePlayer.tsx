@@ -19,6 +19,20 @@ interface RufflePlayerProps {
 	onPlayerReady?: (player: any) => void;
 }
 
+/** The Flash player (Ruffle, self-hosted under vendor/flash): loaded the first time a game needs it, not with the page. */
+let flashPlayer: Promise<void> | null = null;
+const loadFlashPlayer = () =>
+	(flashPlayer ??= new Promise<void>((resolve, reject) => {
+		const script = document.createElement("script");
+		script.src = "/vendor/flash/player.js";
+		script.onload = () => resolve();
+		script.onerror = () => {
+			flashPlayer = null;
+			reject(new Error("The Flash player failed to load"));
+		};
+		document.head.appendChild(script);
+	}));
+
 export const RufflePlayer = ({
 	src,
 	data,
@@ -49,6 +63,13 @@ export const RufflePlayer = ({
 		let cleanup: (() => void) | undefined;
 
 		const loadRuffle = async () => {
+			try {
+				await loadFlashPlayer();
+			} catch {
+				setLoading(false);
+				setError("Couldn't load the Flash player");
+				return;
+			}
 			// @ts-expect-error - window.RufflePlayer rah
 			while (!window.RufflePlayer) {
 				await new Promise(resolve => setTimeout(resolve, 100));
@@ -159,7 +180,7 @@ export const RufflePlayer = ({
 			{loading && (
 				<div className="absolute inset-0 flex items-center justify-center bg-(--primary)">
 					<div className="flex flex-col items-center gap-3">
-						<div className={`size-12 border-4 border-(--accent) border-t-transparent rounded-full animate-spin`}></div>
+						<div className={"size-12 border-4 border-(--accent) border-t-transparent rounded-full animate-spin"} />
 						<span className="text-lg font-semibold text-(--text-secondary)">Loading Flash game...</span>
 					</div>
 				</div>

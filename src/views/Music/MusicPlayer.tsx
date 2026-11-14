@@ -21,6 +21,7 @@ import {
 } from "@heroicons/react/24/solid";
 import { useMusicStore, usePlaybackStore, useSettingsStore, useTabsStore } from "../../store";
 import type { Track } from "../../types";
+import { NowPlayingTabIcon } from "../../components/NowPlayingTabIcon";
 import { AudvisVisualizer } from "../../components/AudvisVisualizer";
 import { formatTime, getAudio, isPlayerUrl, next, nowPlayingTitle, parsePlayerMode, play, playerUrl, previous, seek, setPlaybackOwner, setVolume, toggleLoop, toggleMute, togglePlay, type PlaybackOwner, type PlayerMode } from "../../libs/playback";
 import { LYRICS_CHANGED_EVENT, LYRICS_SOURCE_LABELS, loadLyrics, type Lyrics } from "../../libs/lyrics";
@@ -887,8 +888,6 @@ const VideoPoster = ({ track, className }: { track: Track; className?: string })
 		<div className="relative size-9 rounded-full border-3 border-[#ffffff40] border-t-white animate-spin" />
 	</div>
 );
-
-export const NowPlayingTabIcon = ({ cover }: { cover: string }) => <img src={cover} alt="" className="size-5 shrink-0 rounded object-cover" />;
 
 export const MusicPlayer = ({ query, className, onClose }: MusicPlayerProps) => {
 	const settings = useSettingsStore(state => state.settings);

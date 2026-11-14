@@ -1,17 +1,17 @@
-import { useState, useEffect, useRef } from "react";
-import { RufflePlayer } from "../components/RufflePlayer";
-import { HTMLPlayer } from "../components/HTMLPlayer";
-import { GameBarButton, GameStage } from "../components/GameStage";
-import { GameInstaller } from "../components/GameInstaller";
-import { GameCloudSave } from "../components/GameCloudSave";
-import { prepareGame, syncGame, trackGameSession } from "../libs/gameSaves";
-import { HolyText } from "../components/common/HolyText";
-import { useSettingsStore, useTabsStore } from "../store";
-import { updatePageTab } from "../libs/aboutPages";
-import { PlusIcon, PlayIcon, XMarkIcon, PhotoIcon, TrashIcon, StarIcon, PencilIcon, ArrowsPointingOutIcon, ArrowsPointingInIcon, SpeakerWaveIcon, SpeakerXMarkIcon, FunnelIcon, ArchiveBoxIcon, FolderIcon, ChevronLeftIcon, ChevronRightIcon, ArrowDownTrayIcon } from "@heroicons/react/24/solid";
 import { ClipboardIcon, StarIcon as StarOutlineIcon } from "@heroicons/react/24/outline";
-import { GamesPath } from "../types";
+import { ArchiveBoxIcon, ArrowDownTrayIcon, ArrowsPointingInIcon, ArrowsPointingOutIcon, ChevronLeftIcon, ChevronRightIcon, FolderIcon, FunnelIcon, PencilIcon, PhotoIcon, PlayIcon, PlusIcon, SpeakerWaveIcon, SpeakerXMarkIcon, StarIcon, TrashIcon, XMarkIcon } from "@heroicons/react/24/solid";
 import { createId } from "@paralleldrive/cuid2";
+import { useEffect, useRef, useState } from "react";
+import { HolyText } from "../components/common/HolyText";
+import { GameCloudSave } from "../components/GameCloudSave";
+import { GameInstaller } from "../components/GameInstaller";
+import { GameBarButton, GameStage } from "../components/GameStage";
+import { HTMLPlayer } from "../components/HTMLPlayer";
+import { RufflePlayer } from "../components/RufflePlayer";
+import { updatePageTab } from "../libs/aboutPages";
+import { prepareGame, syncGame, trackGameSession } from "../libs/gameSaves";
+import { useSettingsStore, useTabsStore } from "../store";
+import { GamesPath } from "../types";
 
 interface Game {
 	id: string;
@@ -394,7 +394,8 @@ const Games = ({ query, className }: GamesProps) => {
 					gameType = "flash";
 					console.log("Found Flash game:", file.webkitRelativePath);
 					break;
-				} else if (file.name === "index.html") {
+				}
+				if (file.name === "index.html") {
 					gameFile = file.name;
 					gameType = "html5";
 					console.log("Found HTML5 game:", file.webkitRelativePath);
@@ -485,7 +486,8 @@ const Games = ({ query, className }: GamesProps) => {
 					gameType = "flash";
 					console.log("Found Flash game:", filePath);
 					break;
-				} else if (fileName === "index.html") {
+				}
+				if (fileName === "index.html") {
 					gameFile = fileName;
 					gameType = "html5";
 					console.log("Found HTML5 game:", filePath);
@@ -615,7 +617,7 @@ const Games = ({ query, className }: GamesProps) => {
 						<div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 auto-rows-min gap-3 md:gap-4">
 							{loading ? (
 								<div className="col-span-full flex flex-col items-center justify-center py-20 gap-4">
-									<div className={`size-12 border-4 border-(--accent) border-t-transparent rounded-full animate-spin`}></div>
+									<div className={"size-12 border-4 border-(--accent) border-t-transparent rounded-full animate-spin"} />
 									<span className="text-lg font-semibold text-(--text-secondary)">Loading games...</span>
 								</div>
 							) : displayedGames.length > 0 ? (
@@ -759,7 +761,7 @@ const Games = ({ query, className }: GamesProps) => {
 								{!savesReady ? (
 									<div className="absolute inset-0 flex items-center justify-center bg-(--primary)">
 										<div className="flex flex-col items-center gap-3">
-											<div className="size-12 border-4 border-(--accent) border-t-transparent rounded-full animate-spin"></div>
+											<div className="size-12 border-4 border-(--accent) border-t-transparent rounded-full animate-spin" />
 											<HolyText className="text-lg font-semibold text-(--text-secondary)" text="Loading saves..." />
 										</div>
 									</div>
@@ -912,7 +914,7 @@ const Games = ({ query, className }: GamesProps) => {
 			{/* Upload Modal */}
 			{uploadModal && (
 				<div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-					<div className={`w-full max-w-md sm:max-w-lg md:max-w-xl lg:max-w-2xl mx-2 sm:mx-6 rounded-2xl p-4 sm:p-6 bg-(--primary) max-h-[85vh] overflow-y-auto`}>
+					<div className={"w-full max-w-md sm:max-w-lg md:max-w-xl lg:max-w-2xl mx-2 sm:mx-6 rounded-2xl p-4 sm:p-6 bg-(--primary) max-h-[85vh] overflow-y-auto"}>
 						<div className="flex items-center justify-between mb-6">
 							<h2 className="text-2xl font-bold">Add Game</h2>
 							<button onClick={() => setUploadModal(null)} className={`p-2 rounded-lg duration-150 ${settings.brightness === "dark" ? "hover:bg-[#ffffff10]" : "hover:bg-[#00000010]"}`}>
@@ -1094,7 +1096,7 @@ const Games = ({ query, className }: GamesProps) => {
 											alert("Failed to upload game");
 										}
 									}}
-									className={`flex-1 px-4 py-2 rounded-lg font-semibold duration-150 bg-(--accent) hover:opacity-80 text-white`}
+									className={"flex-1 px-4 py-2 rounded-lg font-semibold duration-150 bg-(--accent) hover:opacity-80 text-white"}
 								>
 									Add Game
 								</button>
@@ -1248,7 +1250,7 @@ const Games = ({ query, className }: GamesProps) => {
 											alert("Failed to update game");
 										}
 									}}
-									className={`flex-1 px-4 py-2 rounded-lg font-semibold duration-150 bg-(--accent) hover:opacity-80 text-white`}
+									className={"flex-1 px-4 py-2 rounded-lg font-semibold duration-150 bg-(--accent) hover:opacity-80 text-white"}
 								>
 									Save Changes
 								</button>

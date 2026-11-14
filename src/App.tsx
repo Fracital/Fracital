@@ -1,3 +1,4 @@
+import { config as fontAwesomeConfig } from "@fortawesome/fontawesome-svg-core";
 import { ChevronLeftIcon, ChevronRightIcon, Cog6ToothIcon, XMarkIcon } from "@heroicons/react/24/solid";
 import { createId } from "@paralleldrive/cuid2";
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
@@ -10,6 +11,7 @@ import { StreakWinNotice } from "./components/StreakBadge";
 import { Tab } from "./components/Tab";
 import Shell from "./gui/Shell";
 import { NewGroupButton, NewTabButton } from "./gui/tabBatch";
+import { ProfileSwitcher } from "./gui/TabProfiles";
 import { appRoot } from "./libs/cloak";
 import { scrollParent } from "./libs/dragFeel";
 import type { detailProps } from "./libs/eventBus";
@@ -29,6 +31,7 @@ import { aboutPages, getPageFromUrl, getQueryFromUrl, openLibraryPage } from "./
 import { startGameSaveSync } from "./libs/gameSaves";
 import { init, quickLinks } from "./libs/init";
 import { applyMotionSetting, MOTION_SETTING } from "./libs/motion";
+import { startProfileRules } from "./libs/profileRules";
 import { isPlayerUrl, togglePlay } from "./libs/playback";
 import { ResilientTransport } from "./libs/resilientTransport";
 import { bootStomp, useStompStore } from "./libs/stompEngine";
@@ -42,8 +45,14 @@ declare global {
 		scramjetController?: Controller;
 		scramjetReady?: Promise<void>;
 		appReady?: Promise<void>;
+		/** The bundled games are copied into the virtual drive (init.ts copies them in the background). */
+		gamesReady?: Promise<void>;
 	}
 }
+
+// Font Awesome's styles come from index.css, in the base layer; its own copy (unlayered) would override every
+// size utility on its icons. Set before any icon renders: it adds that copy on the first one.
+fontAwesomeConfig.autoAddCss = false;
 
 let serviceWorkerInit: Promise<void> | undefined;
 
@@ -215,6 +224,8 @@ const App = () => {
 	const peek = !panelsOpen && settings["compact-tabs"] !== true;
 	/** The tab view setting: the tabs move from the side panel into the tab view, opened from the top bar. */
 	const tabView = settings[TAB_VIEW_SETTING] === true;
+	/** The tab layout settings are known (read, or last time's copy until they are; see bootCache). */
+	const layoutReady = useSettingsStore(state => state.layoutReady);
 	const tabViewOpen = usePanelsStore(state => state.tabViewOpen);
 	/** While the tab view is open every tab's page shows, scaled into its card. */
 	const previewing = tabView && tabViewOpen;
@@ -243,10 +254,12 @@ const App = () => {
 	useEffect(() => {
 		bootstrapPromise ??= (async () => {
 			await Api();
+			// The theme needs only the file system: it loads while init brings settings up to date.
+			const theme = initTheme();
 			await init();
-			await initTheme();
-			// After init, so the bundled games are on disk before their saves are matched.
-			startGameSaveSync();
+			await theme;
+			// After the bundled games are on disk, so their saves can be matched.
+			void window.gamesReady?.then(startGameSaveSync);
 		})();
 		window.appReady = bootstrapPromise;
 		void bootstrapPromise;
@@ -358,6 +371,9 @@ const App = () => {
 	// Extensions (about:extensions) run in proxied pages; this starts the ones that are on and follows their settings.
 	useEffect(() => startExtensions(), []);
 
+	// The active tab profile's site rules and focus mode.
+	useEffect(() => startProfileRules(), []);
+
 	useEffect(() => {
 		const getSettings = async () => {
 			if (window.appReady) await window.appReady.catch(() => undefined);
@@ -374,6 +390,8 @@ const App = () => {
 				setSettings("proxy", "sj");
 				setSettings("quicklinks", quickLinks);
 				setSettings("compact-tabs", false);
+			} finally {
+				useSettingsStore.setState({ loaded: true, layoutReady: true });
 			}
 		};
 		getSettings();
@@ -705,6 +723,11 @@ const App = () => {
 				)}
 				<TabsAd enabled={adEnabled} />
 			</div>
+			{listRail && (
+				<div className="flex justify-center pt-1">
+					<ProfileSwitcher rail />
+				</div>
+			)}
 			<div
 				className={
 					(listRail
@@ -721,7 +744,8 @@ const App = () => {
 					{/* Hidden in the icon rail, which keeps only the new tab button. */}
 					<NewGroupButton title={platform.includes("Mac") ? "New Group ⌃ + T" : "New Group: Alt + T"} className={listRail ? "hidden!" : ""} />
 				</div>
-				<div className="flex gap-0.5 items-center h-full" />
+				{/* The rail has no room in this bar; its profile switcher sits above it. */}
+				<div className="flex min-w-0 gap-0.5 items-center h-full">{!listRail && <ProfileSwitcher />}</div>
 			</div>
 		</>
 	);
@@ -729,8 +753,9 @@ const App = () => {
 	return (
 		<ModalProvider>
 			{/* clip, not hidden: the collapsed side panel reaches past the window edge, and an overflow-hidden box can still be
-			    scrolled (by focus moving into a page, scrollIntoView), which slid the whole app sideways. A clipped box can't. */}
-			<div className="relative flex flex-col h-screen w-full gap-2.5 p-3 overflow-clip">
+			    scrolled (by focus moving into a page, scrollIntoView), which slid the whole app sideways. A clipped box can't.
+			    h-dvh, not h-screen: on phones 100vh reaches behind the browser's toolbars, which cut off the bottom. */}
+			<div className="relative flex flex-col h-dvh w-full gap-2.5 p-3 overflow-clip">
 				<Shell />
 				<StreakWinNotice />
 				<ProfileCardHost />
@@ -738,7 +763,9 @@ const App = () => {
 					<div id="main" className={`relative flex flex-1 min-h-0 gap-2.5 ${tabsLeft ? "flex-row-reverse" : ""}`}>
 						{/* Ad panel (hidden for premium accounts and on narrow windows) */}
 						<SideAd />
-						<div className={"relative flex-1 min-h-0 h-[calc(100%+2px)] bg-(--secondary) inset-shadow-(--inset-shadow-primary) rounded-2xl overflow-hidden"}>
+						{/* isolate: what's layered inside the page area (the tab view over the pages) stays inside it, under the
+						    top bar's dropdowns and anything else stacked over the app. */}
+						<div className={"relative isolate flex-1 min-h-0 h-[calc(100%+2px)] bg-(--secondary) inset-shadow-(--inset-shadow-primary) rounded-2xl overflow-hidden"}>
 							<Suspense fallback={<SpinnerLoader />}>
 								{tabs.length > 0 ? (
 									tabs.map(item => {
@@ -798,17 +825,26 @@ const App = () => {
 											return (
 												<div key={item.id} data-tab-frame={item.id} className={frameClass(item.id)}>
 													<View key={viewKey} id={item.id}>
-														<PageComponent
-															key={viewKey}
-															query={query}
-															className={
-																"absolute inset-0 duration-150" +
-																" " +
-																`
-														${hidden(item.id) ? "opacity-0 translate-y-2 pointer-events-none" : ""}
-													`
+														{/* Pages load the first time they're opened (aboutPages.tsx): the spinner shows in this tab only. */}
+														<Suspense
+															fallback={
+																<div className={`absolute inset-0 ${hidden(item.id) ? "hidden" : ""}`}>
+																	<SpinnerLoader />
+																</div>
 															}
-														/>
+														>
+															<PageComponent
+																key={viewKey}
+																query={query}
+																className={
+																	"absolute inset-0 duration-150" +
+																	" " +
+																	`
+															${hidden(item.id) ? "opacity-0 translate-y-2 pointer-events-none" : ""}
+														`
+																}
+															/>
+														</Suspense>
 													</View>
 												</div>
 											);
@@ -855,7 +891,7 @@ const App = () => {
 									<Home />
 								)}
 							</Suspense>
-							{tabView && <TabView />}
+							{layoutReady && tabView && <TabView />}
 						</div>
 						<div
 							className={
@@ -864,7 +900,7 @@ const App = () => {
 								`
                             ${panelsOpen ? "w-78" : "w-10"}
                             ${peek && tabsLeft ? "items-end" : ""}
-                            ${tabView && (playerTabOpen || !hasMusic) ? "hidden" : ""}
+                            ${!layoutReady || (tabView && (playerTabOpen || !hasMusic)) ? "hidden" : ""}
 						`
 							}
 						>
@@ -908,8 +944,9 @@ const App = () => {
 									</>
 								)}
 							</div>
-							{/* tabs panel (the tab view shows the tabs instead while the tab view setting is on) */}
-							{!tabView && (
+							{/* tabs panel (the tab view shows the tabs instead while the tab view setting is on). Neither renders
+							    before the layout is known: with no settings yet the tab view reads as off, and the floating list flashed. */}
+							{layoutReady && !tabView && (
 								<div
 									ref={tabsRef}
 									className={
@@ -924,6 +961,10 @@ const App = () => {
 									// under the cursor before mouseup, so collapsed items never got their click.
 									onClickCapture={e => {
 										if (panelsOpen || panelClickOpen === "off") return;
+										// Clicks in a menu opened from the panel arrive here too (React passes portal events up its own
+										// tree), but they're not in the panel. The profile switcher opens its own menu.
+										if (!e.currentTarget.contains(e.target as Node)) return;
+										if ((e.target as Element).closest?.("[data-profile-switcher]")) return;
 										if (panelClickOpen === "except-tabs" && (e.target as Element).closest?.("[data-url][id]")) return;
 										setPanelsOpen(true);
 									}}

@@ -1,3 +1,4 @@
+import { writeBootAccount } from "./libs/bootCache";
 import type { libcurl } from "libcurl.js";
 
 declare global {
@@ -20,17 +21,18 @@ export const isWebOS = false;
 // the legacy literal is only a fallback for local dev without a gate key.
 const relayPath = typeof window !== "undefined" ? window.__FRX_CFG__?.relay || "/wisp/" : "/wisp/";
 export const wispURL = typeof window !== "undefined" && window.location && window.location.origin ? `${window.location.origin.replace(/^https?:\/\//, window.location.protocol === "https:" ? "wss://" : "ws://")}${relayPath}` : "";
+// The signed-in account lives in /account.json; bootCache keeps a synchronous copy for the first paint.
 export const saveLogin = async ({ id, display, handle, avatar }: { id: string; display: string; handle: string; avatar: string | any }) => {
 	await window.fr.fs.promises.writeFile("/account.json", JSON.stringify({ id, display, handle, avatar }), "utf8");
+	writeBootAccount({ id, display, handle, avatar });
 };
 export const getLogin = async (): Promise<{ id: string; display: string; handle: string; avatar: string | any } | null> => {
-	if (!(await fileExists("/account.json"))) {
-		return null;
-	} else {
-		return JSON.parse(await window.fr.fs.promises.readFile("/account.json", "utf8"));
-	}
+	const login = (await fileExists("/account.json")) ? JSON.parse(await window.fr.fs.promises.readFile("/account.json", "utf8")) : null;
+	writeBootAccount(login);
+	return login;
 };
 export const clearLogin = async (): Promise<void> => {
+	writeBootAccount(null);
 	if (await fileExists("/account.json")) {
 		await window.fr.fs.promises.unlink("/account.json");
 	}

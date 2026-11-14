@@ -6,9 +6,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#1a1a1a" />
     <title>Fracital</title>
-    <script src="/vendor/core.js"></script>
-		<script src="/vendor/ctl.js"></script>
-    <script src="/vendor/flash/player.js"></script>
+    <!-- defer: run in order before the app's module, without holding up the first paint (the prerendered skeleton). -->
+    <script src="/vendor/core.js" defer></script>
+    <script src="/vendor/ctl.js" defer></script>
     <script src="//js.rev.iq/fracit.al" defer></script>
   </head>
   <body>
