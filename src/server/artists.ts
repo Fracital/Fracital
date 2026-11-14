@@ -132,6 +132,46 @@ export async function userMeta(pool: Pool, user: { id: string; email: string }) 
 	};
 }
 
+const RESERVED = new Set(["admin", "admins", "fracital", "support", "help", "staff", "mod", "moderator", "official", "system", "root", "api", "artists", "artist", "null", "undefined", "me", "user"]);
+
+/**
+ * Gives a user without a username a base one from their display name ("Will B." → willb), with
+ * random digits added when that is taken, reserved or too short ("user4821" for a name with no
+ * usable letters). Never touches a username the user already has. Returns the user's username.
+ */
+export async function assignBaseUsername(pool: Pool, userId: string, name: string): Promise<string | null> {
+	const base = name
+		.normalize("NFKD")
+		.toLowerCase()
+		.replace(/[^a-z0-9_.]/g, "")
+		.replace(/[._]{2,}/g, "_")
+		.replace(/^[._]+|[._]+$/g, "")
+		.slice(0, 20);
+	const stem = base.length >= 3 && !RESERVED.has(base) ? base : "user";
+	const digits = (n: number) => String(randomBytes(4).readUInt32BE() % 10 ** n).padStart(n, "0");
+	const candidates = [...(stem === base ? [base] : []), ...Array.from({ length: 5 }, () => stem + digits(4)), ...Array.from({ length: 5 }, () => stem + digits(8))];
+	for (const candidate of candidates) {
+		try {
+			const { rows } = await pool.query<{ username: string | null }>(
+				"insert into fracital_user_meta (user_id, username) values ($1, $2) on conflict (user_id) do update set username = coalesce(fracital_user_meta.username, excluded.username) returning username",
+				[userId, candidate],
+			);
+			return rows[0]?.username ?? null;
+		} catch (err) {
+			// Taken (the unique index on lower(username)): try the next one.
+			if ((err as { code?: string }).code !== "23505") throw err;
+		}
+	}
+	return null;
+}
+
+/** Gives every account that has no username a base one (accounts from before usernames were given out). */
+export async function backfillUsernames(pool: Pool) {
+	const { rows } = await pool.query<{ id: string; name: string }>('select u.id, u.name from "user" u left join fracital_user_meta m on m.user_id = u.id where m.username is null');
+	for (const user of rows) await assignBaseUsername(pool, user.id, user.name ?? "");
+	if (rows.length) console.log(`Gave ${rows.length} account(s) a base username`);
+}
+
 export async function isBanned(pool: Pool, userId: string) {
 	const { rows } = await pool.query("select 1 from fracital_user_meta where user_id = $1 and banned_at is not null", [userId]);
 	return rows.length > 0;
@@ -348,8 +388,6 @@ export function registerArtistRoutes(app: Hono<Env>, { init, requireUser }: Deps
 
 	// --- Your profile: display name, username, profile picture ---
 
-	const RESERVED = new Set(["admin", "admins", "fracital", "support", "help", "staff", "mod", "moderator", "official", "system", "root", "api", "artists", "artist", "null", "undefined", "me"]);
-
 	app.put("/api/me/profile", async c => {
 		const body = z
 			.object({
@@ -378,8 +416,12 @@ export function registerArtistRoutes(app: Hono<Env>, { init, requireUser }: Deps
 			const taken = await pool.query("select 1 from fracital_user_meta where lower(username) = $1 and user_id <> $2", [username, userId]);
 			if (taken.rows.length) return c.json({ error: "That username is taken" }, 409);
 		}
-		if (username !== undefined) {
+		if (username) {
 			await pool.query("insert into fracital_user_meta (user_id, username) values ($1, $2) on conflict (user_id) do update set username = excluded.username", [userId, username]);
+		} else if (username === null) {
+			// Everyone keeps a username: clearing it gives a fresh base one instead.
+			await pool.query("update fracital_user_meta set username = null where user_id = $1", [userId]);
+			await assignBaseUsername(pool, userId, name ?? c.get("user").name);
 		}
 		if (name !== undefined) await pool.query('update "user" set name = $2, "updatedAt" = now() where id = $1', [userId, name]);
 		if (image !== undefined) await pool.query('update "user" set image = $2, "updatedAt" = now() where id = $1', [userId, image || null]);

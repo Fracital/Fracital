@@ -23,7 +23,7 @@ import { Pool } from "pg";
 import * as z from "zod";
 import { asArray, lastfmCall, LastfmError, lastfmImage, lastfmKey, lastfmSecret, toCount } from "./lastfm";
 import { findDeezerArtist, findDeezerTrack, type RadioTrack } from "./music-radio";
-import { isBanned, migrateArtistTables, registerArtistRoutes, userMeta } from "./artists";
+import { assignBaseUsername, backfillUsernames, isBanned, migrateArtistTables, registerArtistRoutes, userMeta } from "./artists";
 import { mailEnabled, sendAccountDeletedEmail, sendDeleteAccountEmail, sendPasswordResetEmail, sendVerificationEmail } from "./mail";
 import { enabledSocialProviders, passkeyPlugin, passkeyRpId, socialProviders, terbiumEnabled, terbiumPlugin } from "./auth-providers";
 import { setStatStore } from "./music-stats";
@@ -263,6 +263,14 @@ const authOptions = (pool: Pool) => ({
 		}),
 	},
 	databaseHooks: {
+		user: {
+			create: {
+				// Every account starts with a username, made from its display name; the user can change it.
+				after: async (user: { id: string; name: string }) => {
+					await assignBaseUsername(pool, user.id, user.name).catch(err => console.error("Couldn't give a new account a username:", err));
+				},
+			},
+		},
 		account: {
 			create: {
 				// A provider sign-in that linked itself into an account whose email was never verified (see
@@ -394,6 +402,7 @@ function init() {
 				},
 			});
 			console.log("Fracital Accounts ready");
+			void backfillUsernames(pool).catch(err => console.error("Username backfill failed:", err));
 			return { auth, pool };
 		} catch (err) {
 			console.error("Fracital Accounts failed to start:", err);
