@@ -184,11 +184,7 @@ const Subscriptions = ({ className = "" }: { className?: string }) => {
 							<article key={tier.id} className="flex flex-col gap-4 p-5 rounded-2xl bg-(--tertiary)" style={tier.highlight ? { boxShadow: `inset 0 0 0 2px ${blue}` } : undefined}>
 								<div className="flex items-center justify-between gap-2">
 									<HolyText as="h2" className="text-xl font-bold" text={tier.name} />
-									{current ? (
-										<HolyText className="text-xs font-semibold px-2 py-1 rounded-md bg-[#8882]" text="Your plan" />
-									) : (
-										tier.badge && <HolyText className="text-xs font-semibold px-2 py-1 rounded-md" style={{ backgroundColor: blue, color: dark ? "#fff" : "#0b2a55" }} text={tier.badge} />
-									)}
+									{current ? <HolyText className="text-xs font-semibold px-2 py-1 rounded-md bg-[#8882]" text="Your plan" /> : tier.badge && <HolyText className="text-xs font-semibold px-2 py-1 rounded-md" style={{ backgroundColor: blue, color: dark ? "#fff" : "#0b2a55" }} text={tier.badge} />}
 								</div>
 								{tier.price && (
 									<div className="flex items-baseline gap-1">

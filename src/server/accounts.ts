@@ -994,10 +994,7 @@ else setTimeout(() => location.replace("/"), 1500);
 	const megabytes = (bytes: number) => `${Math.round(bytes / 100_000) / 10} MB`;
 
 	app.get("/api/me/game-saves", async c => {
-		const [{ rows }, quota] = await Promise.all([
-			c.get("pool").query<{ game_key: string; title: string; hash: string; size: number; updated_at: Date }>("select game_key, title, hash, size, updated_at from fracital_game_saves where user_id = $1 order by updated_at desc", [c.get("user").id]),
-			gameSaveQuota(c),
-		]);
+		const [{ rows }, quota] = await Promise.all([c.get("pool").query<{ game_key: string; title: string; hash: string; size: number; updated_at: Date }>("select game_key, title, hash, size, updated_at from fracital_game_saves where user_id = $1 order by updated_at desc", [c.get("user").id]), gameSaveQuota(c)]);
 		const used = rows.reduce((sum, r) => sum + r.size, 0);
 		return c.json({ saves: rows.map(r => ({ key: r.game_key, title: r.title, hash: r.hash, size: r.size, updatedAt: r.updated_at })), used, quota, premiumQuota: GAME_SAVE_QUOTA.premium });
 	});
