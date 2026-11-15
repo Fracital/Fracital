@@ -59,6 +59,9 @@ export const readBootLayout = (): BootLayout | null => {
 	return saved && typeof saved.tabView === "boolean" ? saved : null;
 };
 
+/** A phone-sized window: where Shell's bar row (the window less 32px) is under its TINY_WIDTH. */
+export const isPhoneScreen = () => typeof window !== "undefined" && window.innerWidth < 632;
+
 /** From settings.json's keys. */
 export const writeBootLayout = (settings: Record<string, unknown>) => {
 	const next: BootLayout = { tabView: settings["tab-view"] === true, compact: settings["compact-tabs"] === true, tabsLeft: settings["tabs-position"] === "left" };

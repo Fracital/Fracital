@@ -12,6 +12,7 @@ import { Tab } from "./components/Tab";
 import Shell from "./gui/Shell";
 import { NewGroupButton, NewTabButton } from "./gui/tabBatch";
 import { ProfileSwitcher } from "./gui/TabProfiles";
+import { isPhoneScreen } from "./libs/bootCache";
 import { appRoot } from "./libs/cloak";
 import { scrollParent } from "./libs/dragFeel";
 import type { detailProps } from "./libs/eventBus";
@@ -391,6 +392,8 @@ const App = () => {
 				setSettings("quicklinks", quickLinks);
 				setSettings("compact-tabs", false);
 			} finally {
+				// Phones always open in Big Screen; not saved, so the setting still holds on bigger screens.
+				if (isPhoneScreen()) setSettings(TAB_VIEW_SETTING, true);
 				useSettingsStore.setState({ loaded: true, layoutReady: true });
 			}
 		};

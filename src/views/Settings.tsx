@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { RectangleGroupIcon, PaintBrushIcon, TrashIcon, ScaleIcon, GlobeAltIcon, ChevronDownIcon } from "@heroicons/react/24/solid";
 import { CheckCircleIcon } from "@heroicons/react/24/outline";
 import { QuickLinksGrid } from "../components/LinkCard";
+import { isPhoneScreen } from "../libs/bootCache";
 import { quickLinks } from "../libs/init";
 import { BIG_PLAYER_DEFAULT_SETTING, useSettingsStore } from "../store";
 import { loadTheme } from "../libs/theme";
@@ -253,6 +254,8 @@ const Settings = ({ className }: SettingsProps) => {
 				const settingsData = await window.fr.fs.promises.readFile(SettingsPath, "utf-8");
 				const parsedSettings = JSON.parse(settingsData);
 				Object.entries(parsedSettings).forEach(([key, value]) => {
+					// Phones open in Big Screen whatever was saved (App.tsx); keep this session's tab layout.
+					if (key === TAB_VIEW_SETTING && isPhoneScreen()) return;
 					setSettings(key, value);
 				});
 			} catch (error) {

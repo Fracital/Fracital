@@ -30,7 +30,7 @@ const LinkCardSkeleton = () => (
 const Avatar = ({ account, className }: { account: BootAccount | null; className: string }) => (account?.avatar ? <img src={account.avatar} alt="" className={`${className} rounded-full object-cover opacity-70`} /> : <UserCircleIcon className={`${className} text-(--text-quaternary)`} />);
 
 /** Big Screen's tab count button in the top bar. */
-const TabCount = () => <div className="mx-1 h-5 w-6 shrink-0 rounded-md border-2 border-(--text-quaternary)" />;
+const TabCount = ({ className = "" }: { className?: string }) => <div className={`mx-1 h-5 w-6 shrink-0 rounded-md border-2 border-(--text-quaternary) ${className}`} />;
 
 /** The side panel, collapsed: its open button and the tab list (peeking in from the edge, or the compact rail). */
 const SidePanel = ({ layout }: { layout: BootLayout | null }) => {
@@ -71,6 +71,7 @@ const SidePanel = ({ layout }: { layout: BootLayout | null }) => {
  */
 export const SsrLoader = () => {
 	const layout = readBootLayout();
+	const tabView = layout?.tabView === true;
 	const account = readBootAccount();
 	return (
 		<div className="relative flex size-full flex-col overflow-hidden bg-(--primary)" data-server-shell="true">
@@ -78,9 +79,9 @@ export const SsrLoader = () => {
 				{/* Top bar */}
 				<div className="flex h-14 shrink-0 items-center justify-between gap-2.5 p-1">
 					<div className="flex min-w-0 flex-1 items-center gap-2.5">
-						<div className="flex items-center gap-1">
-							{/* The home button; on narrow screens it's in the menu. */}
-							<div className={`mr-1 size-9 rounded-full ${block} max-[631px]:hidden`} />
+						{/* The home and nav buttons; on phones they're in the menu and the search sits flush left. */}
+						<div className="flex items-center gap-1 max-[631px]:hidden">
+							<div className={`mr-1 size-9 rounded-full ${block}`} />
 							<div className={`flex items-center gap-0.5 rounded-full p-1.5 ${block}`}>
 								<span className="p-2">
 									<ArrowPathIcon className={`${icon} stroke-2`} />
@@ -91,7 +92,7 @@ export const SsrLoader = () => {
 								<span className="p-2">
 									<ArrowRightIcon className={icon} />
 								</span>
-								<span className="p-2 max-[631px]:hidden">
+								<span className="p-2">
 									<StarIcon className={`${icon} stroke-2`} />
 								</span>
 							</div>
@@ -103,7 +104,7 @@ export const SsrLoader = () => {
 					<div className="flex shrink-0 items-center gap-2.5">
 						{/* Wide: the bar's own buttons, the engine, the bar's settings and the account. */}
 						<div className="hidden items-center gap-2.5 min-[1212px]:flex">
-							{layout?.tabView && <TabCount />}
+							{tabView && <TabCount />}
 							<Bars3Icon className="size-6 text-(--text-quaternary)" />
 							<ArrowsPointingOutIcon className="size-6 text-(--text-quaternary)" />
 							<Cog6ToothIcon className="size-6 text-(--text-quaternary)" />
@@ -113,7 +114,8 @@ export const SsrLoader = () => {
 						</div>
 						{/* Narrower: the top bar toggle and the menu. */}
 						<div className="flex items-center gap-2.5 min-[1212px]:hidden">
-							{layout?.tabView && <TabCount />}
+							{/* Phones always open in Big Screen (App.tsx), whatever the saved layout. */}
+							<TabCount className={tabView ? "" : "hidden max-[631px]:block"} />
 							<div className={`size-9 rounded-full ${block}`} />
 							<div className={`flex h-9 w-16.5 items-center gap-1.5 rounded-full p-1 pl-2 ${block}`}>
 								<Bars3Icon className="size-5 text-(--text-quaternary)" />
@@ -145,7 +147,11 @@ export const SsrLoader = () => {
 					</div>
 
 					{/* Big Screen keeps the tabs in the tab view, not the side panel. */}
-					{!layout?.tabView && <SidePanel layout={layout} />}
+					{!tabView && (
+						<div className="contents max-[631px]:hidden">
+							<SidePanel layout={layout} />
+						</div>
+					)}
 				</div>
 			</div>
 			<div className="pointer-events-none absolute inset-0 flex items-center justify-center">
