@@ -1,6 +1,8 @@
 import { ChevronDownIcon } from "@heroicons/react/24/solid";
 import { type ReactNode, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useHolyAttr } from "../libs/holy-attr";
+import { portalTarget } from "../libs/cloak";
 import { HolyText } from "./common/HolyText";
 
 /**
@@ -215,44 +217,56 @@ export const BarSettingsMenu = ({ bar, dark, title, trigger }: { bar: Collapsibl
 		return () => setHeld(false);
 	}, [open, setHeld]);
 
+	return (
+		<div ref={ref} className="relative flex">
+			{trigger(() => setOpen(v => !v), open)}
+			{open && <BarSettingsPanel bar={bar} dark={dark} title={title} className="absolute right-0 top-full z-50 mt-2" />}
+		</div>
+	);
+};
+
+/** The settings card itself, with a live preview of the hover zone along the top of the window. */
+export const BarSettingsPanel = ({ bar, dark, title, className = "" }: { bar: CollapsibleBar; dark: boolean; title: string; className?: string }) => {
 	const surface = dark ? "bg-[#1e1e1ef0] border border-[#ffffff1a]" : "bg-[#fafafaf0] border border-[#00000014]";
 	const option = (on: boolean) => `flex-1 px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer duration-150 ${on ? "bg-(--accent) text-white" : dark ? "bg-[#ffffff10] hover:bg-[#ffffff1c]" : "bg-[#00000010] hover:bg-[#0000001c]"}`;
 
 	return (
-		<div ref={ref} className="relative flex">
-			{trigger(() => setOpen(v => !v), open)}
-			{open && (
-				<div role="dialog" className={`absolute right-0 top-full z-50 mt-2 flex w-64 flex-col gap-3 rounded-xl p-3 text-(--text-primary) shadow-[0_10px_40px_#00000060] backdrop-blur-xl ${surface}`}>
-					<span className="text-sm font-semibold">
-						<HolyText text={title} />
-					</span>
-					<div className="flex gap-1.5">
-						<button className={option(bar.mode === "hover")} onClick={() => bar.setMode("hover")}>
-							<HolyText text="Show on hover" />
-						</button>
-						<button className={option(bar.mode === "button")} onClick={() => bar.setMode("button")}>
-							<HolyText text="Open/close button" />
-						</button>
-					</div>
-					{bar.mode === "hover" ? (
-						<>
-							<label className="flex flex-col gap-1.5">
-								<span className="flex justify-between text-xs text-(--text-secondary)">
-									<HolyText text="Hover zone" />
-									<span className="font-mono tabular-nums">{bar.threshold}px</span>
-								</span>
-								<input type="range" min={THRESHOLD_MIN} max={THRESHOLD_MAX} step={2} value={bar.threshold} onChange={e => bar.setThreshold(Number(e.target.value))} className="w-full accent-(--accent)" />
-							</label>
-							<p className="text-xs leading-snug text-(--text-tertiary)">
-								<HolyText text="When the bar isn't kept open, it hides and comes back when the pointer is this close to the top." />
-							</p>
-						</>
-					) : (
-						<p className="text-xs leading-snug text-(--text-tertiary)">
-							<HolyText text="The bar only opens and closes with its button." />
-						</p>
+		<div role="dialog" className={`flex w-64 flex-col gap-3 rounded-xl p-3 text-(--text-primary) shadow-[0_10px_40px_#00000060] backdrop-blur-xl ${surface} ${className}`}>
+			<span className="text-sm font-semibold">
+				<HolyText text={title} />
+			</span>
+			<div className="flex gap-1.5">
+				<button className={option(bar.mode === "hover")} onClick={() => bar.setMode("hover")}>
+					<HolyText text="Show on hover" />
+				</button>
+				<button className={option(bar.mode === "button")} onClick={() => bar.setMode("button")}>
+					<HolyText text="Open/close button" />
+				</button>
+			</div>
+			{bar.mode === "hover" ? (
+				<>
+					<label className="flex flex-col gap-1.5">
+						<span className="flex justify-between text-xs text-(--text-secondary)">
+							<HolyText text="Hover zone" />
+							<span className="font-mono tabular-nums">{bar.threshold}px</span>
+						</span>
+						<input type="range" min={THRESHOLD_MIN} max={THRESHOLD_MAX} step={2} value={bar.threshold} onChange={e => bar.setThreshold(Number(e.target.value))} className="w-full accent-(--accent)" />
+					</label>
+					<p className="text-xs leading-snug text-(--text-tertiary)">
+						<HolyText text="When the bar isn't kept open, it hides and comes back when the pointer is this close to the top." />
+					</p>
+					{createPortal(
+						<div className="fixed inset-x-0 top-0 z-[9999] pointer-events-none transition-all duration-150 ease-out" style={{ height: bar.threshold }}>
+							<div className="size-full bg-(--accent) opacity-15 rounded-b-lg" />
+							<div className="absolute inset-x-0 bottom-0 h-px bg-(--accent) opacity-40" />
+						</div>,
+						portalTarget(),
 					)}
-				</div>
+				</>
+			) : (
+				<p className="text-xs leading-snug text-(--text-tertiary)">
+					<HolyText text="The bar only opens and closes with its button." />
+				</p>
 			)}
 		</div>
 	);

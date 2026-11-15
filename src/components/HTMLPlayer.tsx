@@ -7,6 +7,7 @@ interface HTMLPlayerProps {
 	className?: string;
 	width?: string | number;
 	height?: string | number;
+	muted?: boolean;
 }
 
 // Helper to get MIME type from file extension
@@ -34,7 +35,21 @@ const getMimeType = (filename: string): string => {
 	return mimeTypes[ext || ""] || "application/octet-stream";
 };
 
-export const HTMLPlayer = ({ folderPath, gameFile = "index.html", className = "", width = "100%", height = "100%" }: HTMLPlayerProps) => {
+// Injected before the game's own scripts so it can intercept AudioContext from the start.
+const muteScript = `<script>(function(){
+var M=false,G=null,C=[],O=window.AudioContext||window.webkitAudioContext;
+if(O){var W=function(){var c=new O();var g=c.createGain();g.connect(c.destination);
+if(M)g.gain.value=0;C.push({ctx:c,gain:g});
+var _dest=c.destination;Object.defineProperty(c,'destination',{get:function(){return g}});
+return c};W.prototype=O.prototype;window.AudioContext=W;if(window.webkitAudioContext)window.webkitAudioContext=W}
+function S(m){M=m;C.forEach(function(e){e.gain.gain.value=m?0:1});
+document.querySelectorAll('audio,video').forEach(function(el){el.muted=m});
+if(G)G.disconnect();if(m&&!G){try{var a=new O();G=a;var g=a.createGain();g.gain.value=0;g.connect(a.destination)}catch(e){}}
+}
+new MutationObserver(function(){if(M)document.querySelectorAll('audio,video').forEach(function(el){el.muted=true})}).observe(document.documentElement,{childList:true,subtree:true});
+window.__setMuted=S})()<\/script>`;
+
+export const HTMLPlayer = ({ folderPath, gameFile = "index.html", className = "", width = "100%", height = "100%", muted = false }: HTMLPlayerProps) => {
 	const iframeRef = useRef<HTMLIFrameElement>(null);
 	const [error, setError] = useState<string | null>(null);
 	const [loading, setLoading] = useState(true);
@@ -113,6 +128,15 @@ export const HTMLPlayer = ({ folderPath, gameFile = "index.html", className = ""
 				});
 
 				console.log("[HTMLPlayer] Setting HTML content");
+				// Inject the mute-intercept script as early as possible.
+				const headIdx = html.indexOf("<head");
+				if (headIdx !== -1) {
+					const closeTag = html.indexOf(">", headIdx);
+					if (closeTag !== -1) html = html.slice(0, closeTag + 1) + muteScript + html.slice(closeTag + 1);
+					else html = muteScript + html;
+				} else {
+					html = muteScript + html;
+				}
 				setHtmlContent(html);
 				setLoading(false);
 			} catch (err) {
@@ -125,8 +149,19 @@ export const HTMLPlayer = ({ folderPath, gameFile = "index.html", className = ""
 		loadGame();
 	}, [folderPath, gameFile]);
 
+	useEffect(() => {
+		try {
+			const win = iframeRef.current?.contentWindow as (Window & { __setMuted?: (m: boolean) => void }) | null;
+			win?.__setMuted?.(muted);
+		} catch { /* cross-origin guard */ }
+	}, [muted]);
+
 	const handleIframeLoad = () => {
 		setLoading(false);
+		try {
+			const win = iframeRef.current?.contentWindow as (Window & { __setMuted?: (m: boolean) => void }) | null;
+			win?.__setMuted?.(muted);
+		} catch { /* cross-origin guard */ }
 	};
 
 	const handleIframeError = () => {

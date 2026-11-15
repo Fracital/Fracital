@@ -300,7 +300,7 @@ const Games = ({ query, className }: GamesProps) => {
 	const toggleGameMute = () => {
 		const next = !isMuted;
 		setIsMuted(next);
-		if (rufflePlayerRef.current && rufflePlayerRef.current.volume !== undefined) rufflePlayerRef.current.volume = next ? 0 : 1;
+		if (selectedGame?.type === "flash" && rufflePlayerRef.current && rufflePlayerRef.current.volume !== undefined) rufflePlayerRef.current.volume = next ? 0 : 1;
 	};
 
 	useEffect(() => {
@@ -742,11 +742,9 @@ const Games = ({ query, className }: GamesProps) => {
 								}
 								barEnd={
 									<>
-										{selectedGame.type === "flash" && (
-											<GameBarButton label={isMuted ? "Unmute" : "Mute"} active={isMuted} onClick={toggleGameMute} dark={dark}>
-												{isMuted ? <SpeakerXMarkIcon className="size-5" /> : <SpeakerWaveIcon className="size-5" />}
-											</GameBarButton>
-										)}
+										<GameBarButton label={isMuted ? "Unmute" : "Mute"} active={isMuted} onClick={toggleGameMute} dark={dark}>
+											{isMuted ? <SpeakerXMarkIcon className="size-5" /> : <SpeakerWaveIcon className="size-5" />}
+										</GameBarButton>
 										<GameBarButton label={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"} onClick={() => void toggleGameFullscreen()} dark={dark}>
 											{isFullscreen ? <ArrowsPointingInIcon className="size-5" /> : <ArrowsPointingOutIcon className="size-5" />}
 										</GameBarButton>
@@ -779,7 +777,7 @@ const Games = ({ query, className }: GamesProps) => {
 										}}
 									/>
 								) : (
-									<HTMLPlayer folderPath={selectedGame.folderPath} gameFile="index.html" className="w-full h-full" />
+									<HTMLPlayer folderPath={selectedGame.folderPath} gameFile="index.html" className="w-full h-full" muted={isMuted} />
 								)}
 							</GameStage>
 							<div className={`flex items-center justify-between gap-4 p-4 rounded-xl ${settings.brightness === "dark" ? "bg-[#ffffff10]" : "bg-[#00000010]"}`}>

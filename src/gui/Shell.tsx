@@ -32,11 +32,12 @@ import {
 	ClockIcon,
 } from "@heroicons/react/24/solid";
 import { readBootAccount } from "../libs/bootCache";
-import { BarOpenHandle, BarSettingsMenu, useCollapsibleBar, useHoverReveal, useNoHover } from "../components/CollapsibleBar";
+import { BarOpenHandle, BarSettingsMenu, BarSettingsPanel, useCollapsibleBar, useHoverReveal, useNoHover } from "../components/CollapsibleBar";
 import { useHolyAttr } from "../libs/holy-attr";
-import { appRoot } from "../libs/cloak";
+import { appRoot, portalTarget } from "../libs/cloak";
 import { StarIcon as StarIconOutline } from "@heroicons/react/24/outline";
 import { Suspense, useEffect, useState, useRef } from "react";
+import { createPortal } from "react-dom";
 import { ShellButton } from "../components/ShellButton";
 import { useTabsStore, useSettingsStore, useTabLoadingStore, usePanelsStore } from "../store";
 import TabCountIcon from "../components/TabCountIcon";
@@ -307,7 +308,7 @@ export const UserCard = ({ id, display, handle, avatar }: UserProps) => {
 const COMPACT_WIDTH = 1180;
 const TINY_WIDTH = 600;
 
-/** The logo on the home button (and the menu's Home item, where the button folds into it on narrow screens). */
+/** The logo on the home button. */
 const FracitalLogo = ({ className }: { className: string }) => (
 	<svg viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg" className={className}>
 		<circle cx="64" cy="64" r="64" className="fill-(--logo-primary)" />
@@ -321,8 +322,6 @@ const FracitalLogo = ({ className }: { className: string }) => (
 		<path d="M51 87V41H81V51.5H62.1278V59.75H78.9222L76.5 70.25H62.1278V85L51 87Z" className="fill-(--logo-secondary)" />
 	</svg>
 );
-
-const HOVER_PRESETS = [8, 24, 48, 96];
 
 const Shell = () => {
 	const newTab = useTabsStore(state => state.newTab);
@@ -362,6 +361,7 @@ const Shell = () => {
 	const { ref: barSettingsRef, placeholder: barSettingsAttrs } = useHolyAttr({ title: "Top bar settings", "aria-label": "Top bar settings" });
 	const { ref: pinRef, placeholder: pinAttrs } = useHolyAttr({ title: bar.pinned ? "Auto-hide the top bar" : "Keep the top bar open", "aria-label": bar.pinned ? "Auto-hide the top bar" : "Keep the top bar open" });
 	const { ref: closeBarRef, placeholder: closeBarAttrs } = useHolyAttr({ title: "Hide the top bar", "aria-label": "Hide the top bar" });
+	const { ref: menuHomeRef, placeholder: menuHomeAttrs } = useHolyAttr({ title: "Home", "aria-label": "Home" });
 
 	const versions = useEngineVersions();
 	const { uv: uvVersion, sj: sjVersion } = versions;
@@ -379,6 +379,28 @@ const Shell = () => {
 	const { openModal } = useModal();
 	const [isFavorited, setIsFavorited] = useState<boolean>(false);
 	const [contextMenu, setContextMenu] = useState<null | { x: number; y: number; visible: boolean; items: MenuItem[]; align?: "start" | "end" }>(null);
+	// The top bar settings card opened from the compact menu, anchored where that menu was (right edge, top).
+	const [barPanelAt, setBarPanelAt] = useState<null | { x: number; y: number }>(null);
+	const barPanelRef = useRef<HTMLDivElement>(null);
+	useEffect(() => {
+		if (!barPanelAt) return;
+		const onDown = (e: PointerEvent) => {
+			if (barPanelRef.current && !e.composedPath().includes(barPanelRef.current)) setBarPanelAt(null);
+		};
+		const onKey = (e: KeyboardEvent) => e.key === "Escape" && setBarPanelAt(null);
+		document.addEventListener("pointerdown", onDown);
+		document.addEventListener("keydown", onKey);
+		return () => {
+			document.removeEventListener("pointerdown", onDown);
+			document.removeEventListener("keydown", onKey);
+		};
+	}, [barPanelAt]);
+	const { setHeld: setBarHeld } = bar;
+	useEffect(() => {
+		if (!barPanelAt) return;
+		setBarHeld(true);
+		return () => setBarHeld(false);
+	}, [barPanelAt, setBarHeld]);
 	// Last time's account (bootCache) until /account.json is read, so the bar doesn't start signed out.
 	const [accountinfo, setAccountinfo] = useState<{ id: string; display: string; handle: string; avatar: string | React.ReactNode } | null>(readBootAccount);
 
@@ -520,15 +542,58 @@ const Shell = () => {
 		onClick: () => setEngine(engine),
 	});
 
-	const compactMenu = (): MenuItem[] => {
+	const goHistory = (step: -1 | 1) => {
+		const currTab = tabs.find(tab => tab.current);
+		if (!currTab) return;
+		const currTabId = currTab.id;
+		const history = useTabsStore.getState().getHistory(currTabId);
+		if (!history || history.length < 2) return;
+		const currentIndex = useTabsStore.getState().getHistoryIndex(currTabId);
+		const target = history[currentIndex + step];
+		if (!target) return;
+		useTabsStore.getState().setHistoryIndex(currTabId, currentIndex + step);
+		navigationEvent({
+			url: target.url,
+			icon: target.icon,
+			title: target.title,
+			displayUrl: target.displayUrl ?? target.url,
+			id: currTabId,
+			isHistoryNavigation: true,
+		} as any);
+	};
+	const navButtonClass = `group flex p-2 rounded-full cursor-pointer inset-shadow-[0_0_0_2px_transparent] hover:inset-shadow-[0_0_0_2px_var(--accent)] duration-150 ${settings.brightness === "light" ? "text-(--text-tertiary) hover:text-(--text-primary) hover:bg-[#00000018]" : "text-(--text-primary) hover:text-(--text-secondary) hover:bg-[#ffffff10]"}`;
+	/** Refresh, back, forward and favorite: in the bar, or in the compact menu on tiny screens with a home button in front. */
+	const navPill = (inBar: boolean) => (
+		<div ref={inBar ? navButtonsRef : undefined} className="flex items-center justify-center gap-0.5 p-1.5 bg-(--secondary) inset-shadow-(--inset-shadow-primary) rounded-full duration-150">
+			{!inBar && (
+				<button ref={menuHomeRef} {...menuHomeAttrs} className={navButtonClass} onClick={goHome}>
+					<HomeIcon className="size-4.5 text-(--text-tertiary) cursor-pointer group-hover:text-(--text-primary) duration-300" />
+				</button>
+			)}
+			<button className={navButtonClass} title="Refresh Page" onClick={() => window.dispatchEvent(new CustomEvent("reload-tab", { detail: { tab: tabs.find(tab => tab.current)?.id ?? null } }))}>
+				<ArrowPathIcon className={"size-4.5 stroke-current stroke-1 text-(--text-tertiary) cursor-pointer group-hover:text-(--text-primary) group-hover:rotate-180 duration-300" + (currentTabLoading ? " view-load-spin" : "")} />
+			</button>
+			<button className={navButtonClass} title="Go back" onClick={() => goHistory(-1)}>
+				<ArrowLeftIcon className="size-4.5 stroke-current stroke-1 text-(--text-tertiary) cursor-pointer group-hover:text-(--text-primary) duration-300" />
+			</button>
+			<button className={navButtonClass} title="Go forward" onClick={() => goHistory(1)}>
+				<ArrowRightIcon className="size-4.5 stroke-current stroke-1 text-(--text-tertiary) cursor-pointer group-hover:text-(--text-primary) duration-300" />
+			</button>
+			<button className={navButtonClass} title={isFavorited ? "Remove from favorites" : "Add to favorites"} onClick={toggleFavorite}>
+				{isFavorited ? (
+					<StarIconSolid className="size-4.5 text-(--text-tertiary) cursor-pointer group-hover:text-(--text-primary) duration-300" />
+				) : (
+					<StarIconOutline className="size-4.5 stroke-current stroke-2 text-(--text-tertiary) cursor-pointer group-hover:text-(--text-primary) duration-300" />
+				)}
+			</button>
+		</div>
+	);
+
+	const sep: MenuItem = { isSeparator: true, title: "", icon: null, onClick: () => undefined };
+	const compactMenu = (anchor: { x: number; y: number }): MenuItem[] => {
 		const items: MenuItem[] = [];
 		if (tiny) {
-			items.push({ title: <HolyText text="Home" />, icon: <FracitalLogo className="size-5" />, onClick: goHome });
-			items.push({
-				title: <HolyText text={isFavorited ? "Remove from favorites" : "Add to favorites"} />,
-				icon: isFavorited ? <StarIconSolid className="size-5" /> : <StarIconOutline className="size-5" />,
-				onClick: toggleFavorite,
-			});
+			items.push({ custom: navPill(false), title: "", icon: null, onClick: () => undefined });
 		}
 		items.push(
 			{
@@ -549,13 +614,11 @@ const Shell = () => {
 			{
 				title: <HolyText text="Top bar" />,
 				icon: <AdjustmentsVerticalIcon className="size-5" />,
-				onClick: () => undefined,
-				children: [
-					{ title: <HolyText text="Show on hover" />, icon: check(bar.mode === "hover"), onClick: () => bar.setMode("hover") },
-					{ title: <HolyText text="Open/close button" />, icon: check(bar.mode === "button"), onClick: () => bar.setMode("button") },
-					...(bar.mode === "hover" ? [{ isHeader: true, title: <HolyText text="Hover zone" />, icon: null, onClick: () => undefined }, ...HOVER_PRESETS.map(px => ({ title: `${px}px`, icon: check(bar.threshold === px), onClick: () => bar.setThreshold(px) }))] : []),
-				],
+				onClick: () => setBarPanelAt(anchor),
 			},
+		);
+		items.push(sep);
+		items.push(
 			{ title: <HolyText text="Settings" />, icon: <Cog6ToothIcon className="size-5" />, onClick: () => openPage("about:settings", "Settings", <Cog6ToothIcon className="size-5" />) },
 			{ title: <HolyText text="File Manager" />, icon: <FolderIcon className="size-5" />, onClick: () => openPage("about:files", "File Manager", <FolderIcon className="size-4.5" />) },
 			{ title: <HolyText text="Games" />, icon: <PlayIcon className="size-5" />, onClick: () => openPage("about:games", "Games", <PlayIcon className="size-4.5" />) },
@@ -564,6 +627,7 @@ const Shell = () => {
 			{ title: <HolyText text="Music" />, icon: <MusicalNoteIcon className="size-5" />, onClick: () => openLibraryPage("") },
 			{ title: <HolyText text="Chat" />, icon: <ChatBubbleLeftRightIcon className="size-5" />, onClick: () => openPage("about:chat", "Chat", <ChatBubbleLeftRightIcon className="size-4.5" />) },
 		);
+		items.push(sep);
 		if (accountinfo) {
 			items.push(
 				{ title: <HolyText text="Manage Account" />, icon: <UserIcon className="size-5" />, onClick: () => openPage("about:account", "Fracital Account") },
@@ -628,7 +692,8 @@ const Shell = () => {
 	const openCompactMenu = (e: React.MouseEvent<HTMLElement>) => {
 		const rect = e.currentTarget.getBoundingClientRect();
 		// The menu keeps itself on screen, so anchoring at the right edge lines it up under the button.
-		setContextMenu({ x: rect.right, y: rect.bottom + 8, visible: true, items: compactMenu(), align: "end" });
+		const anchor = { x: rect.right, y: rect.bottom + 8 };
+		setContextMenu({ ...anchor, visible: true, items: compactMenu(anchor), align: "end" });
 	};
 	const compactTrigger = (
 		<button ref={menuTriggerRef} {...menuTriggerAttrs} aria-haspopup="menu" className="group flex shrink-0 items-center gap-1.5 p-1 pl-2 rounded-full bg-(--secondary) inset-shadow-(--inset-shadow-secondary) hover:inset-shadow-(--inset-shadow-accent) cursor-pointer duration-200" onClick={openCompactMenu}>
@@ -648,8 +713,9 @@ const Shell = () => {
 	const row = (
 		<div id="shell" ref={rowRef} className={"flex justify-between gap-2.5 p-1 duration-200"}>
 			<div className="flex flex-1 min-w-0 items-center justify-start gap-2.5">
-				<div className="relative flex items-center justify-center gap-1">
-					<button className={`group relative flex items-center justify-center mr-1 cursor-pointer ${tiny ? "hidden" : ""}`} title={`Home - Go to the homepage`} onMouseDown={goHome}>
+				{/* On tiny screens home and the nav buttons live in the compact menu; hiding the whole group lets the search sit flush left. */}
+				<div className={`relative items-center justify-center gap-1 ${tiny ? "hidden" : "flex"}`}>
+					<button className="group relative flex items-center justify-center mr-1 cursor-pointer" title={`Home - Go to the homepage`} onMouseDown={goHome}>
 						<FracitalLogo className="size-9 group-hover:-translate-y-1 group-hover:opacity-0 duration-150 pointer-events-none" />
 						<HomeIcon
 							className={
@@ -661,111 +727,7 @@ const Shell = () => {
 							}
 						/>
 					</button>
-					<div ref={navButtonsRef} className={`flex items-center justify-center gap-0.5 p-1.5 bg-(--secondary) inset-shadow-(--inset-shadow-primary) rounded-full duration-150`}>
-						<button
-							className={
-								"group flex p-2 rounded-full cursor-pointer inset-shadow-[0_0_0_2px_transparent] hover:inset-shadow-[0_0_0_2px_var(--accent)] duration-150" +
-								" " +
-								`
-							${settings.brightness === "light" ? "text-(--text-tertiary) hover:text-(--text-primary) hover:bg-[#00000018]" : "text-(--text-primary) hover:text-(--text-secondary) hover:bg-[#ffffff10]"}
-						`
-							}
-							title="Refresh Page"
-							onClick={() => {
-								window.dispatchEvent(
-									new CustomEvent("reload-tab", {
-										detail: {
-											tab: tabs.find(tab => tab.current)?.id ?? null,
-										},
-									}),
-								);
-							}}
-						>
-							<ArrowPathIcon className={"size-4.5 stroke-current stroke-1 text-(--text-tertiary) cursor-pointer group-hover:text-(--text-primary) group-hover:rotate-180 duration-300" + (currentTabLoading ? " view-load-spin" : "")} />
-						</button>
-						<button
-							className={
-								"group p-2 rounded-full cursor-pointer inset-shadow-[0_0_0_2px_transparent] hover:inset-shadow-[0_0_0_2px_var(--accent)] duration-150" +
-								" " +
-								`
-                            ${settings.brightness === "light" ? "text-(--text-tertiary) hover:text-(--text-primary) hover:bg-[#00000018]" : "text-(--text-primary) hover:text-(--text-secondary) hover:bg-[#ffffff10]"}
-                        `
-							}
-							title="Go back"
-							onClick={() => {
-								const currTab = tabs.find(tab => tab.current);
-								if (!currTab) return;
-								const currTabId = currTab.id;
-								const currentIndex = useTabsStore.getState().getHistoryIndex(currTabId);
-								if (currentIndex <= 0) return;
-								const history = useTabsStore.getState().getHistory(currTabId);
-								if (!history || history.length < 2) return;
-								const target = history[currentIndex - 1];
-								if (!target) return;
-								useTabsStore.getState().setHistoryIndex(currTabId, currentIndex - 1);
-								navigationEvent({
-									url: target.url,
-									icon: target.icon,
-									title: target.title,
-									displayUrl: target.displayUrl ?? target.url,
-									id: currTabId,
-									isHistoryNavigation: true,
-								} as any);
-							}}
-						>
-							<ArrowLeftIcon className={"size-4.5 stroke-current stroke-1 text-(--text-tertiary) cursor-pointer group-hover:text-(--text-primary) duration-300"} />
-						</button>
-						<button
-							className={
-								"group p-2 rounded-full cursor-pointer inset-shadow-[0_0_0_2px_transparent] hover:inset-shadow-[0_0_0_2px_var(--accent)] duration-150" +
-								" " +
-								`
-                            ${settings.brightness === "light" ? "text-(--text-tertiary) hover:text-(--text-primary) hover:bg-[#00000018]" : "text-(--text-primary) hover:text-(--text-secondary) hover:bg-[#ffffff10]"}
-                        `
-							}
-							title="Go forward"
-							onClick={() => {
-								const currTab = tabs.find(tab => tab.current);
-								if (!currTab) return;
-								const currTabId = currTab.id;
-								const history = useTabsStore.getState().getHistory(currTabId);
-								if (!history || history.length < 2) return;
-								const currentIndex = useTabsStore.getState().getHistoryIndex(currTabId);
-								if (currentIndex >= history.length - 1) return;
-								const target = history[currentIndex + 1];
-								if (!target) return;
-								useTabsStore.getState().setHistoryIndex(currTabId, currentIndex + 1);
-								navigationEvent({
-									url: target.url,
-									icon: target.icon,
-									title: target.title,
-									displayUrl: target.displayUrl ?? target.url,
-									id: currTabId,
-									isHistoryNavigation: true,
-								} as any);
-							}}
-						>
-							<ArrowRightIcon className={"size-4.5 stroke-current stroke-1 text-(--text-tertiary) cursor-pointer group-hover:text-(--text-primary) duration-300"} />
-						</button>
-						<button
-							className={
-								"group p-2 rounded-full cursor-pointer inset-shadow-[0_0_0_2px_transparent] hover:inset-shadow-[0_0_0_2px_var(--accent)] duration-150" +
-								(tiny ? " hidden" : "") +
-								" " +
-								`
-                            ${settings.brightness === "light" ? "text-(--text-tertiary) hover:text-(--text-primary) hover:bg-[#00000018]" : "text-(--text-primary) hover:text-(--text-secondary) hover:bg-[#ffffff10]"}
-                        `
-							}
-							title={isFavorited ? "Remove from favorites" : "Add to favorites"}
-							onClick={toggleFavorite}
-						>
-							{isFavorited ? (
-								<StarIconSolid className={"size-4.5 text-(--text-tertiary) cursor-pointer group-hover:text-(--text-primary) duration-300"} />
-							) : (
-								<StarIconOutline className={"size-4.5 stroke-current stroke-2 text-(--text-tertiary) cursor-pointer group-hover:text-(--text-primary) duration-300"} />
-							)}
-						</button>
-					</div>
+					{navPill(true)}
 				</div>
 				<div className="relative flex flex-1 min-w-0 items-center">{tabs && tabs.length > 0 ? tabs.map((tab, index) => <Search tab={tab} key={index} />) : <Search />}</div>
 			</div>
@@ -1001,6 +963,13 @@ const Shell = () => {
 				)}
 			</div>
 			{contextMenu?.visible && <ContextMenu items={contextMenu.items} position={{ x: contextMenu.x, y: contextMenu.y }} align={contextMenu.align} onClose={() => setContextMenu(null)} />}
+			{barPanelAt &&
+				createPortal(
+					<div ref={barPanelRef} className="fixed z-50" style={{ top: barPanelAt.y, right: Math.max(8, window.innerWidth - barPanelAt.x) }}>
+						<BarSettingsPanel bar={bar} dark={dark} title="Top bar" />
+					</div>,
+					portalTarget(),
+				)}
 		</div>
 	);
 

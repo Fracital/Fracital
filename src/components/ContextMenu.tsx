@@ -12,6 +12,10 @@ export interface MenuItem {
 	icon: string | React.ReactNode | null;
 	// when true, render as a non-clickable header row
 	isHeader?: boolean;
+	// when true, render as a thin horizontal divider
+	isSeparator?: boolean;
+	// rendered as-is in place of a row; pressing a button inside it closes the menu
+	custom?: React.ReactNode;
 	// optional submenu children
 	children?: MenuItem[];
 	// layout for children when shown: 'vertical' (column) or 'horizontal' (row)
@@ -32,10 +36,13 @@ export const ContextMenu = ({ items, position, onClose, align = "start" }: MenuP
 	const menuRef = useRef<HTMLDivElement>(null);
 	const itemsRef = useRef<HTMLDivElement>(null);
 	const [adjustedPos, setAdjustedPos] = useState(position);
+	const [maxHeight, setMaxHeight] = useState<number>();
 	const parentRefs = useRef<Record<number, HTMLDivElement | null>>({});
 	const submenuRefs = useRef<Record<number, HTMLDivElement | null>>({});
 	const [submenuPositions, setSubmenuPositions] = useState<Record<number, "left" | "right">>({});
 	const [submenuShift, setSubmenuShift] = useState<Record<number, number>>({});
+	// Submenus are position: fixed so the menu's scroll box doesn't clip them; this is each parent row's rect.
+	const [submenuAnchor, setSubmenuAnchor] = useState<Record<number, { top: number; left: number; right: number }>>({});
 	/** Submenu opened by click/tap (hover opens them too). */
 	const [openSub, setOpenSub] = useState<number | null>(null);
 
@@ -46,7 +53,11 @@ export const ContextMenu = ({ items, position, onClose, align = "start" }: MenuP
 		if (!menu) return;
 
 		const { innerWidth, innerHeight } = window;
-		const { offsetWidth, offsetHeight } = menu;
+		const { offsetWidth } = menu;
+		// Fill the room below the anchor (up to 32rem) and scroll the rest; only move up when that room is too small.
+		const below = innerHeight - position.y - 8;
+		const cap = Math.min(512, below >= 240 ? below : innerHeight - 16);
+		const height = Math.min(menu.scrollHeight, cap);
 
 		let x = align === "end" ? position.x - offsetWidth : position.x;
 		let y = position.y;
@@ -55,10 +66,11 @@ export const ContextMenu = ({ items, position, onClose, align = "start" }: MenuP
 		if (x + offsetWidth > innerWidth) {
 			x = innerWidth - offsetWidth - 8;
 		}
-		if (y + offsetHeight > innerHeight) {
-			y = innerHeight - offsetHeight - 8;
+		if (y + height > innerHeight) {
+			y = innerHeight - height - 8;
 		}
 
+		setMaxHeight(cap);
 		setAdjustedPos({ x, y });
 	}, [position, align]);
 
@@ -86,6 +98,7 @@ export const ContextMenu = ({ items, position, onClose, align = "start" }: MenuP
 				const { innerWidth, innerHeight } = window;
 				const next: Record<number, "left" | "right"> = {};
 				const nextShift: Record<number, number> = {};
+				const nextAnchor: Record<number, { top: number; left: number; right: number }> = {};
 				(items || []).forEach((item, i) => {
 					if (!item.children) return;
 					const parentEl = parentRefs.current[i];
@@ -97,10 +110,14 @@ export const ContextMenu = ({ items, position, onClose, align = "start" }: MenuP
 					next[i] = parentRect.right + submenuRect.width + 8 > innerWidth ? "left" : preferred;
 					// Lift the submenu so its bottom stays on screen (it opens level with its row).
 					nextShift[i] = Math.max(0, Math.min(parentRect.top + submenuRect.height + 8 - innerHeight, parentRect.top - 8));
+					// On narrow screens there's no room beside the menu, so overlap it rather than run off the edge.
+					const room = innerWidth - submenuRect.width - 8;
+					nextAnchor[i] = { top: parentRect.top, left: Math.max(8, Math.min(parentRect.right, room)), right: Math.max(8, Math.min(innerWidth - parentRect.left, room)) };
 				});
 				const same = (a: object, b: object) => JSON.stringify(a) === JSON.stringify(b);
 				setSubmenuPositions(prev => (same(prev, next) ? prev : next));
 				setSubmenuShift(prev => (same(prev, nextShift) ? prev : nextShift));
+				setSubmenuAnchor(prev => (same(prev, nextAnchor) ? prev : nextAnchor));
 			} catch {
 				// ignore measurement errors
 			}
@@ -108,12 +125,18 @@ export const ContextMenu = ({ items, position, onClose, align = "start" }: MenuP
 
 		// run on next tick so DOM has rendered
 		const t = setTimeout(update, 0);
+		// The open animation slides the menu in, so measure again once it has settled.
+		const settled = setTimeout(update, 700);
+		const scroller = menuRef.current;
 		window.addEventListener("resize", update);
+		scroller?.addEventListener("scroll", update, { passive: true });
 		return () => {
 			clearTimeout(t);
+			clearTimeout(settled);
 			window.removeEventListener("resize", update);
+			scroller?.removeEventListener("scroll", update);
 		};
-	}, [items, adjustedPos.x, adjustedPos.y]);
+	}, [items, adjustedPos.x, adjustedPos.y, maxHeight]);
 
 	useEffect(() => {
 		setTimeout(() => {
@@ -150,10 +173,16 @@ export const ContextMenu = ({ items, position, onClose, align = "start" }: MenuP
 	// Portaled to the app root: a transformed, filtered or contained ancestor would otherwise make this
 	// fixed menu position against (and be clipped by) that ancestor instead of the window.
 	return createPortal(
-		<div ref={menuRef} className="fixed z-50 min-w-[180px] p-1.5 text-(--text-primary) bg-(--secondary) inset-shadow-(--inset-shadow-primary) rounded-xl shadow-lg translate-y-2 opacity-0" style={{ top: adjustedPos.y, left: adjustedPos.x }}>
+		<div ref={menuRef} className="fixed z-50 min-w-[180px] p-1.5 overflow-y-auto overscroll-contain text-(--text-primary) bg-(--secondary) inset-shadow-(--inset-shadow-primary) rounded-xl shadow-lg translate-y-2 opacity-0" style={{ top: adjustedPos.y, left: adjustedPos.x, maxHeight }}>
 			<div ref={itemsRef} className="flex flex-col translate-y-4 opacity-0 duration-500">
 				{items.map((item, i) =>
-					item.isHeader ? (
+					item.isSeparator ? (
+						<span key={i} className="mx-2 my-1.5 block bg-current opacity-15" style={{ height: 2 }} />
+					) : item.custom ? (
+						<div key={i} className="flex justify-center p-1" onClick={e => (e.target as Element).closest("button") && onClose()}>
+							{item.custom}
+						</div>
+					) : item.isHeader ? (
 						<div key={i} className={"px-3 py-2 text-sm font-semibold text-(--text-primary)"}>
 							{item.title}
 						</div>
@@ -187,8 +216,15 @@ export const ContextMenu = ({ items, position, onClose, align = "start" }: MenuP
 										submenuRefs.current[i] = el;
 									}}
 									// Padding (not margin) bridges the gap so the pointer can cross from the row to the submenu.
-									style={{ top: -6 - (submenuShift[i] ?? 0) }}
-									className={`absolute ${submenuPositions[i] === "left" ? "right-full pr-1.5" : "left-full pl-1.5"} z-50 transition-opacity duration-150 ${openSub === i ? "opacity-100 pointer-events-auto" : "pointer-events-none opacity-0 group-hover:opacity-100 group-hover:pointer-events-auto"}`}
+									style={
+										submenuAnchor[i]
+											? {
+													top: submenuAnchor[i].top - 6 - (submenuShift[i] ?? 0),
+													...(submenuPositions[i] === "left" ? { right: submenuAnchor[i].right } : { left: submenuAnchor[i].left }),
+												}
+											: undefined
+									}
+									className={`fixed ${submenuPositions[i] === "left" ? "pr-1.5" : "pl-1.5"} z-50 transition-opacity duration-150 ${openSub === i ? "opacity-100 pointer-events-auto" : "pointer-events-none opacity-0 group-hover:opacity-100 group-hover:pointer-events-auto"}`}
 								>
 									{item.childrenLayout === "grid" ? (
 										// Rows of round options (the group icons).
