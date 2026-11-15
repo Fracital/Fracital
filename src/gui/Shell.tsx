@@ -580,11 +580,7 @@ const Shell = () => {
 				<ArrowRightIcon className="size-4.5 stroke-current stroke-1 text-(--text-tertiary) cursor-pointer group-hover:text-(--text-primary) duration-300" />
 			</button>
 			<button className={navButtonClass} title={isFavorited ? "Remove from favorites" : "Add to favorites"} onClick={toggleFavorite}>
-				{isFavorited ? (
-					<StarIconSolid className="size-4.5 text-(--text-tertiary) cursor-pointer group-hover:text-(--text-primary) duration-300" />
-				) : (
-					<StarIconOutline className="size-4.5 stroke-current stroke-2 text-(--text-tertiary) cursor-pointer group-hover:text-(--text-primary) duration-300" />
-				)}
+				{isFavorited ? <StarIconSolid className="size-4.5 text-(--text-tertiary) cursor-pointer group-hover:text-(--text-primary) duration-300" /> : <StarIconOutline className="size-4.5 stroke-current stroke-2 text-(--text-tertiary) cursor-pointer group-hover:text-(--text-primary) duration-300" />}
 			</button>
 		</div>
 	);

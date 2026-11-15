@@ -153,7 +153,9 @@ export const HTMLPlayer = ({ folderPath, gameFile = "index.html", className = ""
 		try {
 			const win = iframeRef.current?.contentWindow as (Window & { __setMuted?: (m: boolean) => void }) | null;
 			win?.__setMuted?.(muted);
-		} catch { /* cross-origin guard */ }
+		} catch {
+			/* cross-origin guard */
+		}
 	}, [muted]);
 
 	const handleIframeLoad = () => {
@@ -161,7 +163,9 @@ export const HTMLPlayer = ({ folderPath, gameFile = "index.html", className = ""
 		try {
 			const win = iframeRef.current?.contentWindow as (Window & { __setMuted?: (m: boolean) => void }) | null;
 			win?.__setMuted?.(muted);
-		} catch { /* cross-origin guard */ }
+		} catch {
+			/* cross-origin guard */
+		}
 	};
 
 	const handleIframeError = () => {
