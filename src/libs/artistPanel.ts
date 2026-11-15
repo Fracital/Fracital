@@ -203,6 +203,10 @@ export interface AdminUser {
 	premium: boolean;
 	/** Time-limited premium (the streak promo), while it lasts. */
 	premiumUntil: string | null;
+	/** Has had premium before (no launch offer). */
+	hadPremium: boolean;
+	/** A paying subscriber's plan, else null. */
+	paidPlan: "monthly" | "annual" | null;
 	pages: number;
 	claims: number;
 }

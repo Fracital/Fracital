@@ -411,6 +411,9 @@ const Users = ({ dark }: { dark: boolean }) => {
 									{u.name}
 									{u.role === "admin" && <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-[#3d91ff]/20 text-[#6aaaff]">ADMIN</span>}
 									{u.premium && <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-yellow-500/20 text-yellow-300">PREMIUM</span>}
+									{u.paidPlan && <HolyText className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-green-500/20 text-green-300" text={u.paidPlan === "annual" ? "PAID ANNUAL" : "PAID MONTHLY"} />}
+									{/* Not on the launch offer's new-member price. */}
+									{u.hadPremium && !u.premium && !u.premiumUntil && !u.paidPlan && <HolyText className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-[#8882] text-(--text-tertiary)" text="HAD PREMIUM" />}
 									{u.premiumUntil && (
 										<HolyRich className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-orange-500/20 text-orange-300">
 											PROMO PREMIUM UNTIL <HolyDynamic>{new Date(u.premiumUntil).toLocaleDateString()}</HolyDynamic>

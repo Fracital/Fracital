@@ -23,6 +23,7 @@ const MusicPlayer = lazy(() => import("../views/Music/MusicPlayer").then(m => ({
 const Profile = lazy(() => import("../views/Profile"));
 const Settings = lazy(() => import("../views/Settings"));
 const Social = lazy(() => import("../views/Social"));
+const Subscriptions = lazy(() => import("../views/Subscriptions"));
 const TextEditor = lazy(() => import("../views/TextEditor").then(m => ({ default: m.TextEditor })));
 
 export interface AboutPage {
@@ -129,6 +130,12 @@ export const aboutPages: Record<string, AboutPage> = {
 		component: History,
 		icon: <ClockIcon className="size-5" />,
 		title: "History",
+	},
+	subscriptions: {
+		name: "subscriptions",
+		component: Subscriptions,
+		icon: <CheckBadgeIcon className="size-5" />,
+		title: "Premium",
 	},
 	extensions: {
 		name: "extensions",

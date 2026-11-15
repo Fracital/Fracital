@@ -24,6 +24,7 @@ import * as z from "zod";
 import { asArray, lastfmCall, LastfmError, lastfmImage, lastfmKey, lastfmSecret, toCount } from "./lastfm";
 import { findDeezerArtist, findDeezerTrack, type RadioTrack } from "./music-radio";
 import { assignBaseUsername, backfillUsernames, isBanned, migrateArtistTables, registerArtistRoutes, userMeta } from "./artists";
+import { billingSummary, cancelBillingForUser, migrateBilling, registerBillingRoutes } from "./billing";
 import { mailEnabled, sendAccountDeletedEmail, sendDeleteAccountEmail, sendPasswordResetEmail, sendVerificationEmail } from "./mail";
 import { enabledSocialProviders, passkeyPlugin, passkeyRpId, socialProviders, terbiumEnabled, terbiumPlugin } from "./auth-providers";
 import { setStatStore } from "./music-stats";
@@ -369,6 +370,7 @@ function init() {
 				primary key (user_id, game_key)
 			)`);
 			await migrateArtistTables(pool);
+			await migrateBilling(pool);
 			// ListenBrainz isn't a sign-in method, so its link lives here instead of in "account".
 			// An empty token means ListenBrainz rejected it; the row stays so a reconnect keeps the account.
 			await pool.query(`create table if not exists fracital_listenbrainz (
@@ -616,6 +618,7 @@ else setTimeout(() => location.replace("/"), 1500);
 	registerCommentRoutes(app, { init });
 	registerProfileRoutes(app, { init });
 	registerStreakRoutes(app);
+	registerBillingRoutes(app, { init });
 
 	type Ctx = { get: <K extends keyof Env["Variables"]>(k: K) => Env["Variables"][K] };
 
@@ -717,7 +720,7 @@ else setTimeout(() => location.replace("/"), 1500);
 		const user = c.get("user") as Env["Variables"]["user"] & { emailVerified?: boolean };
 		const [{ link, discord, hasPassword, providers }, passkeys, lb] = await Promise.all([lastfmLink(c), countPasskeys(c), lbLink(c)]);
 		const [lastfm, listenbrainz, discordPresence] = await Promise.all([link ? lastfmProfile(user.id, link.username, link.sessionKey) : null, lb ? lbProfile(user.id, lb) : null, presenceStatus(c, discord)]);
-		const { isAdmin, username, premium } = await userMeta(c.get("pool"), user);
+		const [{ isAdmin, username, premium, premiumUntil, hadPremium }, billing] = await Promise.all([userMeta(c.get("pool"), user), billingSummary(c.get("pool"), user.id)]);
 		const placeholderEmail = user.email.endsWith("@lastfm.invalid");
 		return c.json({
 			user: { id: user.id, name: user.name, email: placeholderEmail ? null : user.email, image: user.image ?? null, emailVerified: !placeholderEmail && !!user.emailVerified },
@@ -732,6 +735,9 @@ else setTimeout(() => location.replace("/"), 1500);
 			isAdmin,
 			username,
 			premium,
+			premiumUntil,
+			hadPremium,
+			billing,
 		});
 	});
 
@@ -982,10 +988,18 @@ else setTimeout(() => location.replace("/"), 1500);
 	const gameKey = z.string().regex(/^[a-z0-9-]{1,100}$/);
 	const MAX_GAME_SAVE_BYTES = 4_000_000;
 	const MAX_GAME_SAVES = 500;
+	// All of an account's game backups together, by plan.
+	const GAME_SAVE_QUOTA = { free: 75_000_000, premium: 200_000_000 };
+	const gameSaveQuota = async (c: Context<Env>) => ((await userMeta(c.get("pool"), c.get("user"))).premium ? GAME_SAVE_QUOTA.premium : GAME_SAVE_QUOTA.free);
+	const megabytes = (bytes: number) => `${Math.round(bytes / 100_000) / 10} MB`;
 
 	app.get("/api/me/game-saves", async c => {
-		const { rows } = await c.get("pool").query<{ game_key: string; title: string; hash: string; size: number; updated_at: Date }>("select game_key, title, hash, size, updated_at from fracital_game_saves where user_id = $1 order by updated_at desc", [c.get("user").id]);
-		return c.json({ saves: rows.map(r => ({ key: r.game_key, title: r.title, hash: r.hash, size: r.size, updatedAt: r.updated_at })) });
+		const [{ rows }, quota] = await Promise.all([
+			c.get("pool").query<{ game_key: string; title: string; hash: string; size: number; updated_at: Date }>("select game_key, title, hash, size, updated_at from fracital_game_saves where user_id = $1 order by updated_at desc", [c.get("user").id]),
+			gameSaveQuota(c),
+		]);
+		const used = rows.reduce((sum, r) => sum + r.size, 0);
+		return c.json({ saves: rows.map(r => ({ key: r.game_key, title: r.title, hash: r.hash, size: r.size, updatedAt: r.updated_at })), used, quota, premiumQuota: GAME_SAVE_QUOTA.premium });
 	});
 
 	app.get("/api/me/game-saves/:key", async c => {
@@ -1008,13 +1022,25 @@ else setTimeout(() => location.replace("/"), 1500);
 		}
 		const pool = c.get("pool");
 		const userId = c.get("user").id;
-		const { rows: count } = await pool.query<{ n: string }>("select count(*) as n from fracital_game_saves where user_id = $1 and game_key <> $2", [userId, key.data]);
-		if (Number(count[0]?.n) >= MAX_GAME_SAVES) return c.json({ error: "Too many game backups" }, 409);
+		const [{ rows: others }, { rows: current }, quota] = await Promise.all([
+			pool.query<{ n: string; used: string | null }>("select count(*) as n, sum(size) as used from fracital_game_saves where user_id = $1 and game_key <> $2", [userId, key.data]),
+			pool.query<{ size: number }>("select size from fracital_game_saves where user_id = $1 and game_key = $2", [userId, key.data]),
+			gameSaveQuota(c),
+		]);
+		if (Number(others[0]?.n) >= MAX_GAME_SAVES) return c.json({ error: "Too many game backups" }, 409);
+		const size = body.data.data.length;
+		const used = Number(others[0]?.used ?? 0) + size;
+		// Over the plan's space only blocks growth: an account past it (Premium ended) can still update a save
+		// as long as that save doesn't get bigger.
+		if (used > quota && size > (current[0]?.size ?? 0)) {
+			const premiumNote = quota < GAME_SAVE_QUOTA.premium ? ` Premium gets ${megabytes(GAME_SAVE_QUOTA.premium)}.` : "";
+			return c.json({ error: `Your game backups are full (${megabytes(used - size)} of ${megabytes(quota)}).${premiumNote}`, used: used - size, quota, premiumQuota: GAME_SAVE_QUOTA.premium }, 413);
+		}
 		const { rows } = await pool.query<{ updated_at: Date }>(
 			"insert into fracital_game_saves (user_id, game_key, title, hash, data, size, updated_at) values ($1, $2, $3, $4, $5, $6, now()) on conflict (user_id, game_key) do update set title = excluded.title, hash = excluded.hash, data = excluded.data, size = excluded.size, updated_at = now() returning updated_at",
-			[userId, key.data, body.data.title, body.data.hash, body.data.data, body.data.data.length],
+			[userId, key.data, body.data.title, body.data.hash, body.data.data, size],
 		);
-		return c.json({ ok: true, updatedAt: rows[0].updated_at });
+		return c.json({ ok: true, updatedAt: rows[0].updated_at, used, quota, premiumQuota: GAME_SAVE_QUOTA.premium });
 	});
 
 	app.delete("/api/me/game-saves/:key", async c => {
@@ -1401,6 +1427,8 @@ else setTimeout(() => location.replace("/"), 1500);
 		if (!user) return null;
 		// The copy comes first, so nothing is deleted unless it was saved.
 		const { path, expires } = await saveExport(pool, user.name, await buildExport(pool, userId));
+		// A subscription would keep charging a deleted account: end it first, and stop here if Stripe can't be reached.
+		await cancelBillingForUser(pool, userId);
 		const download = `${authOrigin() ?? ownOrigin(headers) ?? ""}${path}`;
 		// A Discord status Fracital set would otherwise linger until it times out.
 		const presence = await readPresence(pool, userId).catch(() => null);

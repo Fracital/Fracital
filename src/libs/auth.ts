@@ -97,6 +97,15 @@ export interface Me {
 	isAdmin?: boolean;
 	username?: string | null;
 	premium?: boolean;
+	/** When time-limited premium runs out (ISO); null when there's none. Admin-given premium has no end. */
+	premiumUntil?: string | null;
+	/** Has had premium at some point, so the launch offer (new members only) doesn't apply. */
+	hadPremium?: boolean;
+	/** Paid Premium (src/server/billing.ts): whether this server takes payments, and the account's subscription. */
+	billing?: {
+		enabled: boolean;
+		subscription: { plan: "monthly" | "annual" | null; status: string; renewsAt: string | null; endsAt: string | null } | null;
+	};
 }
 
 /** fetch() against the Fracital server with the session cookie. */

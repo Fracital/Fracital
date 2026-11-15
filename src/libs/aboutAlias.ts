@@ -13,5 +13,6 @@ export function normalizeAboutUrl(url: string | undefined): string | undefined {
 	// The full player is the "Now Playing" section: about:player?lyrics → about:music?player&lyrics.
 	const player = /^about:player(?:\?(.*))?$/.exec(url);
 	if (player) return `about:music?player${player[1] ? `&${player[1]}` : ""}`;
+	if (url === "about:premium") return "about:subscriptions";
 	return url;
 }

@@ -157,7 +157,19 @@ export interface GameSaveInfo {
 	error?: string;
 }
 
-export const useGameSaveStore = create<{ saves: Record<string, GameSaveInfo> }>(() => ({ saves: {} }));
+/** Space the account's backups take, and how much its plan allows (bytes). */
+export interface GameSaveUsage {
+	used: number;
+	quota: number;
+	/** What Premium allows, to offer when this plan's space runs out. */
+	premiumQuota: number;
+}
+
+export const useGameSaveStore = create<{ saves: Record<string, GameSaveInfo>; usage?: GameSaveUsage }>(() => ({ saves: {} }));
+
+const setUsage = (res: Partial<GameSaveUsage>) => {
+	if (typeof res.used === "number" && typeof res.quota === "number") useGameSaveStore.setState({ usage: { used: res.used, quota: res.quota, premiumQuota: res.premiumQuota ?? res.quota } });
+};
 
 const setInfo = (key: string, info: GameSaveInfo) => {
 	useGameSaveStore.setState(s => ({ saves: { ...s.saves, [key]: info } }));
@@ -178,7 +190,11 @@ function serial<T>(key: string, op: () => Promise<T>): Promise<T> {
 	return next;
 }
 
-const listRemote = async () => new Map((await meFetch<{ saves: RemoteMeta[] }>("/api/me/game-saves")).saves.map(s => [s.key, s]));
+const listRemote = async () => {
+	const res = await meFetch<{ saves: RemoteMeta[] } & Partial<GameSaveUsage>>("/api/me/game-saves");
+	setUsage(res);
+	return new Map(res.saves.map(s => [s.key, s]));
+};
 
 type SyncMode = "auto" | "upload" | "restore";
 
@@ -212,7 +228,12 @@ export function syncGame(game: SaveGame, mode: SyncMode = "auto", opts: { remote
 			const upload = async (snap = local, hash = localHash): Promise<GameSaveInfo> => {
 				const data = JSON.stringify(snap);
 				if (data.length > MAX_BYTES) return setInfo(key, { status: "error", error: "This save is too large to back up" });
-				const res = await meFetch<{ updatedAt: string }>(`/api/me/game-saves/${key}`, { method: "PUT", body: JSON.stringify({ title: game.title, hash, data }), keepalive: opts.keepalive && data.length < 60_000 });
+				const res = await meFetch<{ updatedAt: string } & Partial<GameSaveUsage>>(`/api/me/game-saves/${key}`, { method: "PUT", body: JSON.stringify({ title: game.title, hash, data }), keepalive: opts.keepalive && data.length < 60_000 }).catch(err => {
+					// Full: the error says so; keep the usage it reports for the bar.
+					setUsage((err as { data?: Partial<GameSaveUsage> }).data ?? {});
+					throw err;
+				});
+				setUsage(res);
 				remember(hash);
 				return setInfo(key, { status: "synced", updatedAt: res.updatedAt });
 			};
@@ -368,7 +389,7 @@ export function startGameSaveSync() {
 	started = true;
 	void syncAllGames();
 	window.addEventListener("account-upd", () => {
-		useGameSaveStore.setState({ saves: {} });
+		useGameSaveStore.setState({ saves: {}, usage: undefined });
 		void syncAllGames();
 	});
 }

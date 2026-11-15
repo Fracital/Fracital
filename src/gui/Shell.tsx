@@ -53,7 +53,7 @@ import { useStompStore } from "../libs/stompEngine";
 import { getMe, signOut } from "../libs/auth";
 import { useEngineVersions } from "../libs/proxyEngines";
 import { HolyText } from "../components/common/HolyText";
-import { PuzzlePieceIcon, ShieldCheckIcon } from "@heroicons/react/24/solid";
+import { PuzzlePieceIcon, ShieldCheckIcon, SparklesIcon } from "@heroicons/react/24/solid";
 import { ContextMenu, type MenuItem } from "../components/ContextMenu";
 
 declare global {
@@ -117,6 +117,7 @@ export const UserCard = ({ id, display, handle, avatar }: UserProps) => {
 	const { ref: premiumRef, placeholder: premiumAttrs } = useHolyAttr({ title: "Premium", "aria-label": "Premium" });
 	const { ref: adminRef, placeholder: adminAttrs } = useHolyAttr({ title: "Admin", "aria-label": "Admin" });
 	const badgeHover = settings.brightness === "light" ? "hover:bg-[#ffffff30]" : "hover:bg-[#ffffff18]";
+	const openPremium = () => newTab({ id: createId(), url: "about:subscriptions", displayUrl: "about:subscriptions", title: "Premium", icon: null, current: true });
 	const menuItemCls = "group flex items-center justify-between gap-5 w-[calc(100%)] p-2 pl-3 pr-2 rounded-md leading-none text-(--text-secondary) hover:text-(--text-primary) duration-100 cursor-pointer " + (settings.brightness === "light" ? "hover:bg-[#00000018]" : "hover:bg-[#ffffff10]");
 
 	return (
@@ -180,6 +181,10 @@ export const UserCard = ({ id, display, handle, avatar }: UserProps) => {
 						>
 							<span className="text-md font-semibold leading-none w-max">Manage Account</span>
 							<UserIcon className="size-5.5 group-active:scale-125 group-hover:scale-110 pointer-events-none duration-150" />
+						</button>
+						<button className={menuItemCls} onClick={openPremium}>
+							<HolyText className="text-md font-semibold leading-none w-max" text="Premium" />
+							<SparklesIcon className="size-5.5 group-active:scale-125 group-hover:scale-110 pointer-events-none duration-150" />
 						</button>
 						<button className={menuItemCls} onClick={() => newTab({ id: createId(), url: "about:artists", displayUrl: "about:artists", title: "Fracital for Artists", icon: null, current: true })}>
 							<span className="text-md font-semibold leading-none w-max">For Artists</span>
@@ -275,9 +280,9 @@ export const UserCard = ({ id, display, handle, avatar }: UserProps) => {
 								{/* Badges: the active streak, premium (the check) and admin (the wrench). */}
 								<StreakBadge className={`p-1 rounded-md ${badgeHover}`} />
 								{isPremium && (
-									<span ref={premiumRef} {...premiumAttrs} className={`p-1 rounded-md duration-150 ${badgeHover}`}>
+									<button type="button" ref={premiumRef} {...premiumAttrs} className={`p-1 rounded-md duration-150 cursor-pointer ${badgeHover}`} onClick={openPremium}>
 										<CheckBadgeIcon className={`size-5 stroke-0.5 ${settings.brightness === "light" ? "text-[#9fc8ff]" : "text-[#398fff]"}`} />
-									</span>
+									</button>
 								)}
 								{isAdmin && (
 									<span ref={adminRef} {...adminAttrs} className={`p-1.5 rounded-md duration-150 ${badgeHover}`}>
@@ -562,6 +567,7 @@ const Shell = () => {
 		if (accountinfo) {
 			items.push(
 				{ title: <HolyText text="Manage Account" />, icon: <UserIcon className="size-5" />, onClick: () => openPage("about:account", "Fracital Account") },
+				{ title: <HolyText text="Premium" />, icon: <SparklesIcon className="size-5" />, onClick: () => openPage("about:subscriptions", "Premium") },
 				{ title: <HolyText text="For Artists" />, icon: <CheckBadgeIcon className="size-5" />, onClick: () => openPage("about:artists", "Fracital for Artists") },
 			);
 			if (isAdmin) items.push({ title: <HolyText text="Admin Dashboard" />, icon: <ShieldCheckIcon className="size-5" />, onClick: () => openPage("about:admin", "Admin Dashboard") });

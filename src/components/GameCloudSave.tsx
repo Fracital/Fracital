@@ -1,7 +1,9 @@
 import { useState } from "react";
-import { CloudArrowDownIcon, CloudArrowUpIcon, CloudIcon, ExclamationTriangleIcon } from "@heroicons/react/24/solid";
+import { CloudArrowDownIcon, CloudArrowUpIcon, CloudIcon, ExclamationTriangleIcon, SparklesIcon } from "@heroicons/react/24/solid";
+import { createId } from "@paralleldrive/cuid2";
 import { gameSaveKey, syncGame, useGameSaveStore, type SaveGame } from "../libs/gameSaves";
-import { useSettingsStore } from "../store";
+import { useSettingsStore, useTabsStore } from "../store";
+import { HolyDynamic, HolyRich } from "./common/HolyRich";
 import { HolyText } from "./common/HolyText";
 import { useHolyAttr } from "../libs/holy-attr";
 
@@ -11,12 +13,15 @@ interface GameCloudSaveProps {
 	onRestore: () => Promise<void>;
 }
 
+const megabytes = (bytes: number) => `${Math.round(bytes / 100_000) / 10} MB`;
 const when = (iso?: string) => (iso ? new Date(iso).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) : "");
 
 /** Cloud backup status for the open game, with conflict resolution. */
 export const GameCloudSave = ({ game, onRestore }: GameCloudSaveProps) => {
 	const settings = useSettingsStore(state => state.settings);
 	const info = useGameSaveStore(s => s.saves[gameSaveKey(game.title)]);
+	const usage = useGameSaveStore(s => s.usage);
+	const newTab = useTabsStore(s => s.newTab);
 	const [busy, setBusy] = useState(false);
 	const { ref: backupRef, placeholder: backupAttrs } = useHolyAttr({ title: "Back up this game's save now" });
 
@@ -63,6 +68,17 @@ export const GameCloudSave = ({ game, onRestore }: GameCloudSaveProps) => {
 			{info.status === "error" ? <ExclamationTriangleIcon className="size-5 shrink-0 text-red-400" /> : <CloudIcon className={`size-5 shrink-0 ${info.status === "synced" ? "text-(--accent)" : "text-(--text-tertiary)"}`} />}
 			<HolyText className="text-(--text-secondary)" text={label} />
 			{info.status === "synced" && info.updatedAt && <span className="text-(--text-tertiary)">{when(info.updatedAt)}</span>}
+			{usage && (
+				<HolyRich className={usage.used >= usage.quota * 0.9 ? "text-amber-400" : "text-(--text-tertiary)"}>
+					<HolyDynamic>{megabytes(usage.used)}</HolyDynamic> of <HolyDynamic>{megabytes(usage.quota)}</HolyDynamic> used
+				</HolyRich>
+			)}
+			{usage && usage.quota < usage.premiumQuota && usage.used >= usage.quota * 0.9 && (
+				<button className={button} onClick={() => newTab({ id: createId(), url: "about:subscriptions", displayUrl: "about:subscriptions", title: "Premium", icon: null, current: true })}>
+					<SparklesIcon className="size-4" />
+					<HolyText text="Get more space" />
+				</button>
+			)}
 			{info.status !== "syncing" && (
 				<button ref={backupRef} {...backupAttrs} className={button} disabled={busy} onClick={run(() => syncGame(game, "upload"))}>
 					<CloudArrowUpIcon className="size-4" />

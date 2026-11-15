@@ -18,6 +18,8 @@ export const DEFAULT_OBFUSCATED_STRINGS: string[] = [
 	"Fracital Music",
 	"Fracital for Artists",
 	"Official Fracital game store",
+	"Fracital Premium",
+	"Premium",
 	"Create a Fracital Account",
 	"Sync your settings and build your library from Last.fm.",
 

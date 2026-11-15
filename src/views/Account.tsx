@@ -1,9 +1,10 @@
 import type { IconDefinition } from "@fortawesome/fontawesome-svg-core";
 import { faDiscord, faGithub, faGoogle, faLastfm, faMicrosoft } from "@fortawesome/free-brands-svg-icons";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { ArrowLeftStartOnRectangleIcon, ArrowPathIcon, CheckCircleIcon, ComputerDesktopIcon, CubeTransparentIcon, ExclamationTriangleIcon, FingerPrintIcon, KeyIcon, MusicalNoteIcon, SpeakerWaveIcon, UserCircleIcon, VideoCameraIcon } from "@heroicons/react/24/solid";
+import { ArrowLeftStartOnRectangleIcon, ArrowPathIcon, CheckCircleIcon, ComputerDesktopIcon, CubeTransparentIcon, ExclamationTriangleIcon, FingerPrintIcon, KeyIcon, MusicalNoteIcon, SparklesIcon, SpeakerWaveIcon, UserCircleIcon, VideoCameraIcon } from "@heroicons/react/24/solid";
 import { createId } from "@paralleldrive/cuid2";
 import { useEffect, useRef, useState } from "react";
+import { HolyDynamic, HolyRich } from "../components/common/HolyRich";
 import { HolyText } from "../components/common/HolyText";
 import { Input } from "../components/Input";
 import { ProfileSettings } from "../components/ProfileSettings";
@@ -86,6 +87,40 @@ const Banner = ({ kind, children }: { kind: "error" | "info" | "ok"; children: R
 );
 
 const pill = "text-sm font-semibold px-3 py-1.5 rounded-full bg-[#ffffff15] hover:bg-[#ffffff25] disabled:opacity-50 cursor-pointer duration-150 shrink-0";
+
+/** Which plan the account is on, and the way to about:subscriptions. */
+function PremiumCard({ me }: { me: Me }) {
+	const newTab = useTabsStore(state => state.newTab);
+	const sub = me.billing?.subscription;
+	const date = (iso: string | null | undefined) => (iso ? new Date(iso).toLocaleDateString(undefined, { month: "long", day: "numeric", year: "numeric" }) : null);
+	const until = date(me.premiumUntil);
+	return (
+		<section className="flex items-center gap-3 p-4 rounded-2xl bg-(--tertiary)">
+			<SparklesIcon className={`size-6 shrink-0 ${me.premium ? "text-[#398fff]" : "text-(--text-tertiary)"}`} />
+			<div className="flex flex-col flex-1 min-w-0 text-sm">
+				<HolyText className="font-semibold" text={sub?.plan === "annual" ? "Premium Annual" : me.premium ? "Premium" : "Free plan"} />
+				{sub?.endsAt ? (
+					<HolyRich className="text-(--text-tertiary)">
+						Ends <HolyDynamic>{date(sub.endsAt)}</HolyDynamic>
+					</HolyRich>
+				) : sub?.renewsAt ? (
+					<HolyRich className="text-(--text-tertiary)">
+						Renews <HolyDynamic>{date(sub.renewsAt)}</HolyDynamic>
+					</HolyRich>
+				) : me.premium && until ? (
+					<HolyRich className="text-(--text-tertiary)">
+						Until <HolyDynamic>{until}</HolyDynamic>
+					</HolyRich>
+				) : (
+					<HolyText className="text-(--text-tertiary)" text={me.premium ? "No ads, anywhere in Fracital." : "Go ad-free with Premium, from $5 a month."} />
+				)}
+			</div>
+			<button className={pill} onClick={() => newTab({ id: createId(), url: "about:subscriptions", displayUrl: "about:subscriptions", title: "Premium", icon: null, current: true })}>
+				<HolyText text={me.premium ? "Your plan" : "See plans"} />
+			</button>
+		</section>
+	);
+}
 
 function useAuthOptions() {
 	const [options, setOptions] = useState<AuthOptions | null>(null);
@@ -388,6 +423,7 @@ const Manage = ({ me, notice, onChange, onDeleted }: { me: Me; notice?: string; 
 				</div>
 
 				<StreakCard />
+				<PremiumCard me={me} />
 
 				{notice === "verify-error" && !error && !info && <Banner kind="error">{NOTICES["verify-error"].text}</Banner>}
 				{error && <Banner kind="error">{error}</Banner>}

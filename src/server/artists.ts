@@ -103,6 +103,20 @@ export async function migrateArtistTables(pool: Pool) {
 		alter table fracital_user_meta add column if not exists premium boolean not null default false;
 		-- Premium for a while (the streak promo's reward), on top of the admin's on/off premium.
 		alter table fracital_user_meta add column if not exists premium_until timestamptz;
+		-- Ever had premium, by any grant: the launch offer is for accounts that haven't. A trigger keeps it, so
+		-- every way premium is given (the admin toggle, the streak promo, anything later) counts.
+		alter table fracital_user_meta add column if not exists had_premium boolean not null default false;
+		create or replace function fracital_mark_had_premium() returns trigger language plpgsql as $$
+		begin
+			if new.premium or new.premium_until is not null then new.had_premium := true; end if;
+			return new;
+		end $$;
+		do $$ begin
+			if not exists (select 1 from pg_trigger where tgname = 'fracital_user_meta_had_premium') then
+				create trigger fracital_user_meta_had_premium before insert or update on fracital_user_meta for each row execute procedure fracital_mark_had_premium();
+			end if;
+		end $$;
+		update fracital_user_meta set had_premium = true where not had_premium and (premium or premium_until is not null);
 		create unique index if not exists fracital_user_meta_username on fracital_user_meta (lower(username));
 	`);
 }
@@ -121,14 +135,28 @@ const adminEmails = () =>
 		.filter(Boolean);
 
 export async function userMeta(pool: Pool, user: { id: string; email: string }) {
-	const { rows } = await pool.query<{ role: string; banned_at: Date | null; ban_reason: string | null; username: string | null; premium: boolean }>("select role, banned_at, ban_reason, username, premium or coalesce(premium_until > now(), false) premium from fracital_user_meta where user_id = $1", [user.id]);
+	// Premium has three sources: the admin's toggle, the streak promo's time (premium_until) and a paid
+	// subscription (fracital_billing; the statuses match PAID_STATUSES in billing.ts).
+	const { rows } = await pool.query<{ role: string | null; banned_at: Date | null; ban_reason: string | null; username: string | null; admin_premium: boolean; promo_until: Date | null; paid: boolean; had_premium: boolean | null }>(
+		`select m.role, m.banned_at, m.ban_reason, m.username, coalesce(m.premium, false) admin_premium, case when m.premium_until > now() then m.premium_until end promo_until,
+			coalesce(b.status in ('active', 'trialing', 'past_due'), false) paid, m.had_premium
+		from (select $1::text id) u left join fracital_user_meta m on m.user_id = u.id left join fracital_billing b on b.user_id = u.id`,
+		[user.id],
+	);
 	const meta = rows[0];
+	const premium = !!meta && (meta.admin_premium || meta.paid || !!meta.promo_until);
 	return {
 		isAdmin: meta?.role === "admin" || adminEmails().includes(user.email.toLowerCase()),
 		banned: !!meta?.banned_at,
 		banReason: meta?.ban_reason ?? null,
 		username: meta?.username ?? null,
-		premium: !!meta?.premium,
+		premium,
+		// Given by an admin: no end, nothing to pay for.
+		adminPremium: !!meta?.admin_premium,
+		// When premium runs out, if it's only time-limited (the streak promo's); null for none, admin-given or paid premium.
+		premiumUntil: meta && !meta.admin_premium && !meta.paid ? (meta.promo_until?.toISOString() ?? null) : null,
+		// Has had premium at some point (now included): no launch offer.
+		hadPremium: !!meta?.had_premium || premium,
 	};
 }
 
@@ -686,7 +714,8 @@ export function registerArtistRoutes(app: Hono<Env>, { init, requireUser }: Deps
 	app.get("/api/admin/users", async c => {
 		const q = (c.req.query("q") || "").trim();
 		const { rows } = await c.get("pool").query(
-			`select u.id, u.name, u.email, u.image, u."createdAt" created_at, m.role, m.banned_at, m.ban_reason, m.username, coalesce(m.premium, false) premium, m.premium_until,
+			`select u.id, u.name, u.email, u.image, u."createdAt" created_at, m.role, m.banned_at, m.ban_reason, m.username, coalesce(m.premium, false) premium, m.premium_until, coalesce(m.had_premium, false) had_premium,
+				(select b.plan from fracital_billing b where b.user_id = u.id and b.status in ('active', 'trialing', 'past_due')) paid_plan,
 				(select count(*) from artist_members am where am.user_id = u.id)::int pages,
 				(select count(*) from artist_claims ac where ac.user_id = u.id)::int claims,
 				(select max(s."updatedAt") from session s where s."userId" = u.id) last_seen
@@ -712,6 +741,10 @@ export function registerArtistRoutes(app: Hono<Env>, { init, requireUser }: Deps
 				premium: r.premium,
 				// Time-limited premium (the streak promo), shown apart from the on/off grant.
 				premiumUntil: r.premium_until && new Date(r.premium_until) > new Date() ? r.premium_until : null,
+				// Had premium before, so staff don't give them the new-member launch price.
+				hadPremium: r.had_premium,
+				// A paying subscriber's plan ("monthly" / "annual"), else null.
+				paidPlan: r.paid_plan ?? null,
 				pages: r.pages,
 				claims: r.claims,
 			})),
