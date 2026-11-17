@@ -5,9 +5,11 @@
  * (listenbrainz.ts), plus the opt-in Discord status (discord-presence.ts).
  *
  * Mounted by both the production Hono server (backend.ts) and the Vite dev server
- * (music-api.ts) via `getAccountsApp()`. Disabled (503) when DATABASE_URL is unset.
+ * (music-api.ts) via `getAccountsApp()`. Disabled (503) when DATABASE_URL is unset; while the
+ * database isn't answering, requests get a 503 with `code: "accounts_unavailable"` and the
+ * connection is retried until it is (db-connect.ts).
  *
- * Env: DATABASE_URL, BETTER_AUTH_SECRET, LASTFM_API_KEY, LASTFM_API_SECRET,
+ * Env: DATABASE_URL, optional DATABASE_CA (the database's certificate, db-connect.ts), BETTER_AUTH_SECRET, LASTFM_API_KEY, LASTFM_API_SECRET,
  *      optional BETTER_AUTH_URL (public origin) and BETTER_AUTH_TRUSTED_ORIGINS (comma list),
  *      DISCORD_PRESENCE=1 (Discord status; needs the Discord sign-in credentials too),
  *      BETTER_AUTH_API_KEY (Better Auth dashboard via @better-auth/infra's dash(); off when unset).
@@ -20,6 +22,7 @@ import { setSessionCookie } from "better-auth/cookies";
 import { getMigrations } from "better-auth/db/migration";
 import { type Context, Hono, type MiddlewareHandler } from "hono";
 import { Pool } from "pg";
+import { createRetrying, poolConfig, type Retrying } from "./db-connect";
 import * as z from "zod";
 import { asArray, lastfmCall, LastfmError, lastfmImage, lastfmKey, lastfmSecret, toCount } from "./lastfm";
 import { findDeezerArtist, findDeezerTrack, type RadioTrack } from "./music-radio";
@@ -308,115 +311,142 @@ const createAuth = (pool: Pool) => betterAuth(authOptions(pool));
 
 type Auth = ReturnType<typeof createAuth>;
 
-/**
- * Pool config with libpq-like SSL defaults (psql negotiates SSL; node-postgres doesn't):
- * remote hosts use TLS without CA verification (like sslmode=require), localhost uses none.
- * `sslmode=disable` / `verify-full` in the URL override that.
- */
-function poolConfig(url: string) {
-	const parsed = new URL(url);
-	const mode = parsed.searchParams.get("sslmode");
-	parsed.searchParams.delete("sslmode");
-	const local = ["localhost", "127.0.0.1", "::1", "[::1]"].includes(parsed.hostname) || parsed.hostname === "";
-	const ssl = mode === "disable" ? false : mode === "verify-full" || mode === "verify-ca" ? { rejectUnauthorized: true } : mode || !local ? { rejectUnauthorized: false } : false;
-	return { connectionString: parsed.toString(), ssl, max: 10 };
+/** `tls` describes the connection for the log. */
+type AccountsContext = { auth: Auth; pool: Pool; tls: string };
+
+const errorText = (err: unknown) => (err instanceof Error ? `${err.message}${(err as { code?: string }).code ? ` (${(err as { code?: string }).code})` : ""}` : String(err));
+
+/** One connect + migrate attempt. A failed attempt closes its pool, so retries don't pile up connections. */
+async function connectAccounts(url: string): Promise<AccountsContext> {
+	const config = poolConfig(url);
+	const pool = new Pool(config);
+	// The server dropping an idle connection (a restart, an upgrade) is an 'error' on the pool, which
+	// ends the process when nothing listens. The pool replaces the connection on the next query.
+	pool.on("error", err => console.error(`Fracital Accounts: database connection lost: ${errorText(err)}`));
+	try {
+		// Migrate before constructing auth, which checks the schema on startup.
+		const { runMigrations } = await getMigrations(authOptions(pool));
+		await runMigrations();
+		const auth = createAuth(pool);
+		await pool.query(`create table if not exists fracital_settings (
+			user_id text primary key references "user"(id) on delete cascade,
+			value text not null,
+			updated_at timestamptz not null default now()
+		)`);
+		await pool.query(`create table if not exists fracital_saved_artists (
+			user_id text not null references "user"(id) on delete cascade,
+			artist_id text not null,
+			name text not null,
+			picture text not null default '',
+			created_at timestamptz not null default now(),
+			primary key (user_id, artist_id)
+		)`);
+		await pool.query(`create table if not exists fracital_saved_items (
+			user_id text not null references "user"(id) on delete cascade,
+			kind text not null,
+			item_id text not null,
+			data jsonb not null,
+			created_at timestamptz not null default now(),
+			primary key (user_id, kind, item_id)
+		)`);
+		await pool.query(`create table if not exists fracital_game_saves (
+			user_id text not null references "user"(id) on delete cascade,
+			game_key text not null,
+			title text not null,
+			hash text not null,
+			data text not null,
+			size integer not null,
+			updated_at timestamptz not null default now(),
+			primary key (user_id, game_key)
+		)`);
+		await migrateArtistTables(pool);
+		await migrateBilling(pool);
+		// ListenBrainz isn't a sign-in method, so its link lives here instead of in "account".
+		// An empty token means ListenBrainz rejected it; the row stays so a reconnect keeps the account.
+		await pool.query(`create table if not exists fracital_listenbrainz (
+			user_id text primary key references "user"(id) on delete cascade,
+			username text not null unique,
+			token text not null,
+			updated_at timestamptz not null default now()
+		)`);
+		await migratePresence(pool);
+		await migratePlaylists(pool);
+		await migrateSocial(pool);
+		await migrateComments(pool);
+		await migrateProfiles(pool);
+		await migrateStreaks(pool);
+		await migrateExports(pool);
+		// What the log's "ready" line reports: whether this connection is encrypted (it is always verified when it is).
+		const { rows } = await pool.query<{ ssl: boolean; version: string | null }>("select ssl, version from pg_stat_ssl where pid = pg_backend_pid()");
+		const tls = rows[0]?.ssl ? `${rows[0].version}, certificate verified${typeof config.ssl === "object" && config.ssl.ca ? " against DATABASE_CA" : ""}` : "no TLS";
+		// Play/listener counts survive restarts and are shared between deploys on the same database.
+		await pool.query(`create table if not exists fracital_stat_cache (
+			key text primary key,
+			value jsonb,
+			updated_at timestamptz not null default now()
+		)`);
+		setStatStore({
+			get: async key => {
+				const { rows } = await pool.query<{ value: unknown; updated_at: Date }>("select value, updated_at from fracital_stat_cache where key = $1", [key]);
+				return rows[0] ? { value: rows[0].value, at: rows[0].updated_at.getTime() } : null;
+			},
+			set: async (key, value) => {
+				await pool.query("insert into fracital_stat_cache (key, value, updated_at) values ($1, $2, now()) on conflict (key) do update set value = excluded.value, updated_at = now()", [key, JSON.stringify(value)]);
+			},
+		});
+		return { auth, pool, tls };
+	} catch (err) {
+		await pool.end().catch(() => {});
+		throw err;
+	}
 }
 
-let ready: Promise<{ auth: Auth; pool: Pool } | null> | null = null;
+let accounts: Retrying<AccountsContext> | null = null;
+let accountsUnset = false;
 
-/** Connects, runs migrations once, and returns the auth instance (null when DATABASE_URL is unset or unreachable). */
-function init() {
-	ready ??= (async () => {
-		const url = process.env.DATABASE_URL;
-		if (!url) {
-			console.log("Fracital Accounts disabled (no DATABASE_URL)");
-			return null;
-		}
-		try {
-			const pool = new Pool(poolConfig(url));
-			// Migrate before constructing auth, which checks the schema on startup.
-			const { runMigrations } = await getMigrations(authOptions(pool));
-			await runMigrations();
-			const auth = createAuth(pool);
-			await pool.query(`create table if not exists fracital_settings (
-				user_id text primary key references "user"(id) on delete cascade,
-				value text not null,
-				updated_at timestamptz not null default now()
-			)`);
-			await pool.query(`create table if not exists fracital_saved_artists (
-				user_id text not null references "user"(id) on delete cascade,
-				artist_id text not null,
-				name text not null,
-				picture text not null default '',
-				created_at timestamptz not null default now(),
-				primary key (user_id, artist_id)
-			)`);
-			await pool.query(`create table if not exists fracital_saved_items (
-				user_id text not null references "user"(id) on delete cascade,
-				kind text not null,
-				item_id text not null,
-				data jsonb not null,
-				created_at timestamptz not null default now(),
-				primary key (user_id, kind, item_id)
-			)`);
-			await pool.query(`create table if not exists fracital_game_saves (
-				user_id text not null references "user"(id) on delete cascade,
-				game_key text not null,
-				title text not null,
-				hash text not null,
-				data text not null,
-				size integer not null,
-				updated_at timestamptz not null default now(),
-				primary key (user_id, game_key)
-			)`);
-			await migrateArtistTables(pool);
-			await migrateBilling(pool);
-			// ListenBrainz isn't a sign-in method, so its link lives here instead of in "account".
-			// An empty token means ListenBrainz rejected it; the row stays so a reconnect keeps the account.
-			await pool.query(`create table if not exists fracital_listenbrainz (
-				user_id text primary key references "user"(id) on delete cascade,
-				username text not null unique,
-				token text not null,
-				updated_at timestamptz not null default now()
-			)`);
-			await migratePresence(pool);
-			await migratePlaylists(pool);
-			await migrateSocial(pool);
-			await migrateComments(pool);
-			await migrateProfiles(pool);
-			await migrateStreaks(pool);
+/**
+ * Starts the accounts connection once. An unreachable database is retried (1 s, doubling to 30 s,
+ * forever) and accounts come up as soon as it answers; until then requests get `accountsDown`.
+ */
+function accountsLoop() {
+	if (accounts || accountsUnset) return accounts;
+	const url = process.env.DATABASE_URL;
+	if (!url) {
+		console.log("Fracital Accounts disabled (no DATABASE_URL)");
+		accountsUnset = true;
+		return null;
+	}
+	const loop = createRetrying(() => connectAccounts(url), {
+		onFailure: (err, n, delay) => console.error(`Fracital Accounts: database unavailable (attempt ${n}), retrying in ${delay / 1000} s: ${errorText(err)}`),
+		onConfigError: err => console.error(`Fracital Accounts disabled: ${err.message}`),
+		onReady: n => {
+			const ctx = loop.current();
+			if (!ctx) return;
+			console.log(`Fracital Accounts ready (${ctx.tls}${n > 1 ? `, after ${n} attempts` : ""})`);
 			// Deleted accounts' downloadable copies are erased after 30 days.
-			await migrateExports(pool);
-			setInterval(() => void purgeExpiredExports(pool), 6 * 60 * 60 * 1000).unref();
-			// Play/listener counts survive restarts and are shared between deploys on the same database.
-			await pool.query(`create table if not exists fracital_stat_cache (
-				key text primary key,
-				value jsonb,
-				updated_at timestamptz not null default now()
-			)`);
-			setStatStore({
-				get: async key => {
-					const { rows } = await pool.query<{ value: unknown; updated_at: Date }>("select value, updated_at from fracital_stat_cache where key = $1", [key]);
-					return rows[0] ? { value: rows[0].value, at: rows[0].updated_at.getTime() } : null;
-				},
-				set: async (key, value) => {
-					await pool.query("insert into fracital_stat_cache (key, value, updated_at) values ($1, $2, now()) on conflict (key) do update set value = excluded.value, updated_at = now()", [key, JSON.stringify(value)]);
-				},
-			});
-			console.log("Fracital Accounts ready");
-			void backfillUsernames(pool).catch(err => console.error("Username backfill failed:", err));
-			return { auth, pool };
-		} catch (err) {
-			console.error("Fracital Accounts failed to start:", err);
-			ready = null; // retry on the next request
-			return null;
-		}
-	})();
-	return ready;
+			setInterval(() => void purgeExpiredExports(ctx.pool), 6 * 60 * 60 * 1000).unref();
+			void backfillUsernames(ctx.pool).catch(err => console.error("Username backfill failed:", err));
+		},
+	});
+	accounts = loop;
+	loop.start();
+	return loop;
+}
+
+/** The auth instance and pool, or null while accounts are unset, misconfigured or the database isn't answering. */
+async function init(): Promise<AccountsContext | null> {
+	return (await accountsLoop()?.get(5000)) ?? null;
+}
+
+/** The 503 for a request that needs accounts: not set up on this server, or the database isn't answering yet. */
+export function accountsDown(c: Context) {
+	if (!accounts || accounts.status() === "off") return c.json({ error: "Fracital Accounts aren't configured on this server" }, 503);
+	c.header("Retry-After", "5");
+	return c.json({ error: "Fracital Accounts are unavailable right now. Try again in a moment.", code: "accounts_unavailable" }, 503);
 }
 
 /** Warm up (connect + migrate) at server start instead of on the first request. */
-export const initAccounts = () => init();
+export const initAccounts = () => void accountsLoop();
 
 // ============================================================
 // Last.fm data helpers
@@ -594,14 +624,14 @@ else setTimeout(() => location.replace("/"), 1500);
 
 	app.on(["GET", "POST"], "/api/auth/*", async c => {
 		const ctx = await init();
-		if (!ctx) return c.json({ error: "Fracital Accounts aren't configured on this server" }, 503);
+		if (!ctx) return accountsDown(c);
 		return ctx.auth.handler(c.req.raw);
 	});
 
 	// Everything below requires a signed-in user.
 	const requireUser: MiddlewareHandler<Env> = async (c, next) => {
 		const ctx = await init();
-		if (!ctx) return c.json({ error: "Fracital Accounts aren't configured on this server" }, 503);
+		if (!ctx) return accountsDown(c);
 		const session = await ctx.auth.api.getSession({ headers: c.req.raw.headers });
 		if (!session) return c.json({ error: "Not signed in" }, 401);
 		if (await isBanned(ctx.pool, session.user.id)) return c.json({ error: "This account has been banned" }, 403);
@@ -615,10 +645,10 @@ else setTimeout(() => location.replace("/"), 1500);
 	registerArtistRoutes(app, { init, requireUser });
 	registerPlaylistRoutes(app);
 	registerSocialRoutes(app);
-	registerCommentRoutes(app, { init });
-	registerProfileRoutes(app, { init });
+	registerCommentRoutes(app, { init, down: accountsDown });
+	registerProfileRoutes(app, { init, down: accountsDown });
 	registerStreakRoutes(app);
-	registerBillingRoutes(app, { init });
+	registerBillingRoutes(app, { init, down: accountsDown });
 
 	type Ctx = { get: <K extends keyof Env["Variables"]>(k: K) => Env["Variables"][K] };
 

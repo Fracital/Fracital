@@ -6,7 +6,7 @@
  * Social page's "share what I'm listening to", and "show my Discord activity").
  */
 import { randomBytes } from "node:crypto";
-import type { Hono } from "hono";
+import type { Context, Hono } from "hono";
 import type { Pool } from "pg";
 import * as z from "zod";
 import type { Env } from "./accounts";
@@ -103,7 +103,7 @@ const profileInput = z.object({
 
 /** Just what reading needs from the accounts setup: the database, and who's signed in. */
 type SessionAuth = { api: { getSession: (o: { headers: Headers }) => Promise<{ user: Env["Variables"]["user"] } | null> } };
-type Deps = { init: () => Promise<{ pool: Pool; auth: SessionAuth } | null> };
+type Deps = { init: () => Promise<{ pool: Pool; auth: SessionAuth } | null>; down: (c: Context) => Response };
 
 type UserRow = { id: string; name: string; image: string | null; created_at: Date; username: string | null; banned: boolean };
 
@@ -118,7 +118,7 @@ const findUser = async (pool: Pool, handle: string) => {
 	return rows[0] && !rows[0].banned ? rows[0] : null;
 };
 
-export function registerProfileRoutes(app: Hono<Env>, { init }: Deps) {
+export function registerProfileRoutes(app: Hono<Env>, { init, down }: Deps) {
 	const viewerOf = async (headers: Headers, auth: SessionAuth) => (await auth.api.getSession({ headers }).catch(() => null))?.user ?? null;
 
 	/** The profile and the sections its owner shows (all of them to the owner, who's told which are hidden). */
@@ -131,7 +131,7 @@ export function registerProfileRoutes(app: Hono<Env>, { init }: Deps) {
 
 	app.get("/api/profiles/:handle", async c => {
 		const ctx = await init();
-		if (!ctx) return c.json({ error: "Fracital Accounts aren't configured on this server" }, 503);
+		if (!ctx) return down(c);
 		const { pool } = ctx;
 		const user = await findUser(pool, c.req.param("handle"));
 		if (!user) return c.json({ error: "No one has that username" }, 404);
@@ -182,7 +182,7 @@ export function registerProfileRoutes(app: Hono<Env>, { init }: Deps) {
 	// Someone's comments, newest first, a page at a time (?offset), each with the song or album it's on.
 	app.get("/api/profiles/:handle/comments", async c => {
 		const ctx = await init();
-		if (!ctx) return c.json({ error: "Fracital Accounts aren't configured on this server" }, 503);
+		if (!ctx) return down(c);
 		const user = await findUser(ctx.pool, c.req.param("handle"));
 		if (!user) return c.json({ error: "No one has that username" }, 404);
 		const viewer = await viewerOf(c.req.raw.headers, ctx.auth);
@@ -209,7 +209,7 @@ export function registerProfileRoutes(app: Hono<Env>, { init }: Deps) {
 	// One of their playlists' songs (to play from their profile).
 	app.get("/api/profiles/:handle/playlists/:id", async c => {
 		const ctx = await init();
-		if (!ctx) return c.json({ error: "Fracital Accounts aren't configured on this server" }, 503);
+		if (!ctx) return down(c);
 		const user = await findUser(ctx.pool, c.req.param("handle"));
 		if (!user) return c.json({ error: "No one has that username" }, 404);
 		const viewer = await viewerOf(c.req.raw.headers, ctx.auth);

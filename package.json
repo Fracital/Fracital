@@ -11,6 +11,7 @@
 		"protect": "node scripts/prune-dist.mjs && node scripts/obfuscate-build.mjs dist && node scripts/check-plaintext-leaks.mjs dist && node scripts/check-dist-refs.mjs dist",
 		"lint": "eslint .",
 		"preview": "vite preview",
+		"test": "tsx --test src/server/*.test.ts",
 		"format": "biome format --write .",
 		"check": "biome check --write ."
 	},

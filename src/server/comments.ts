@@ -4,7 +4,7 @@
  * any and review reports in about:admin. Lists sort (newest, oldest, top, relevant, friends) and filter (mine, from
  * the artist, with song times, by one person).
  */
-import type { Hono, MiddlewareHandler } from "hono";
+import type { Context, Hono, MiddlewareHandler } from "hono";
 import type { Pool } from "pg";
 import * as z from "zod";
 import type { Env } from "./accounts";
@@ -131,9 +131,9 @@ const listQuery = z.object({
 
 /** Just what reading needs from the accounts setup: the database, and who's signed in. */
 type SessionAuth = { api: { getSession: (o: { headers: Headers }) => Promise<{ user: Env["Variables"]["user"] } | null> } };
-type Deps = { init: () => Promise<{ pool: Pool; auth: SessionAuth } | null> };
+type Deps = { init: () => Promise<{ pool: Pool; auth: SessionAuth } | null>; down: (c: Context) => Response };
 
-export function registerCommentRoutes(app: Hono<Env>, { init }: Deps) {
+export function registerCommentRoutes(app: Hono<Env>, { init, down }: Deps) {
 	const posted = new Map<string, number[]>();
 
 	/** Who's reading, when signed in; reading needs no account. */
@@ -146,7 +146,7 @@ export function registerCommentRoutes(app: Hono<Env>, { init }: Deps) {
 	// A song's or album's comments, sorted and filtered (?sort, ?filter, ?by=<userId>), a page at a time (?offset).
 	app.get("/api/comments", async c => {
 		const ctx = await init();
-		if (!ctx) return c.json({ error: "Fracital Accounts aren't configured on this server" }, 503);
+		if (!ctx) return down(c);
 		const target = targetQuery.safeParse({ kind: c.req.query("kind"), name: c.req.query("name"), artist: c.req.query("artist") });
 		const options = listQuery.safeParse({ sort: c.req.query("sort") || undefined, filter: c.req.query("filter") || undefined, by: c.req.query("by") || undefined, offset: c.req.query("offset") || undefined });
 		if (!target.success || !options.success) return c.json({ error: "Bad request" }, 400);
