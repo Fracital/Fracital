@@ -60,4 +60,4 @@ jobs:
           echo "$TERP_HOST $TERP_HOST_KEY" > ~/.ssh/known_hosts
 
       - name: Deploy ${{ github.sha }} to dev.fracit.al
-        run: ssh -o BatchMode=yes "root@$TERP_HOST" deploy-dev "$GITHUB_SHA"
+        run: ssh -o BatchMode=yes "deploy@$TERP_HOST" deploy-dev "$GITHUB_SHA"

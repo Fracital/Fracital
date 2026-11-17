@@ -1,6 +1,7 @@
 # Build every push to main, then deploy it to terp (5.188.124.62).
 #
-# TERP_DEPLOY_KEY is an SSH key that terp pins to `/usr/local/sbin/fracital-deploy-gate app`
+# TERP_DEPLOY_KEY is an SSH key for terp's unprivileged `deploy` user, pinned to
+# `/usr/local/sbin/fracital-deploy-gate app`
 # (source: deploy/terp-deploy-gate.sh, installed by hand, CI never updates it). The only command it
 # accepts is `deploy <sha>`: terp fetches that commit from GitHub, runs npm ci + build in
 # /opt/fracital/stage, swaps /opt/fracital/repo to it, restarts pm2 `fracital`, health-checks :8080 and
@@ -66,7 +67,7 @@ jobs:
           echo "$TERP_HOST $TERP_HOST_KEY" > ~/.ssh/known_hosts
 
       - name: Deploy ${{ github.sha }} to terp
-        run: ssh -o BatchMode=yes "root@$TERP_HOST" deploy "$GITHUB_SHA"
+        run: ssh -o BatchMode=yes "deploy@$TERP_HOST" deploy "$GITHUB_SHA"
 
       # terp's :80 is not reachable by IP from outside; the gate already health-checks :8080 locally.
       - name: Verify site responds
