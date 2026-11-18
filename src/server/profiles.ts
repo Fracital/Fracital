@@ -1,7 +1,7 @@
 /**
  * Public user profiles (about:user?<username>, and the card a name or avatar opens): who someone is, their bio and
  * banner, and what they do here: comments, favorite artists, stats and streak, playlists, what they're listening to
- * and their Discord activity. Anyone can look; each section can be hidden by its owner, or the whole profile made
+ * their Discord activity and a link to their Last.fm profile. Anyone can look; each section can be hidden by its owner, or the whole profile made
  * private (then only the name and picture show). Listening and Discord also need the owner's existing opt-ins (the
  * Social page's "share what I'm listening to", and "show my Discord activity").
  */
@@ -9,14 +9,15 @@ import { randomBytes } from "node:crypto";
 import type { Hono } from "hono";
 import type { Pool } from "pg";
 import * as z from "zod";
-import type { Env } from "./accounts";
-import { artistKey, IMAGE_TYPES, sniff, userMeta } from "./artists";
-import { COMMENT_SELECT, type CommentRow, commentJson, firstArtist, targetKey } from "./comments";
-import { discordBotStatus, discordBotToken, discordPresenceFor } from "./discord-bot";
-import { readPresence } from "./discord-presence";
-import { liveStreakSql } from "./streaks";
+import type { Env } from "./accounts.ts";
+import { BANNER_BYTES, BANNER_CROP_MIN, BANNER_SIZE, type BannerCrop, bannerBytes, bannerMb, isBannerAspect } from "../libs/banner-limits.ts";
+import { artistKey, IMAGE_TYPES, imageSize, sniff, userMeta } from "./artists.ts";
+import { COMMENT_SELECT, type CommentRow, commentJson, firstArtist, targetKey } from "./comments.ts";
+import { discordBotStatus, discordBotToken, discordPresenceFor } from "./discord-bot.ts";
+import { readPresence } from "./discord-presence.ts";
+import { liveStreakSql } from "./streaks.ts";
 
-export const PROFILE_SECTIONS = ["comments", "artists", "stats", "playlists", "listening", "discord"] as const;
+export const PROFILE_SECTIONS = ["comments", "artists", "stats", "playlists", "listening", "discord", "lastfm"] as const;
 type Section = (typeof PROFILE_SECTIONS)[number];
 
 const BIO_MAX = 300;
@@ -26,7 +27,7 @@ const INTEREST_NAME_MAX = 40;
 /** The icons in the banner's corner: their accounts elsewhere (Instagram, Spotify, ...). */
 const LINKS_MAX = 6;
 const LINK_MAX = 200;
-const BANNER_MAX_BYTES = 4 * 1024 * 1024;
+// Banner size caps are per tier: BANNER_BYTES in src/libs/banner-limits.ts.
 const COMMENTS_PAGE = 20;
 /** The Social page's freshness for "listening now" (its status is re-sent while a song plays). */
 const LISTENING_FRESH_MINUTES = 3;
@@ -42,6 +43,8 @@ export async function migrateProfiles(pool: Pool) {
 		updated_at timestamptz not null default now()
 	)`);
 	await pool.query(`alter table fracital_profiles add column if not exists interests jsonb not null default '[]', add column if not exists links text[] not null default '{}'`);
+	// A GIF banner's crop window (stills are cropped to size before upload).
+	await pool.query("alter table fracital_profiles add column if not exists banner_crop jsonb");
 	await pool.query(`create table if not exists fracital_profile_media (
 		id text primary key,
 		user_id text not null references "user"(id) on delete cascade,
@@ -53,11 +56,11 @@ export async function migrateProfiles(pool: Pool) {
 }
 
 type Interest = { kind: "game" | "music"; name: string };
-type ProfileRow = { bio: string; banner: string; banner_color: string; private: boolean; hidden: string[]; interests: Interest[]; links: string[] };
-const EMPTY: ProfileRow = { bio: "", banner: "", banner_color: "", private: false, hidden: [], interests: [], links: [] };
+type ProfileRow = { bio: string; banner: string; banner_color: string; banner_crop: BannerCrop | null; private: boolean; hidden: string[]; interests: Interest[]; links: string[] };
+const EMPTY: ProfileRow = { bio: "", banner: "", banner_color: "", banner_crop: null, private: false, hidden: [], interests: [], links: [] };
 
 const readProfile = async (pool: Pool, userId: string): Promise<ProfileRow> => {
-	const { rows } = await pool.query<ProfileRow>("select bio, banner, banner_color, private, hidden, interests, links from fracital_profiles where user_id = $1", [userId]);
+	const { rows } = await pool.query<ProfileRow>("select bio, banner, banner_color, banner_crop, private, hidden, interests, links from fracital_profiles where user_id = $1", [userId]);
 	return rows[0] ?? EMPTY;
 };
 
@@ -65,6 +68,7 @@ const settingsJson = (p: ProfileRow) => ({
 	bio: p.bio,
 	banner: p.banner || null,
 	bannerColor: p.banner_color || null,
+	bannerCrop: p.banner_crop,
 	private: p.private,
 	hidden: p.hidden.filter((s): s is Section => (PROFILE_SECTIONS as readonly string[]).includes(s)),
 	interests: p.interests,
@@ -85,6 +89,9 @@ const linkInput = z
 			return false;
 		}
 	});
+
+/** A GIF banner's crop window as fractions of the image; its shape is checked against the image's real size. */
+const cropInput = z.object({ x: z.number().min(0).max(1), y: z.number().min(0).max(1), w: z.number().gt(0).max(1), h: z.number().gt(0).max(1) }).refine(c => c.x + c.w <= 1.001 && c.y + c.h <= 1.001);
 
 const profileInput = z.object({
 	bio: z.string().trim().max(BIO_MAX).optional(),
@@ -154,12 +161,13 @@ export function registerProfileRoutes(app: Hono<Env>, { init }: Deps) {
 		if (closed) return c.json({ ...base, ...social });
 
 		const artistPages = await pool.query<{ artist_id: string; name: string }>("select p.artist_id, p.name from artist_members m join artist_profiles p on p.artist_id = m.artist_id where m.user_id = $1 and p.verified order by p.name", [user.id]);
-		const [stats, artists, playlists, listening, discord] = await Promise.all([
+		const [stats, artists, playlists, music, discord, lastfm] = await Promise.all([
 			shows("stats") ? statsOf(pool, user.id) : undefined,
 			shows("artists") ? artistsOf(pool, user.id) : undefined,
 			shows("playlists") ? playlistsOf(pool, user.id) : undefined,
 			shows("listening") ? listeningOf(pool, user.id) : undefined,
 			shows("discord") ? discordOf(pool, user.id) : undefined,
+			shows("lastfm") ? lastfmOf(pool, user.id) : undefined,
 		]);
 		return c.json({
 			...base,
@@ -167,6 +175,7 @@ export function registerProfileRoutes(app: Hono<Env>, { init }: Deps) {
 			bio: profile.bio,
 			banner: profile.banner || null,
 			bannerColor: profile.banner_color || null,
+			bannerCrop: profile.banner_crop,
 			interests: profile.interests,
 			links: profile.links,
 			artistPages: artistPages.rows.map(r => ({ artistId: r.artist_id, name: r.name })),
@@ -174,8 +183,9 @@ export function registerProfileRoutes(app: Hono<Env>, { init }: Deps) {
 			...(stats ? { stats } : {}),
 			...(artists ? { artists } : {}),
 			...(playlists ? { playlists } : {}),
-			...(listening !== undefined ? { listening } : {}),
+			...(music ? { listening: music.listening, recentPlays: music.recentPlays } : {}),
 			...(discord !== undefined ? { discord } : {}),
+			...(lastfm ? { lastfm } : {}),
 		});
 	});
 
@@ -260,19 +270,41 @@ export function registerProfileRoutes(app: Hono<Env>, { init }: Deps) {
 		return c.json(settingsJson(next));
 	});
 
-	// A new banner image (the raw file as the body), replacing the old one.
+	// A new banner image (the raw file as the body), replacing the old one. The crop dialog sends stills already
+	// rendered to BANNER_SIZE; a GIF comes as-is with its crop window in X-Banner-Crop. The size cap depends on the tier.
 	app.post("/api/me/public-profile/banner", async c => {
+		const pool = c.get("pool");
+		const user = c.get("user");
 		const bytes = Buffer.from(await c.req.arrayBuffer());
 		if (!bytes.length) return c.json({ error: "Empty file" }, 400);
-		if (bytes.length > BANNER_MAX_BYTES) return c.json({ error: `Banners are up to ${BANNER_MAX_BYTES / 1024 / 1024}MB` }, 413);
+		const { premium } = await userMeta(pool, user);
+		if (bytes.length > bannerBytes(premium)) return c.json({ error: `Banners are up to ${bannerMb(BANNER_BYTES.free)} MB (${bannerMb(BANNER_BYTES.premium)} MB with Premium)` }, 413);
 		const mime = sniff(bytes);
 		if (!mime || !IMAGE_TYPES.has(mime)) return c.json({ error: "Upload a PNG, JPEG, WebP or GIF image" }, 415);
-		const pool = c.get("pool");
-		const userId = c.get("user").id;
+		const size = imageSize(bytes, mime);
+		let crop: BannerCrop | null = null;
+		if (mime === "image/gif") {
+			const raw = c.req.header("x-banner-crop");
+			if (raw) {
+				let json: unknown = null;
+				try {
+					json = JSON.parse(raw);
+				} catch {}
+				const parsed = cropInput.safeParse(json);
+				if (!parsed.success) return c.json({ error: "Invalid crop" }, 400);
+				crop = parsed.data;
+				if (size) {
+					const w = crop.w * size.width;
+					const h = crop.h * size.height;
+					if (!isBannerAspect(w, h) || w < BANNER_CROP_MIN.width || h < BANNER_CROP_MIN.height) return c.json({ error: `The crop needs to be 2.5:1 and at least ${BANNER_CROP_MIN.width}×${BANNER_CROP_MIN.height}` }, 422);
+				}
+			}
+		} else if (size && (size.width !== BANNER_SIZE.width || size.height !== BANNER_SIZE.height)) return c.json({ error: `Banners are ${BANNER_SIZE.width}×${BANNER_SIZE.height}` }, 422);
+		const userId = user.id;
 		const id = randomBytes(12).toString("hex");
 		await pool.query("delete from fracital_profile_media where user_id = $1", [userId]);
 		await pool.query("insert into fracital_profile_media (id, user_id, mime, bytes, size) values ($1, $2, $3, $4, $5)", [id, userId, mime, bytes, bytes.length]);
-		const next = { ...(await readProfile(pool, userId)), banner: `/api/profile-media/${id}` };
+		const next = { ...(await readProfile(pool, userId)), banner: `/api/profile-media/${id}`, banner_crop: crop };
 		await saveProfile(pool, userId, next);
 		return c.json(settingsJson(next));
 	});
@@ -281,7 +313,7 @@ export function registerProfileRoutes(app: Hono<Env>, { init }: Deps) {
 		const pool = c.get("pool");
 		const userId = c.get("user").id;
 		await pool.query("delete from fracital_profile_media where user_id = $1", [userId]);
-		const next = { ...(await readProfile(pool, userId)), banner: "" };
+		const next = { ...(await readProfile(pool, userId)), banner: "", banner_crop: null };
 		await saveProfile(pool, userId, next);
 		return c.json(settingsJson(next));
 	});
@@ -313,10 +345,10 @@ const nameOldComments = async (pool: Pool, rows: { id: string; kind: string; tar
 
 const saveProfile = (pool: Pool, userId: string, p: ProfileRow) =>
 	pool.query(
-		`insert into fracital_profiles (user_id, bio, banner, banner_color, private, hidden, interests, links, updated_at) values ($1, $2, $3, $4, $5, $6, $7, $8, now())
-		 on conflict (user_id) do update set bio = excluded.bio, banner = excluded.banner, banner_color = excluded.banner_color, private = excluded.private, hidden = excluded.hidden,
+		`insert into fracital_profiles (user_id, bio, banner, banner_color, banner_crop, private, hidden, interests, links, updated_at) values ($1, $2, $3, $4, $9, $5, $6, $7, $8, now())
+		 on conflict (user_id) do update set bio = excluded.bio, banner = excluded.banner, banner_color = excluded.banner_color, banner_crop = excluded.banner_crop, private = excluded.private, hidden = excluded.hidden,
 			interests = excluded.interests, links = excluded.links, updated_at = now()`,
-		[userId, p.bio, p.banner, p.banner_color, p.private, p.hidden, JSON.stringify(p.interests), p.links],
+		[userId, p.bio, p.banner, p.banner_color, p.private, p.hidden, JSON.stringify(p.interests), p.links, p.banner_crop ? JSON.stringify(p.banner_crop) : null],
 	);
 
 const statsOf = async (pool: Pool, userId: string) => {
@@ -356,10 +388,31 @@ const playlistsOf = async (pool: Pool, userId: string) => {
 	return rows.map(r => ({ id: r.id, name: r.name, count: Number(r.count), artwork: r.artwork ?? [] }));
 };
 
-/** What they're playing now, when they share it (the Social page's switch); null when nothing is. */
+/** The window of "recent" streams shown with what they're listening to. */
+const RECENT_DAYS = 7;
+const RECENT_MAX = 8;
+
+/**
+ * What they're playing now with how often they've streamed it lately, and the songs they've played this week; all
+ * only when they share their listening (the Social page's switch). `listening` is null when nothing plays now.
+ */
 const listeningOf = async (pool: Pool, userId: string) => {
-	const { rows } = await pool.query<{ song: unknown; updated_at: Date }>(`select song, updated_at from fracital_social_status where user_id = $1 and share and song is not null and updated_at > now() - interval '${LISTENING_FRESH_MINUTES} minutes'`, [userId]);
-	return rows[0] ? { song: rows[0].song, at: rows[0].updated_at.toISOString() } : null;
+	const { rows } = await pool.query<{ share: boolean; song: { title: string; artist: string } | null; updated_at: Date; fresh: boolean }>(`select share, song, updated_at, updated_at > now() - interval '${LISTENING_FRESH_MINUTES} minutes' fresh from fracital_social_status where user_id = $1`, [userId]);
+	const status = rows[0];
+	if (!status?.share) return { listening: null, recentPlays: [] };
+	const now = status.fresh && status.song ? status.song : null;
+	const [plays, recent] = await Promise.all([
+		now ? pool.query<{ plays: string }>(`select count(*) plays from music_play_events where user_id = $1 and at > now() - interval '${RECENT_DAYS} days' and artist_key = $2 and lower(title) = lower($3)`, [userId, artistKey(now.artist), now.title]) : null,
+		pool.query<{ title: string; artist: string; plays: string; last: Date }>(
+			`select min(title) title, min(artist) artist, count(*) plays, max(at) last from music_play_events
+			 where user_id = $1 and at > now() - interval '${RECENT_DAYS} days' group by artist_key, lower(title) order by last desc limit ${RECENT_MAX}`,
+			[userId],
+		),
+	]);
+	return {
+		listening: now ? { song: now, at: status.updated_at.toISOString(), plays: Number(plays?.rows[0]?.plays ?? 0) } : null,
+		recentPlays: recent.rows.map(r => ({ title: r.title, artist: r.artist, plays: Number(r.plays), last: r.last.toISOString() })),
+	};
 };
 
 /**
@@ -373,4 +426,11 @@ const discordOf = async (pool: Pool, userId: string) => {
 	if (!rows[0]) return null;
 	const presence = discordPresenceFor(rows[0].account_id);
 	return presence ? { status: presence.status, activities: presence.activities } : null;
+};
+
+/** Their Last.fm profile, when a Last.fm account is connected (the connection's account id is the Last.fm username); null when none is. */
+const lastfmOf = async (pool: Pool, userId: string) => {
+	const { rows } = await pool.query<{ account_id: string }>(`select "accountId" account_id from account where "userId" = $1 and "providerId" = 'lastfm' limit 1`, [userId]);
+	const username = rows[0]?.account_id;
+	return username ? { username, url: `https://www.last.fm/user/${encodeURIComponent(username)}` } : null;
 };

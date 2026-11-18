@@ -7,13 +7,13 @@ import { scramjetPath } from "@mercuryworkshop/scramjet/path";
 import { stompPath } from "@sysce/stomp/path";
 import { randomBytes } from "node:crypto";
 import { holyWispVite } from "holywisp/vite";
-import { isWebOS } from "./src/types";
-import { cloakRouting } from "./src/server/cloak-routing";
-import { acceptedRelayPath, RELAY_OPTIONS } from "./src/server/relay-gate";
-import { musicApi } from "./src/server/music-api";
-import { shieldPlugin } from "./src/server/shield/vite-plugin";
-import { buildObfuscatorPlugin } from "./src/server/build-obfuscator-plugin";
-import { emojiData } from "./src/server/emoji-data";
+import { isWebOS } from "./src/types.ts";
+import { cloakRouting } from "./src/server/cloak-routing.ts";
+import { acceptedRelayPath, RELAY_OPTIONS } from "./src/server/relay-gate.ts";
+import { musicApi } from "./src/server/music-api.ts";
+import { shieldPlugin } from "./src/server/shield/vite-plugin.ts";
+import { buildObfuscatorPlugin } from "./src/server/build-obfuscator-plugin.ts";
+import { emojiData } from "./src/server/emoji-data.ts";
 
 // The second proxy engine (stomp) ships under this neutral directory, which is
 // also its service worker's scope. The file names are told to the engine at

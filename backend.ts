@@ -15,6 +15,7 @@ import { holyWisp } from "holywisp";
 import { create as createYoutubeDl } from "youtube-dl-exec";
 import { cloakMiddleware, isDecoyHost } from "./src/server/cloak-routing";
 import { injectAdTag } from "./src/server/ad-tag";
+import { getPost, listPosts, renderBlogIndex, renderBlogNotFound, renderBlogPostPage } from "./src/server/blog";
 import { type LegalPage, renderLegalPage } from "./src/server/legal";
 import { acceptedRelayPath, injectClientConfig, RELAY_OPTIONS, relayPath } from "./src/server/relay-gate";
 import { chatPath, chatUpgrade, proxyChat } from "./src/server/chat-relay";
@@ -185,19 +186,22 @@ export function fsrv() {
 	app.get("/api/music/search", async c => {
 		const q = c.req.query("q")?.trim();
 		if (!q) return c.json({ tracks: [], albums: [], artists: [] });
-		const limit = Math.min(Number(c.req.query("limit")) || 24, 50);
+		// brief=1 (the omnibox, typing speed): a few songs and their artists, no album query and no artist pictures.
+		const brief = c.req.query("brief") === "1";
+		const limit = Math.min(Number(c.req.query("limit")) || 24, brief ? 8 : 50);
 		try {
 			// Query songs, albums and artists in parallel for full search coverage.
 			const term = encodeURIComponent(q);
+			const skip = Promise.resolve(null);
 			const [songRes, albumRes, artistRes] = await Promise.all([
 				fetch(`https://itunes.apple.com/search?term=${term}&entity=song&limit=${limit}&country=US`, { headers: { Accept: "application/json" } }),
-				fetch(`https://itunes.apple.com/search?term=${term}&entity=album&limit=12&country=US`, { headers: { Accept: "application/json" } }),
-				fetch(`https://itunes.apple.com/search?term=${term}&entity=musicArtist&limit=6&country=US`, { headers: { Accept: "application/json" } }),
+				brief ? skip : fetch(`https://itunes.apple.com/search?term=${term}&entity=album&limit=12&country=US`, { headers: { Accept: "application/json" } }),
+				brief ? skip : fetch(`https://itunes.apple.com/search?term=${term}&entity=musicArtist&limit=6&country=US`, { headers: { Accept: "application/json" } }),
 			]);
 			if (!songRes.ok) throw new Error(`iTunes ${songRes.status}`);
 			const songCatalog = (await songRes.json()) as { results?: any[] };
-			const albumCatalog = albumRes.ok ? ((await albumRes.json()) as { results?: any[] }) : { results: [] };
-			const artistCatalog = artistRes.ok ? ((await artistRes.json()) as { results?: any[] }) : { results: [] };
+			const albumCatalog = albumRes?.ok ? ((await albumRes.json()) as { results?: any[] }) : { results: [] };
+			const artistCatalog = artistRes?.ok ? ((await artistRes.json()) as { results?: any[] }) : { results: [] };
 			const candidates = (songCatalog.results || []).filter((i: any) => i.wrapperType === "track" && i.kind === "song" && i.trackName && i.artistName);
 			// YouTube resolution is deferred to playback time so search responds instantly.
 			const tracks = candidates.map((item: any) => ({
@@ -226,16 +230,18 @@ export function fsrv() {
 					releaseDate: r.releaseDate,
 					type: albumType(r.collectionName),
 				}));
-			// Profile pictures come from Deezer (cached); iTunes has none.
-			const artists = await Promise.all(
-				(artistCatalog.results || [])
-					.filter((r: any) => r.artistId && r.artistName)
-					.slice(0, 6)
-					.map(async (r: any) => {
-						const dz = await findDeezerArtist(r.artistName).catch(() => null);
-						return { id: String(r.artistId), name: r.artistName, picture: dz?.picture_big || dz?.picture_medium || "" };
-					}),
-			);
+			// Profile pictures come from Deezer (cached); iTunes has none. Brief: the songs' own artists, no pictures.
+			const artists = brief
+				? [...new Map(tracks.filter((t: any) => t.artistId).map((t: any) => [t.artistId, { id: t.artistId as string, name: t.artist as string, picture: "" }])).values()].slice(0, 3)
+				: await Promise.all(
+						(artistCatalog.results || [])
+							.filter((r: any) => r.artistId && r.artistName)
+							.slice(0, 6)
+							.map(async (r: any) => {
+								const dz = await findDeezerArtist(r.artistName).catch(() => null);
+								return { id: String(r.artistId), name: r.artistName, picture: dz?.picture_big || dz?.picture_medium || "" };
+							}),
+					);
 			return c.json({ tracks: rankTracks(q, tracks), albums: rankAlbums(q, albums), artists: rankArtists(q, artists) });
 		} catch (err: any) {
 			return c.json({ error: err.message }, 502);
@@ -505,6 +511,19 @@ export function fsrv() {
 	app.get("/tos", legal("tos"));
 	app.get("/privacy", legal("privacy"));
 	app.get("/terms", (c, next) => (isDecoyHost(c.req.header("x-forwarded-host") || c.req.header("host") || "") ? next() : c.redirect("/tos", 301)));
+	// The blog (src/server/blog.ts): files in content/blog plus posts published from the admin dashboard. Never on a decoy host.
+	const blogPool = async () => (await initAccounts())?.pool ?? null;
+	app.get("/blog", async (c, next) => {
+		if (isDecoyHost(c.req.header("x-forwarded-host") || c.req.header("host") || "")) return next();
+		c.header("Cache-Control", "public, max-age=300");
+		return c.html(renderBlogIndex(await listPosts(await blogPool())));
+	});
+	app.get("/blog/:slug", async (c, next) => {
+		if (isDecoyHost(c.req.header("x-forwarded-host") || c.req.header("host") || "")) return next();
+		const post = await getPost(await blogPool(), c.req.param("slug"));
+		c.header("Cache-Control", "public, max-age=300");
+		return post ? c.html(renderBlogPostPage(post)) : c.html(renderBlogNotFound(), 404);
+	});
 
 	// Direct hosts: serve the app shell with the client config (relay gate
 	// path) injected. Read once at startup; dist/index.html is build output.

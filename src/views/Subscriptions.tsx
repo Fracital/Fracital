@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { HolyDynamic, HolyRich } from "../components/common/HolyRich";
 import { HolyText } from "../components/common/HolyText";
 import { getMe, type Me } from "../libs/auth";
+import { BANNER_BYTES, bannerMb } from "../libs/banner-limits";
 import { openBillingPortal, type Plan, startCheckout } from "../libs/billing";
 import { useSettingsStore, useTabsStore } from "../store";
 
@@ -35,7 +36,7 @@ const TIERS: Tier[] = [
 		name: "Free",
 		price: "$0",
 		tagline: "Everything in Fracital, paid for by ads.",
-		features: ["Browse the web through Fracital", "Games, music, chat and the rest of the app", "75 MB of game save backups", "Your profile, streaks and history"],
+		features: ["Browse the web through Fracital", "Games, music, chat and the rest of the app", "75 MB of game save backups", `Profile banners up to ${bannerMb(BANNER_BYTES.free)} MB, animated GIFs included`, "Your profile, streaks and history"],
 		free: true,
 	},
 	{
@@ -44,8 +45,8 @@ const TIERS: Tier[] = [
 		plan: "monthly",
 		price: "$5",
 		period: "/month",
-		tagline: "Fracital without the ads, and more room for your saves.",
-		features: ["Everything in Free", "No banner, side or video ads", "No ad breaks in music", "200 MB of game save backups", "A premium badge on your account"],
+		tagline: "Fracital with no ads, and more room for your saves and banners.",
+		features: ["Everything in Free", "No ads", "200 MB of game save backups", `Profile banners up to ${bannerMb(BANNER_BYTES.premium)} MB, for bigger animated GIFs`, "A premium badge on your account"],
 	},
 	{
 		id: "premium-annual",
@@ -54,13 +55,13 @@ const TIERS: Tier[] = [
 		price: "$60",
 		period: "/year",
 		tagline: "All of Premium, paid once a year.",
-		features: ["Everything in Premium", "Pay once a year"],
+		features: ["Everything in Premium", "Pay once a year", "Best way to support Fracital and the Team"],
 		highlight: true,
 		launch: {
 			price: "$30",
 			badge: "50%",
 			tagline: "Launch offer: a whole year of Premium for half price.",
-			features: ["Everything in Premium", "Pay once a year", "50% off your first year, for accounts that haven't had Premium before"],
+			features: ["Everything in Premium", "Pay once a year", "Best way to support Fracital and the Team", "50% off your first year, for accounts that haven't had Premium before"],
 		},
 	},
 ];
@@ -111,7 +112,7 @@ const Subscriptions = ({ className = "" }: { className?: string }) => {
 				<header className="flex flex-col items-center gap-2 text-center pt-4">
 					<CheckBadgeIcon className="size-12" style={{ color: blue }} />
 					<HolyText as="h1" className="text-3xl font-bold" text="Fracital Premium" />
-					<HolyText as="p" className="text-(--text-secondary) max-w-xl" text="Fracital is free for everyone. Premium takes the ads away and gives your game saves more room." />
+					<HolyText as="p" className="text-(--text-secondary) max-w-xl" text="Fracital is free for everyone. Premium takes the ads away and gives your game saves and banners more room." />
 				</header>
 
 				<section className="flex flex-wrap items-center gap-3 p-4 rounded-2xl bg-(--tertiary)">

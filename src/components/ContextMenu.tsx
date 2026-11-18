@@ -4,6 +4,7 @@ import { createPortal } from "react-dom";
 import { portalTarget } from "../libs/cloak";
 import { handleImg } from "../libs/imgHandler";
 import { useSettingsStore } from "../store";
+import { useHoldBar } from "./CollapsibleBar";
 
 export interface MenuItem {
 	// allow rich titles (React nodes) so menu entries can include headers or formatted text
@@ -33,6 +34,8 @@ interface MenuProps {
 }
 
 export const ContextMenu = ({ items, position, onClose, align = "start" }: MenuProps) => {
+	// A menu opened from a collapsible bar (it's drawn outside the bar) keeps that bar up while it's open.
+	useHoldBar(true);
 	const menuRef = useRef<HTMLDivElement>(null);
 	const itemsRef = useRef<HTMLDivElement>(null);
 	const [adjustedPos, setAdjustedPos] = useState(position);

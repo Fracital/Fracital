@@ -1,5 +1,6 @@
 /** Client for Fracital for Artists (artist panel) and the admin dashboard. */
 import { meFetch } from "./auth";
+import type { PostKind } from "./blog";
 import { compressImage, IMAGE_PRESETS } from "./compressImage";
 import type { ArtistLinkKind } from "./music-service";
 
@@ -233,6 +234,30 @@ export interface AdminPromoWinner {
 	streak: number;
 }
 
+/** One hour of the admin activity series; `day`, `dow` (1 = Monday … 7 = Sunday) and `hour` are in the server's `tz`. */
+export interface ActivityHour {
+	at: string;
+	day: string;
+	dow: number;
+	hour: number;
+	active: number;
+	listeners: number;
+	plays: number;
+	signups: number;
+}
+
+/** A post as the admin editor sees it: the Markdown source, and whether it's a shipped file or a published/draft row. */
+export interface AdminBlogPost {
+	slug: string;
+	title: string;
+	date: string;
+	kind: PostKind;
+	summary: string;
+	bodyMd: string;
+	source: "file" | "db";
+	published: boolean;
+}
+
 export const admin = {
 	overview: () =>
 		meFetch<{
@@ -246,8 +271,9 @@ export const admin = {
 			listeners7: number;
 			banned: number;
 			topArtists: { artist: string; plays: number }[];
-			daily: { day: string; plays: number }[];
 		}>("/api/admin/overview"),
+	/** Hourly active accounts, music plays and listeners, and signups for the last 28 days. */
+	activity: () => meFetch<{ tz: string; hours: ActivityHour[] }>("/api/admin/activity"),
 	claims: (status: "pending" | "approved" | "rejected") => meFetch<{ claims: AdminClaim[] }>(`/api/admin/claims?status=${status}`),
 	review: (id: number, action: "approve" | "reject", note: string) => meFetch(`/api/admin/claims/${id}`, { method: "POST", body: JSON.stringify({ action, note }) }),
 	artists: () => meFetch<{ artists: { artistId: string; name: string; verified: boolean; verifiedAt: string | null; updatedAt: string; image: string | null; members: { userId: string; name: string; role: PageRole }[] }[] }>("/api/admin/artists"),
@@ -257,6 +283,9 @@ export const admin = {
 	users: (q: string) => meFetch<{ users: AdminUser[] }>(`/api/admin/users?q=${encodeURIComponent(q)}`),
 	updateUser: (id: string, change: { role?: "admin" | "user"; banned?: boolean; reason?: string; premium?: boolean }) => meFetch(`/api/admin/users/${id}`, { method: "POST", body: JSON.stringify(change) }),
 	/** Deletes the account and its data; the owner can download a copy for 30 days (the link is emailed when the account has an email). */
+	blog: () => meFetch<{ posts: AdminBlogPost[] }>("/api/admin/blog").then(r => r.posts),
+	saveBlog: (slug: string, post: { title: string; kind: PostKind; summary: string; bodyMd: string; published: boolean }) => meFetch<{ post: AdminBlogPost | null }>(`/api/admin/blog/${encodeURIComponent(slug)}`, { method: "PUT", body: JSON.stringify(post) }),
+	deleteBlog: (slug: string) => meFetch(`/api/admin/blog/${encodeURIComponent(slug)}`, { method: "DELETE" }),
 	promo: () => meFetch<{ promo: AdminPromo; winners: AdminPromoWinner[] }>("/api/admin/promo"),
 	setPromo: (action: "start" | "stop") => meFetch("/api/admin/promo", { method: "POST", body: JSON.stringify({ action }) }),
 	revokePromo: (userId: string) => meFetch(`/api/admin/promo/winners/${encodeURIComponent(userId)}`, { method: "DELETE" }),

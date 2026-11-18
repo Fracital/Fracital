@@ -10,7 +10,7 @@ import { randomUUID } from "node:crypto";
 import type { Hono } from "hono";
 import type { Pool } from "pg";
 import * as z from "zod";
-import type { Env } from "./accounts";
+import type { Env } from "./accounts.ts";
 
 const MAX_PLAYLISTS = 200;
 const MAX_PLAYLIST_TRACKS = 2000;

@@ -6,8 +6,8 @@
  * - Artist listeners: Last.fm (when LASTFM_API_KEY is set).
  */
 import ytSearch from "yt-search";
-import { splitArtistCredit } from "../libs/artistCredit";
-import { lastfmCall, lastfmKey, toCount } from "./lastfm";
+import { splitArtistCredit } from "../libs/artistCredit.ts";
+import { lastfmCall, lastfmKey, toCount } from "./lastfm.ts";
 
 export type PlaysSource = "youtube";
 

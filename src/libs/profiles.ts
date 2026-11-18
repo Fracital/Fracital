@@ -6,10 +6,10 @@ import { create } from "zustand";
 import type { DiscordActivity } from "./auth";
 import { meFetch } from "./auth";
 import type { MusicComment } from "./comments";
-import { compressImage, IMAGE_PRESETS } from "./compressImage";
+import type { BannerCrop } from "./banner-limits";
 import type { MusicTrack } from "./music-service";
 
-export const PROFILE_SECTIONS = ["comments", "artists", "stats", "playlists", "listening", "discord"] as const;
+export const PROFILE_SECTIONS = ["comments", "artists", "stats", "playlists", "listening", "discord", "lastfm"] as const;
 export type ProfileSection = (typeof PROFILE_SECTIONS)[number];
 
 /** Enough to show someone before their profile loads (a comment's or message's author). */
@@ -34,6 +34,8 @@ export interface Profile {
 	bio?: string;
 	banner?: string | null;
 	bannerColor?: string | null;
+	/** A GIF banner's window (fractions of the image); null when the image is shown whole (stills are pre-cropped). */
+	bannerCrop?: BannerCrop | null;
 	interests?: ProfileInterest[];
 	/** Their accounts elsewhere (https URLs). */
 	links?: string[];
@@ -44,10 +46,14 @@ export interface Profile {
 	stats?: { streak: number; best: number; comments: number; likesReceived: number; plays: number };
 	artists?: { saved: { id: string; name: string; picture: string | null }[]; top: { name: string; plays: number }[] };
 	playlists?: { id: string; name: string; count: number; artwork: string[] }[];
-	/** null: not listening right now (or not sharing it). */
-	listening?: { song: { title: string; artist: string; album?: string; artwork?: string }; at: string } | null;
+	/** null: not listening right now (or not sharing it). `plays`: their streams of this song in the last week. */
+	listening?: { song: { title: string; artist: string; album?: string; artwork?: string }; at: string; plays: number } | null;
+	/** Songs they've streamed in the last week, latest first, with how many times; empty unless they share their listening. */
+	recentPlays?: { title: string; artist: string; plays: number; last: string }[];
 	/** null: nothing to show from Discord right now. */
 	discord?: { status: "online" | "idle" | "dnd" | "offline"; activities: DiscordActivity[] } | null;
+	/** Their Last.fm profile, when one is connected and shown (its link sits with their other links). */
+	lastfm?: { username: string; url: string };
 }
 
 /** A chip under their name: a game they play or an artist they like (their own words). */
@@ -62,6 +68,7 @@ export interface ProfileSettings {
 	bio: string;
 	banner: string | null;
 	bannerColor: string | null;
+	bannerCrop: BannerCrop | null;
 	private: boolean;
 	hidden: ProfileSection[];
 	interests: ProfileInterest[];
@@ -75,12 +82,9 @@ export const profiles = {
 	comments: (h: string, offset = 0) => meFetch<{ comments: ProfileComment[]; more: boolean }>(`/api/profiles/${handle(h)}/comments${offset ? `?offset=${offset}` : ""}`),
 	playlist: (h: string, id: string) => meFetch<{ name: string; tracks: MusicTrack[] }>(`/api/profiles/${handle(h)}/playlists/${encodeURIComponent(id)}`),
 	settings: () => meFetch<ProfileSettings>("/api/me/public-profile"),
-	save: (changes: Partial<Omit<ProfileSettings, "banner">>) => meFetch<ProfileSettings>("/api/me/public-profile", { method: "PUT", body: JSON.stringify(changes) }),
-	/** Compressed in the browser first (Compressor.js), so any size of image works. */
-	uploadBanner: async (input: File) => {
-		const file = await compressImage(input, IMAGE_PRESETS.profileBanner);
-		return meFetch<ProfileSettings>("/api/me/public-profile/banner", { method: "POST", body: file, headers: { "Content-Type": file.type || "application/octet-stream" } });
-	},
+	save: (changes: Partial<Omit<ProfileSettings, "banner" | "bannerCrop">>) => meFetch<ProfileSettings>("/api/me/public-profile", { method: "PUT", body: JSON.stringify(changes) }),
+	/** Prepared by the crop dialog: a still already rendered to the banner size, or a GIF as-is with its crop window. */
+	uploadBanner: (file: Blob, crop?: BannerCrop) => meFetch<ProfileSettings>("/api/me/public-profile/banner", { method: "POST", body: file, headers: { "Content-Type": file.type || "application/octet-stream", ...(crop ? { "X-Banner-Crop": JSON.stringify(crop) } : {}) } }),
 	removeBanner: () => meFetch<ProfileSettings>("/api/me/public-profile/banner", { method: "DELETE" }),
 };
 

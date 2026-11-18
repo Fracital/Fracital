@@ -5,9 +5,9 @@
 import type { Hono } from "hono";
 import type { Pool } from "pg";
 import * as z from "zod";
-import type { Env } from "./accounts";
-import { userMeta } from "./artists";
-import { liveStreakSql } from "./streaks";
+import type { Env } from "./accounts.ts";
+import { userMeta } from "./artists.ts";
+import { liveStreakSql } from "./streaks.ts";
 
 const MESSAGE_MAX = 500;
 const PAGE = 50;

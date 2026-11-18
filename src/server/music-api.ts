@@ -1,19 +1,20 @@
 import type { Plugin, ViteDevServer } from "vite";
 import { create as createYoutubeDl } from "youtube-dl-exec";
-import { rankAlbums, rankArtists, rankTracks } from "./music-rank";
-import { artistBanner, artistBio, artistTopTracks, buildRadio, findDeezerArtist, relatedArtists } from "./music-radio";
-import { artistStats, lastfmKey, trackPlays } from "./music-stats";
+import { rankAlbums, rankArtists, rankTracks } from "./music-rank.ts";
+import { artistBanner, artistBio, artistTopTracks, buildRadio, findDeezerArtist, relatedArtists } from "./music-radio.ts";
+import { artistStats, lastfmKey, trackPlays } from "./music-stats.ts";
 import { getRequestListener } from "@hono/node-server";
-import { getAccountsApp, initAccounts } from "./accounts";
-import { startDiscordBot } from "./discord-bot";
-import { isDecoyHost } from "./cloak-routing";
-import { renderLegalPage } from "./legal";
-import { artistExtras } from "./artist-extras";
-import { albumInfo, songCredits, songInfo } from "./song-info";
-import { findMusicVideo, findYoutubeMatch, isExplicitEdition, playbackHints } from "./youtube-match";
-import { upstreamRange } from "./stream-range";
-import { FILTER_LISTS, type FilterListId, getFilterList, isFilterListId } from "./filter-lists";
-import type { SimilarArtist } from "./music-radio";
+import { getAccountsApp, initAccounts } from "./accounts.ts";
+import { startDiscordBot } from "./discord-bot.ts";
+import { isDecoyHost } from "./cloak-routing.ts";
+import { getPost, listPosts, renderBlogIndex, renderBlogNotFound, renderBlogPostPage } from "./blog.ts";
+import { renderLegalPage } from "./legal.ts";
+import { artistExtras } from "./artist-extras.ts";
+import { albumInfo, songCredits, songInfo } from "./song-info.ts";
+import { findMusicVideo, findYoutubeMatch, isExplicitEdition, playbackHints } from "./youtube-match.ts";
+import { upstreamRange } from "./stream-range.ts";
+import { FILTER_LISTS, type FilterListId, getFilterList, isFilterListId } from "./filter-lists.ts";
+import type { SimilarArtist } from "./music-radio.ts";
 
 /** Adds Last.fm listener counts to an artist and its similar artists (no-op without a key). */
 async function withListeners<A extends { name: string }>(artist: A, similar: SimilarArtist[]) {
@@ -88,7 +89,7 @@ function registerMusicApi(server: { middlewares: ViteDevServer["middlewares"] },
 	startDiscordBot();
 	const accounts = getRequestListener(getAccountsApp().fetch);
 	server.middlewares.use((req, res, next) => {
-		if (/^\/api\/(auth|me|admin|artist-profile|artist-media|play-event|export|comments|profiles|profile-media)(\/|\?|$)/.test(req.url || "")) void accounts(req, res);
+		if (/^\/api\/(auth|me|admin|artist-profile|artist-media|play-event|export|comments|profiles|profile-media|blog|promo)(\/|\?|$)/.test(req.url || "")) void accounts(req, res);
 		else next();
 	});
 
@@ -130,24 +131,41 @@ function registerMusicApi(server: { middlewares: ViteDevServer["middlewares"] },
 		res.end(renderLegalPage(path === "/tos" ? "tos" : "privacy"));
 	});
 
+	// The blog (never on a decoy host); files are re-read on each request so a post can be edited live.
+	server.middlewares.use((req, res, next) => {
+		const path = (req.url || "").split("?")[0];
+		const m = /^\/blog(?:\/([a-z0-9-]+))?\/?$/.exec(path);
+		if (!m || req.method !== "GET" || isDecoyHost(String(req.headers["x-forwarded-host"] || req.headers.host || ""))) return next();
+		void (async () => {
+			const pool = (await initAccounts())?.pool ?? null;
+			const html = m[1] ? await getPost(pool, m[1], { fresh: true }) : null;
+			const status = m[1] && !html ? 404 : 200;
+			res.writeHead(status, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-cache" });
+			res.end(m[1] ? (html ? renderBlogPostPage(html) : renderBlogNotFound()) : renderBlogIndex(await listPosts(pool, { fresh: true })));
+		})().catch(next);
+	});
+
 	server.middlewares.use(`${apiBase}/search`, async (req, res) => {
 		if (req.method !== "GET") return sendJson(res, 405, { error: "Method not allowed" });
 		const query = parseUrl(req.url).searchParams.get("q")?.trim();
 		if (!query) return sendJson(res, 200, { tracks: [], albums: [] });
-		const limit = Math.min(Number(parseUrl(req.url).searchParams.get("limit")) || 24, 50);
+		// brief=1 (the omnibox, typing speed): a few songs and their artists, no album query and no artist pictures.
+		const brief = parseUrl(req.url).searchParams.get("brief") === "1";
+		const limit = Math.min(Number(parseUrl(req.url).searchParams.get("limit")) || 24, brief ? 8 : 50);
 
 		try {
 			// Query songs, albums and artists in parallel for full search coverage.
 			const term = encodeURIComponent(query);
+			const skip = Promise.resolve(null);
 			const [songRes, albumRes, artistRes] = await Promise.all([
 				fetch(`https://itunes.apple.com/search?term=${term}&entity=song&limit=${limit}&country=US`, { headers: { Accept: "application/json" } }),
-				fetch(`https://itunes.apple.com/search?term=${term}&entity=album&limit=12&country=US`, { headers: { Accept: "application/json" } }),
-				fetch(`https://itunes.apple.com/search?term=${term}&entity=musicArtist&limit=6&country=US`, { headers: { Accept: "application/json" } }),
+				brief ? skip : fetch(`https://itunes.apple.com/search?term=${term}&entity=album&limit=12&country=US`, { headers: { Accept: "application/json" } }),
+				brief ? skip : fetch(`https://itunes.apple.com/search?term=${term}&entity=musicArtist&limit=6&country=US`, { headers: { Accept: "application/json" } }),
 			]);
 			if (!songRes.ok) throw new Error(`iTunes ${songRes.status}`);
 			const songCatalog = (await songRes.json()) as { results?: ItunesTrack[] };
-			const albumCatalog = albumRes.ok ? ((await albumRes.json()) as { results?: any[] }) : { results: [] };
-			const artistCatalog = artistRes.ok ? ((await artistRes.json()) as { results?: any[] }) : { results: [] };
+			const albumCatalog = albumRes?.ok ? ((await albumRes.json()) as { results?: any[] }) : { results: [] };
+			const artistCatalog = artistRes?.ok ? ((await artistRes.json()) as { results?: any[] }) : { results: [] };
 
 			const candidates = (songCatalog.results || []).filter(i => i.wrapperType === "track" && i.kind === "song" && i.trackName && i.artistName);
 
@@ -179,16 +197,18 @@ function registerMusicApi(server: { middlewares: ViteDevServer["middlewares"] },
 					type: albumType(r.collectionName),
 				}));
 
-			// Profile pictures come from Deezer (cached); iTunes has none.
-			const artists = await Promise.all(
-				(artistCatalog.results || [])
-					.filter((r: any) => r.artistId && r.artistName)
-					.slice(0, 6)
-					.map(async (r: any) => {
-						const dz = await findDeezerArtist(r.artistName).catch(() => null);
-						return { id: String(r.artistId), name: r.artistName, picture: dz?.picture_big || dz?.picture_medium || "" };
-					}),
-			);
+			// Profile pictures come from Deezer (cached); iTunes has none. Brief: the songs' own artists, no pictures.
+			const artists = brief
+				? [...new Map(tracks.filter(t => t.artistId).map(t => [t.artistId, { id: t.artistId as string, name: t.artist, picture: "" }])).values()].slice(0, 3)
+				: await Promise.all(
+						(artistCatalog.results || [])
+							.filter((r: any) => r.artistId && r.artistName)
+							.slice(0, 6)
+							.map(async (r: any) => {
+								const dz = await findDeezerArtist(r.artistName).catch(() => null);
+								return { id: String(r.artistId), name: r.artistName, picture: dz?.picture_big || dz?.picture_medium || "" };
+							}),
+					);
 
 			sendJson(res, 200, { tracks: rankTracks(query, tracks), albums: rankAlbums(query, albums), artists: rankArtists(query, artists) });
 		} catch (err) {

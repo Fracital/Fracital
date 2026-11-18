@@ -2,14 +2,18 @@
  * Active streaks: days in a row a signed-in account used the site for a while (ACTIVE_SECONDS with the app
  * visible, counted from the client's heartbeat), and the streak promo that gives the first `slots` accounts to
  * reach a `days`-day streak `reward_days` of premium. Routes live under /api/me (signed in) and /api/admin.
+ *
+ * Streaks follow a school week, since most users only get here on a school day: a weekend never breaks one
+ * (Friday's streak carries to Monday), and a weekend day that is used still counts.
  */
 import type { Hono } from "hono";
 import type { Pool, PoolClient } from "pg";
 import * as z from "zod";
-import type { Env } from "./accounts";
+import type { Env } from "./accounts.ts";
+import { recordActivity, SITE_TZ } from "./activity.ts";
 
 /** Every account's day ends at midnight here, so the promo is the same race for everyone. */
-const STREAK_TZ = "America/New_York";
+const STREAK_TZ = SITE_TZ;
 /** Time with the app visible that makes a day count. */
 const ACTIVE_SECONDS = 600;
 /** What one heartbeat is worth; the client sends one a minute while the app is visible. */
@@ -19,12 +23,18 @@ const PING_MIN_GAP_S = 50;
 /** A gap longer than this means the app was closed or hidden: the next heartbeat starts timing again. */
 const PING_MAX_GAP_S = 180;
 const PROMO_ID = "streak-week";
-const PROMO_DEFAULTS = { slots: 20, days: 7, rewardDays: 30 };
+/** A "week" is a school week: five days. */
+const PROMO_DEFAULTS = { slots: 20, days: 5, rewardDays: 30 };
 
 const TODAY = `(now() at time zone '${STREAK_TZ}')::date`;
+/**
+ * The last day before `day` that a streak must have reached to still be alive: the day before, except that the
+ * weekend is skipped (Friday for Saturday, Sunday and Monday). isodow: Monday 1 … Sunday 7.
+ */
+const prevSchoolDaySql = (day: string) => `(${day} - case extract(isodow from ${day}) when 1 then 3 when 7 then 2 else 1 end)`;
 
-/** An account's current streak in SQL, 0 once it's broken (no counted day today or yesterday). */
-export const liveStreakSql = (alias: string) => `coalesce(case when ${alias}.last_day >= ${TODAY} - 1 then ${alias}.current end, 0)`;
+/** An account's current streak in SQL, 0 once it's broken (no counted day today or since the last school day). */
+export const liveStreakSql = (alias: string) => `coalesce(case when ${alias}.last_day >= ${prevSchoolDaySql(TODAY)} then ${alias}.current end, 0)`;
 
 export async function migrateStreaks(pool: Pool) {
 	await pool.query(`create table if not exists fracital_streaks (
@@ -81,7 +91,7 @@ const loadState = async (db: Pool | PoolClient, userId: string) => {
 			(select count(*) from fracital_promo_winners pw where pw.promo_id = '${PROMO_ID}')::int winners,
 			w.won_at, um.premium_until,
 			-- Only days counted since the promo started: a streak from before it can't win at launch.
-			case when s.last_day >= d.day - 1 and p.starts_at is not null
+			case when s.last_day >= ${prevSchoolDaySql("d.day")} and p.starts_at is not null
 				then greatest(0, least(s.current, s.last_day - (p.starts_at at time zone '${STREAK_TZ}')::date + 1)) else 0 end progress
 		from (select ${TODAY} as day) d
 		left join fracital_streaks s on s.user_id = $1
@@ -134,7 +144,7 @@ const creditPing = (pool: Pool, userId: string) =>
 		const { rows } = await db.query<{ current: number; best: number; last_day: string | null; today: string | null; today_seconds: number; since: number | null; day: string; yesterday: string }>(
 			`select current, best, to_char(last_day, 'YYYY-MM-DD') last_day, to_char(today, 'YYYY-MM-DD') today, today_seconds,
 				extract(epoch from now() - last_ping_at)::float8 since,
-				to_char(${TODAY}, 'YYYY-MM-DD') as day, to_char(${TODAY} - 1, 'YYYY-MM-DD') as yesterday
+				to_char(${TODAY}, 'YYYY-MM-DD') as day, to_char(${prevSchoolDaySql(TODAY)}, 'YYYY-MM-DD') as yesterday
 			from fracital_streaks where user_id = $1 for update`,
 			[userId],
 		);
@@ -145,7 +155,8 @@ const creditPing = (pool: Pool, userId: string) =>
 		if (r.since !== null && r.since <= PING_MAX_GAP_S) seconds += PING_CREDIT_S;
 		let { current, best, last_day } = r;
 		if (seconds >= ACTIVE_SECONDS && last_day !== r.day) {
-			current = last_day === r.yesterday ? current + 1 : 1;
+			// Alive when the last counted day is the previous school day or a weekend day after it (ISO dates sort as text).
+			current = last_day !== null && last_day >= r.yesterday ? current + 1 : 1;
 			best = Math.max(best, current);
 			last_day = r.day;
 		}
@@ -193,6 +204,7 @@ export function registerStreakRoutes(app: Hono<Env>) {
 		const pool = c.get("pool");
 		const userId = c.get("user").id;
 		await creditPing(pool, userId);
+		await recordActivity(pool, userId);
 		let state = await loadState(pool, userId);
 		let wonPromo = false;
 		if (state.promo_active && !state.won_at && state.days && state.progress >= state.days) {

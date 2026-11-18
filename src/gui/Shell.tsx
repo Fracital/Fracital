@@ -30,9 +30,10 @@ import {
 	CheckIcon,
 	ChatBubbleLeftRightIcon,
 	ClockIcon,
+	NewspaperIcon,
 } from "@heroicons/react/24/solid";
 import { readBootAccount } from "../libs/bootCache";
-import { BarOpenHandle, BarSettingsMenu, BarSettingsPanel, useCollapsibleBar, useHoverReveal, useNoHover } from "../components/CollapsibleBar";
+import { BarHoldContext, BarOpenHandle, BarSettingsMenu, BarSettingsPanel, useCollapsibleBar, useHoldBar, useHoverReveal, useNoHover } from "../components/CollapsibleBar";
 import { useHolyAttr } from "../libs/holy-attr";
 import { appRoot, portalTarget } from "../libs/cloak";
 import { StarIcon as StarIconOutline } from "@heroicons/react/24/outline";
@@ -73,6 +74,8 @@ interface UserProps {
 
 export const UserCard = ({ id, display, handle, avatar }: UserProps) => {
 	const [contextOpen, setContextOpen] = useState<boolean>(false);
+	// The account dropdown hangs below the top bar: keep the bar up while it's open.
+	useHoldBar(contextOpen);
 
 	const settings = useSettingsStore(state => state.settings);
 
@@ -349,12 +352,14 @@ const Shell = () => {
 		target: () => document,
 		frames: () => appRoot(),
 		edge: () => 0,
-		barBottom: () => {
-			const overlay = overlayRef.current;
-			if (!overlay) return 0;
-			// While typing in the address bar its suggestions hang below the bar; don't hide it under them.
+		bar: () => overlayRef.current,
+		revealed: bar.revealed,
+		held: bar.held,
+		// While typing in the address bar its suggestions hang below the bar; don't hide it under them. Only a text
+		// field counts: a clicked button keeps focus too, and must not keep the bar open.
+		hold: () => {
 			const active = appRoot().activeElement;
-			return active && overlay.contains(active) ? Number.POSITIVE_INFINITY : overlay.getBoundingClientRect().bottom;
+			return !!active && !!overlayRef.current?.contains(active) && active.matches("input, textarea, [contenteditable]");
 		},
 		setRevealed: bar.setRevealed,
 	});
@@ -395,12 +400,10 @@ const Shell = () => {
 			document.removeEventListener("keydown", onKey);
 		};
 	}, [barPanelAt]);
-	const { setHeld: setBarHeld } = bar;
-	useEffect(() => {
-		if (!barPanelAt) return;
-		setBarHeld(true);
-		return () => setBarHeld(false);
-	}, [barPanelAt, setBarHeld]);
+	// The bar's settings open outside the bar: keep an auto-hidden bar up while they're open. (Its menus hold it
+	// themselves: every ContextMenu inside the bar does, through BarHoldContext.)
+	const { hold: holdBar } = bar;
+	useEffect(() => (barPanelAt ? holdBar() : undefined), [barPanelAt, holdBar]);
 	// Last time's account (bootCache) until /account.json is read, so the bar doesn't start signed out.
 	const [accountinfo, setAccountinfo] = useState<{ id: string; display: string; handle: string; avatar: string | React.ReactNode } | null>(readBootAccount);
 
@@ -622,6 +625,7 @@ const Shell = () => {
 			{ title: <HolyText text="Extensions" />, icon: <PuzzlePieceIcon className="size-5" />, onClick: () => openPage("about:extensions", "Extensions", <PuzzlePieceIcon className="size-4.5" />) },
 			{ title: <HolyText text="Music" />, icon: <MusicalNoteIcon className="size-5" />, onClick: () => openLibraryPage("") },
 			{ title: <HolyText text="Chat" />, icon: <ChatBubbleLeftRightIcon className="size-5" />, onClick: () => openPage("about:chat", "Chat", <ChatBubbleLeftRightIcon className="size-4.5" />) },
+			{ title: <HolyText text="Blog" />, icon: <NewspaperIcon className="size-5" />, onClick: () => openPage("about:blog", "Blog", <NewspaperIcon className="size-4.5" />) },
 		);
 		items.push(sep);
 		if (accountinfo) {
@@ -707,266 +711,273 @@ const Shell = () => {
 	);
 
 	const row = (
-		<div id="shell" ref={rowRef} className={"flex justify-between gap-2.5 p-1 duration-200"}>
-			<div className="flex flex-1 min-w-0 items-center justify-start gap-2.5">
-				{/* On tiny screens home and the nav buttons live in the compact menu; hiding the whole group lets the search sit flush left. */}
-				<div className={`relative items-center justify-center gap-1 ${tiny ? "hidden" : "flex"}`}>
-					<button className="group relative flex items-center justify-center mr-1 cursor-pointer" title={`Home - Go to the homepage`} onMouseDown={goHome}>
-						<FracitalLogo className="size-9 group-hover:-translate-y-1 group-hover:opacity-0 duration-150 pointer-events-none" />
-						<HomeIcon
-							className={
-								"absolute size-7 text-(--text-secondary) opacity-0 translate-y-1 group-hover:text-(--text-primary) group-hover:opacity-100 group-hover:translate-y-0 pointer-events-none duration-150" +
-								" " +
-								`
+		<BarHoldContext.Provider value={bar.hold}>
+			<div id="shell" ref={rowRef} className={"flex justify-between gap-2.5 p-1 duration-200"}>
+				<div className="flex flex-1 min-w-0 items-center justify-start gap-2.5">
+					{/* On tiny screens home and the nav buttons live in the compact menu; hiding the whole group lets the search sit flush left. */}
+					<div className={`relative items-center justify-center gap-1 ${tiny ? "hidden" : "flex"}`}>
+						<button className="group relative flex items-center justify-center mr-1 cursor-pointer" title={`Home - Go to the homepage`} onMouseDown={goHome}>
+							<FracitalLogo className="size-9 group-hover:-translate-y-1 group-hover:opacity-0 duration-150 pointer-events-none" />
+							<HomeIcon
+								className={
+									"absolute size-7 text-(--text-secondary) opacity-0 translate-y-1 group-hover:text-(--text-primary) group-hover:opacity-100 group-hover:translate-y-0 pointer-events-none duration-150" +
+									" " +
+									`
                             ${settings.brightness === "light" ? "text-(--text-secondary)" : "text-(--text-primary)"}
                         `
-							}
-						/>
-					</button>
-					{navPill(true)}
-				</div>
-				<div className="relative flex flex-1 min-w-0 items-center">{tabs && tabs.length > 0 ? tabs.map((tab, index) => <Search tab={tab} key={index} />) : <Search />}</div>
-			</div>
-			<div className="flex shrink-0 items-center justify-end gap-2.5">
-				{compact ? (
-					<>
-						{tabViewButton}
-						{barToggle("flex shrink-0 items-center justify-center p-2 rounded-full bg-(--secondary) text-(--text-secondary) inset-shadow-(--inset-shadow-secondary) hover:inset-shadow-(--inset-shadow-accent) hover:text-(--text-primary) cursor-pointer duration-200")}
-						{compactTrigger}
-					</>
-				) : (
-					<>
-						{tabViewButton}
-						<ShellButton
-							title="Page selector"
-							onClick={(e: React.MouseEvent) => {
-								const items: MenuItem[] = [
-									{
-										title: "File Manager",
-										onClick: () => {
-											newTab({
-												id: createId(),
-												title: "File Manager",
-												url: "about:files",
-												icon: <FolderIcon className="size-4.5" />,
-												displayUrl: "about:files",
-											});
-										},
-										icon: <FolderIcon className="size-4.5" />,
-									},
-									{
-										title: "Games",
-										onClick: () => {
-											newTab({
-												id: createId(),
-												title: "Games",
-												url: "about:games",
-												icon: <PlayIcon className="size-4.5" />,
-												displayUrl: "about:games",
-											});
-										},
-										icon: <PlayIcon className="size-4.5" />,
-									},
-									{
-										title: "Music",
-										onClick: () => openLibraryPage(""),
-										icon: <MusicalNoteIcon className="size-4.5" />,
-									},
-									{
-										title: <HolyText text="History" />,
-										onClick: () => openPage("about:history", "History", <ClockIcon className="size-4.5" />),
-										icon: <ClockIcon className="size-4.5" />,
-									},
-									{
-										title: <HolyText text="Extensions" />,
-										onClick: () => openPage("about:extensions", "Extensions", <PuzzlePieceIcon className="size-4.5" />),
-										icon: <PuzzlePieceIcon className="size-4.5" />,
-									},
-								];
-
-								const rect = e.currentTarget.getBoundingClientRect();
-								setContextMenu({ x: rect.right, y: rect.bottom + 8, visible: true, items, align: "end" });
-							}}
-						>
-							<Bars3Icon className="size-5.5 stroke-1 stroke-current" />
-						</ShellButton>
-						<ShellButton
-							title={isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen"}
-							onClick={() => {
-								if (document.fullscreenElement) {
-									document.exitFullscreen();
-								} else {
-									if (document.body) {
-										document.body.requestFullscreen().catch(err => {
-											console.error("Error attempting to enable full-screen mode:", err);
-										});
-									}
 								}
-							}}
-						>
-							{isFullscreen ? <ArrowsPointingInIcon className="p-0.5 size-6 text-current stroke-current stroke-1" /> : <ArrowsPointingOutIcon className="p-0.5 size-6 text-current stroke-current stroke-1" />}
-						</ShellButton>
-						<ShellButton
-							title="Settings"
-							onClick={() =>
-								newTab({
-									id: createId(),
-									title: "Settings",
-									url: "about:settings",
-									icon: <Cog6ToothIcon className="size-5" />,
-									displayUrl: "about:settings",
-								})
-							}
-						>
-							<Cog6ToothIcon className="size-6" />
-						</ShellButton>
-						<div
-							className={
-								"group relative flex justify-center items-center min-h-5 p-2 px-3 gap-1 rounded-full bg-(--secondary) cursor-pointer duration-200" +
-								" " +
-								`
+							/>
+						</button>
+						{navPill(true)}
+					</div>
+					<div className="relative flex flex-1 min-w-0 items-center">{tabs && tabs.length > 0 ? tabs.map((tab, index) => <Search tab={tab} key={index} />) : <Search />}</div>
+				</div>
+				<div className="flex shrink-0 items-center justify-end gap-2.5">
+					{compact ? (
+						<>
+							{tabViewButton}
+							{barToggle("flex shrink-0 items-center justify-center p-2 rounded-full bg-(--secondary) text-(--text-secondary) inset-shadow-(--inset-shadow-secondary) hover:inset-shadow-(--inset-shadow-accent) hover:text-(--text-primary) cursor-pointer duration-200")}
+							{compactTrigger}
+						</>
+					) : (
+						<>
+							{tabViewButton}
+							<ShellButton
+								title="Page selector"
+								onClick={(e: React.MouseEvent) => {
+									const items: MenuItem[] = [
+										{
+											title: "File Manager",
+											onClick: () => {
+												newTab({
+													id: createId(),
+													title: "File Manager",
+													url: "about:files",
+													icon: <FolderIcon className="size-4.5" />,
+													displayUrl: "about:files",
+												});
+											},
+											icon: <FolderIcon className="size-4.5" />,
+										},
+										{
+											title: "Games",
+											onClick: () => {
+												newTab({
+													id: createId(),
+													title: "Games",
+													url: "about:games",
+													icon: <PlayIcon className="size-4.5" />,
+													displayUrl: "about:games",
+												});
+											},
+											icon: <PlayIcon className="size-4.5" />,
+										},
+										{
+											title: "Music",
+											onClick: () => openLibraryPage(""),
+											icon: <MusicalNoteIcon className="size-4.5" />,
+										},
+										{
+											title: <HolyText text="History" />,
+											onClick: () => openPage("about:history", "History", <ClockIcon className="size-4.5" />),
+											icon: <ClockIcon className="size-4.5" />,
+										},
+										{
+											title: <HolyText text="Extensions" />,
+											onClick: () => openPage("about:extensions", "Extensions", <PuzzlePieceIcon className="size-4.5" />),
+											icon: <PuzzlePieceIcon className="size-4.5" />,
+										},
+										{
+											title: <HolyText text="Blog" />,
+											onClick: () => openPage("about:blog", "Blog", <NewspaperIcon className="size-4.5" />),
+											icon: <NewspaperIcon className="size-4.5" />,
+										},
+									];
+
+									const rect = e.currentTarget.getBoundingClientRect();
+									setContextMenu({ x: rect.right, y: rect.bottom + 8, visible: true, items, align: "end" });
+								}}
+							>
+								<Bars3Icon className="size-5.5 stroke-1 stroke-current" />
+							</ShellButton>
+							<ShellButton
+								title={isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen"}
+								onClick={() => {
+									if (document.fullscreenElement) {
+										document.exitFullscreen();
+									} else {
+										if (document.body) {
+											document.body.requestFullscreen().catch(err => {
+												console.error("Error attempting to enable full-screen mode:", err);
+											});
+										}
+									}
+								}}
+							>
+								{isFullscreen ? <ArrowsPointingInIcon className="p-0.5 size-6 text-current stroke-current stroke-1" /> : <ArrowsPointingOutIcon className="p-0.5 size-6 text-current stroke-current stroke-1" />}
+							</ShellButton>
+							<ShellButton
+								title="Settings"
+								onClick={() =>
+									newTab({
+										id: createId(),
+										title: "Settings",
+										url: "about:settings",
+										icon: <Cog6ToothIcon className="size-5" />,
+										displayUrl: "about:settings",
+									})
+								}
+							>
+								<Cog6ToothIcon className="size-6" />
+							</ShellButton>
+							<div
+								className={
+									"group relative flex justify-center items-center min-h-5 p-2 px-3 gap-1 rounded-full bg-(--secondary) cursor-pointer duration-200" +
+									" " +
+									`
                     inset-shadow-(--inset-shadow-secondary)
                     hover:inset-shadow-[0_0_0_2px_var(--accent)]
                 `
-							}
-							aria-haspopup={engines.length > 2 ? "menu" : undefined}
-							// Two engines: a click switches to the other. More: a click lists them to pick from.
-							onMouseDown={() => {
-								if (engines.length > 2) return;
-								setEngine(engines[(engines.indexOf(shownProxy) + 1) % engines.length]);
-							}}
-							onClick={e => {
-								if (engines.length <= 2) return;
-								const rect = e.currentTarget.getBoundingClientRect();
-								setContextMenu({ x: rect.left, y: rect.bottom + 8, visible: true, items: engines.map(engineItem) });
-							}}
-						>
-							<div className="flex items-center overflow-hidden h-5">
-								<div
-									className={
-										"flex flex-col items-start gap-2 h-4.5 duration-150" +
-										" " +
-										`
-                            ${shownProxy === "uv" ? "" : "-translate-y-6.5 pointer-events-none"}
-                        `
-									}
-								>
-									<div className={"flex items-center justify-center gap-2 duration-150"}>
-										<span className="text-(--text-secondary) group-hover:text-(--text-primary) font-bold text-lg duration-150">UV</span>
-										<span className="max-w-16 truncate text-(--text-tertiary) group-hover:text-(--text-primary) font-semibold duration-150" title={uvVersion}>
-											{uvVersion}
-										</span>
-									</div>
+								}
+								aria-haspopup={engines.length > 2 ? "menu" : undefined}
+								// Two engines: a click switches to the other. More: a click lists them to pick from.
+								onMouseDown={() => {
+									if (engines.length > 2) return;
+									setEngine(engines[(engines.indexOf(shownProxy) + 1) % engines.length]);
+								}}
+								onClick={e => {
+									if (engines.length <= 2) return;
+									const rect = e.currentTarget.getBoundingClientRect();
+									setContextMenu({ x: rect.left, y: rect.bottom + 8, visible: true, items: engines.map(engineItem) });
+								}}
+							>
+								<div className="flex items-center overflow-hidden h-5">
 									<div
 										className={
-											"flex items-center justify-center gap-2 duration-150" +
+											"flex flex-col items-start gap-2 h-4.5 duration-150" +
 											" " +
 											`
-                                ${shownProxy === "sj" ? "" : "absolute opacity-0 pointer-events-none"}
-                            `
+                            ${shownProxy === "uv" ? "" : "-translate-y-6.5 pointer-events-none"}
+                        `
 										}
 									>
-										<span className="text-(--text-secondary) group-hover:text-(--text-primary) font-bold text-lg duration-150">Scramjet</span>
-										<span className="max-w-16 truncate text-(--text-tertiary) group-hover:text-(--text-primary) font-semibold duration-150" title={sjVersion}>
-											{sjVersion}
-										</span>
-									</div>
-									{experimentalProxies && (
+										<div className={"flex items-center justify-center gap-2 duration-150"}>
+											<span className="text-(--text-secondary) group-hover:text-(--text-primary) font-bold text-lg duration-150">UV</span>
+											<span className="max-w-16 truncate text-(--text-tertiary) group-hover:text-(--text-primary) font-semibold duration-150" title={uvVersion}>
+												{uvVersion}
+											</span>
+										</div>
 										<div
 											className={
 												"flex items-center justify-center gap-2 duration-150" +
 												" " +
 												`
-                                ${shownProxy === "st" ? "" : "absolute opacity-0 pointer-events-none"}
+                                ${shownProxy === "sj" ? "" : "absolute opacity-0 pointer-events-none"}
                             `
 											}
 										>
-											<HolyText as="span" className="text-(--text-secondary) group-hover:text-(--text-primary) font-bold text-lg duration-150" text="Stomp" />
-											<span className="max-w-16 truncate text-(--text-tertiary) group-hover:text-(--text-primary) font-semibold duration-150" title={stompBuild}>
-												{stompBuild}
+											<span className="text-(--text-secondary) group-hover:text-(--text-primary) font-bold text-lg duration-150">Scramjet</span>
+											<span className="max-w-16 truncate text-(--text-tertiary) group-hover:text-(--text-primary) font-semibold duration-150" title={sjVersion}>
+												{sjVersion}
 											</span>
-											{stompState && <HolyText as="span" className="text-(--text-tertiary) group-hover:text-(--text-primary) font-medium text-sm duration-150" text={stompState} />}
 										</div>
-									)}
+										{experimentalProxies && (
+											<div
+												className={
+													"flex items-center justify-center gap-2 duration-150" +
+													" " +
+													`
+                                ${shownProxy === "st" ? "" : "absolute opacity-0 pointer-events-none"}
+                            `
+												}
+											>
+												<HolyText as="span" className="text-(--text-secondary) group-hover:text-(--text-primary) font-bold text-lg duration-150" text="Stomp" />
+												<span className="max-w-16 truncate text-(--text-tertiary) group-hover:text-(--text-primary) font-semibold duration-150" title={stompBuild}>
+													{stompBuild}
+												</span>
+												{stompState && <HolyText as="span" className="text-(--text-tertiary) group-hover:text-(--text-primary) font-medium text-sm duration-150" text={stompState} />}
+											</div>
+										)}
+									</div>
 								</div>
+								<ChevronUpDownIcon className="size-5 text-(--text-tertiary) group-hover:text-(--text-secondary) stroke-current stroke-1 cursor-pointer duration-150" />
 							</div>
-							<ChevronUpDownIcon className="size-5 text-(--text-tertiary) group-hover:text-(--text-secondary) stroke-current stroke-1 cursor-pointer duration-150" />
-						</div>
-						<BarSettingsMenu
-							bar={bar}
-							dark={dark}
-							title="Top bar"
-							trigger={(toggle, open) => (
-								<div className={`flex items-center rounded-full bg-(--secondary) text-(--text-secondary) duration-200 inset-shadow-(--inset-shadow-secondary) hover:inset-shadow-(--inset-shadow-accent) ${open ? "inset-shadow-(--inset-shadow-accent)" : ""}`}>
-									{barToggle("flex items-center justify-center p-2 pr-1 rounded-l-full hover:text-(--text-primary) cursor-pointer duration-200", e => {
-										e.preventDefault();
-										toggle();
-									})}
-									<button ref={barSettingsRef} {...barSettingsAttrs} aria-haspopup="dialog" aria-expanded={open} className="flex items-center justify-center p-2 pl-0.5 rounded-r-full hover:text-(--text-primary) cursor-pointer duration-200" onClick={toggle}>
-										<ChevronDownIcon className={`size-4 stroke-current stroke-1 duration-200 ${open ? "rotate-180" : ""}`} />
-									</button>
-								</div>
-							)}
-						/>
-						{accountinfo ? (
-							<UserCard
-								avatar={
-									accountinfo.avatar ? (
-										typeof accountinfo.avatar === "string" ? (
-											<img src={accountinfo.avatar} alt={`${accountinfo.display}'s avatar`} className="size-7 rounded-full pointer-events-none select-none" />
+							<BarSettingsMenu
+								bar={bar}
+								dark={dark}
+								title="Top bar"
+								trigger={(toggle, open) => (
+									<div className={`flex items-center rounded-full bg-(--secondary) text-(--text-secondary) duration-200 inset-shadow-(--inset-shadow-secondary) hover:inset-shadow-(--inset-shadow-accent) ${open ? "inset-shadow-(--inset-shadow-accent)" : ""}`}>
+										{barToggle("flex items-center justify-center p-2 pr-1 rounded-l-full hover:text-(--text-primary) cursor-pointer duration-200", e => {
+											e.preventDefault();
+											toggle();
+										})}
+										<button ref={barSettingsRef} {...barSettingsAttrs} aria-haspopup="dialog" aria-expanded={open} className="flex items-center justify-center p-2 pl-0.5 rounded-r-full hover:text-(--text-primary) cursor-pointer duration-200" onClick={toggle}>
+											<ChevronDownIcon className={`size-4 stroke-current stroke-1 duration-200 ${open ? "rotate-180" : ""}`} />
+										</button>
+									</div>
+								)}
+							/>
+							{accountinfo ? (
+								<UserCard
+									avatar={
+										accountinfo.avatar ? (
+											typeof accountinfo.avatar === "string" ? (
+												<img src={accountinfo.avatar} alt={`${accountinfo.display}'s avatar`} className="size-7 rounded-full pointer-events-none select-none" />
+											) : (
+												accountinfo.avatar
+											)
 										) : (
-											accountinfo.avatar
-										)
-									) : (
-										<UserCircleIcon
-											className={
-												"size-7" +
-												" " +
-												`
+											<UserCircleIcon
+												className={
+													"size-7" +
+													" " +
+													`
 								${settings.brightness === "light" ? "text-(--text-secondary)" : "text-(--text-primary)"}
 							`
-											}
-										/>
-									)
-								}
-								id={accountinfo.id}
-								display={accountinfo.display}
-								handle={accountinfo.handle}
-							/>
-						) : (
-							<UserCircleIcon
-								className={
-									"size-8" +
-									" " +
-									"cursor-pointer" +
-									`
+												}
+											/>
+										)
+									}
+									id={accountinfo.id}
+									display={accountinfo.display}
+									handle={accountinfo.handle}
+								/>
+							) : (
+								<UserCircleIcon
+									className={
+										"size-8" +
+										" " +
+										"cursor-pointer" +
+										`
                         ${settings.brightness === "light" ? "text-(--text-secondary)" : "text-(--text-primary)"}
                     `
-								}
-								onClick={() => {
-									newTab({
-										id: createId(),
-										url: "about:account",
-										displayUrl: "about:account",
-										title: "Fracital Account",
-										icon: null,
-										current: true,
-									});
-								}}
-							/>
-						)}
-					</>
-				)}
+									}
+									onClick={() => {
+										newTab({
+											id: createId(),
+											url: "about:account",
+											displayUrl: "about:account",
+											title: "Fracital Account",
+											icon: null,
+											current: true,
+										});
+									}}
+								/>
+							)}
+						</>
+					)}
+				</div>
+				{contextMenu?.visible && <ContextMenu items={contextMenu.items} position={{ x: contextMenu.x, y: contextMenu.y }} align={contextMenu.align} onClose={() => setContextMenu(null)} />}
+				{barPanelAt &&
+					createPortal(
+						<div ref={barPanelRef} className="fixed z-50" style={{ top: barPanelAt.y, right: Math.max(8, window.innerWidth - barPanelAt.x) }}>
+							<BarSettingsPanel bar={bar} dark={dark} title="Top bar" />
+						</div>,
+						portalTarget(),
+					)}
 			</div>
-			{contextMenu?.visible && <ContextMenu items={contextMenu.items} position={{ x: contextMenu.x, y: contextMenu.y }} align={contextMenu.align} onClose={() => setContextMenu(null)} />}
-			{barPanelAt &&
-				createPortal(
-					<div ref={barPanelRef} className="fixed z-50" style={{ top: barPanelAt.y, right: Math.max(8, window.innerWidth - barPanelAt.x) }}>
-						<BarSettingsPanel bar={bar} dark={dark} title="Top bar" />
-					</div>,
-					portalTarget(),
-				)}
-		</div>
+		</BarHoldContext.Provider>
 	);
 
 	return (

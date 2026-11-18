@@ -8,7 +8,7 @@
  * changes, update the policy and EFFECTIVE.
  */
 
-const EFFECTIVE = "November 9, 2026";
+const EFFECTIVE = "November 17, 2026";
 const CONTACT = "contact@fracit.al";
 
 export type LegalPage = "tos" | "privacy";
@@ -16,6 +16,8 @@ export type LegalPage = "tos" | "privacy";
 const TITLES: Record<LegalPage, string> = { tos: "Terms of Service", privacy: "Privacy Policy" };
 
 const mail = `<a href="mailto:${CONTACT}">${CONTACT}</a>`;
+
+export const escapeHtml = (s: string) => s.replace(/[&<>"']/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[ch] as string);
 
 const TOS = `
 <p>These terms are an agreement between you and Fracital about your use of Fracital: the website at fracit.al, our other sites that run the same service, and everything you can do there. By using Fracital you agree to these terms and to our <a href="/privacy">Privacy Policy</a>. If you don't agree, please don't use Fracital.</p>
@@ -84,7 +86,7 @@ const PRIVACY = `
 <li><strong>Profile:</strong> your display name, email address, username and profile picture.</li>
 <li><strong>Sign-in:</strong> your password, stored only as a secure hash; passkeys, of which we store only the public key; and, if you sign in with Google, Discord, GitHub, Microsoft or Terbium, your account ID there and the access tokens that keep the connection working.</li>
 <li><strong>Music services you connect:</strong> for Last.fm, your username and session key; for ListenBrainz, your username and the user token you paste in. With them we read your listening library and send the songs you play (scrobbles), "now playing" and likes to that service.</li>
-<li><strong>What you save:</strong> your settings, saved songs, albums and artists, game save backups, and anything you put on an artist page, including uploaded media.</li>
+<li><strong>What you save:</strong> your settings, saved songs, albums and artists, game save backups, anything you put on an artist page, including uploaded media, and, if you turn it on, your browsing history backup (see below).</li>
 <li><strong>Sessions:</strong> when you sign in, the IP address and browser information of that session, used to keep your account secure.</li>
 </ul>
 <h3>Discord</h3>
@@ -95,10 +97,11 @@ const PRIVACY = `
 </ul>
 <h3>When you use Fracital, with or without an account</h3>
 <ul>
-<li><strong>Proxy:</strong> pages you open through the proxy pass through our servers so they can load. We don't save the sites you visit to your account or keep a browsing history.</li>
+<li id="history"><strong>Browsing history:</strong> Fracital keeps a history of the sites you open through it in your browser, where you can search and clear it. It isn't sent to us unless you turn on <em>history backup</em> on your account page (off by default). With it on, the history on each device you sign in on is saved to your account and kept the same across them; turning it off deletes the backup, and deleting a visit or clearing history removes it from the backup too. <strong>We never sell your history, and we don't read it:</strong> a backup is only ever read back by your own signed-in devices. It isn't used for ads, statistics, moderation or anything else, and it never appears in our admin tools.</li>
+<li><strong>Proxy:</strong> pages you open through the proxy pass through our servers so they can load. We don't log the sites you visit on our servers.</li>
 <li><strong>Plays:</strong> when you play a song, we record the song, the artist, the time, a random ID stored in your browser, and your account if you're signed in. We use this for play counts and artists' statistics, which only ever show totals, never who played what.</li>
 <li><strong>Technical logs:</strong> our servers and our network and security provider (Cloudflare) keep short-lived logs, such as IP addresses, times and errors, to run Fracital and protect it from abuse.</li>
-<li><strong>On your device:</strong> files you add, your settings and other preferences, and songs waiting to be scrobbled are stored in your browser. They stay on your device unless you sign in to sync your settings.</li>
+<li><strong>On your device:</strong> files you add, your settings and other preferences, your browsing history, and songs waiting to be scrobbled are stored in your browser. They stay on your device unless you sign in to sync your settings or turn on history backup.</li>
 </ul>
 
 <h2 id="cookies">2. Cookies and similar storage</h2>
@@ -128,10 +131,10 @@ const PRIVACY = `
 <li><strong>Music and media sources,</strong> such as Deezer and YouTube. When you play or look up music, we request that song or artist from them.</li>
 <li><strong>When the law requires it,</strong> or to protect the rights, safety and security of our users, the public or Fracital.</li>
 </ul>
-<p>We don't sell your account information.</p>
+<p>We don't sell your account information or your browsing history backup, and we don't share a history backup with anyone: only your own signed-in devices read it.</p>
 
 <h2>6. How long we keep it</h2>
-<p>We keep your account information until your account is deleted. Then we keep one copy of your data for 30 days so you can download it (we email you the link), after which it's erased for good; plays recorded with your account are kept only as anonymous totals. Sign-in sessions expire after 30 days without use. Discord activity isn't stored. Library data we fetch from connected services is cached for up to 30 minutes, and technical logs are kept briefly. Information in your browser stays until you clear it.</p>
+<p>We keep your account information until your account is deleted. Then we keep one copy of your data for 30 days so you can download it (we email you the link), after which it's erased for good; plays recorded with your account are kept only as anonymous totals. Sign-in sessions expire after 30 days without use. Discord activity isn't stored. Library data we fetch from connected services is cached for up to 30 minutes, and technical logs are kept briefly. A history backup is kept while backup is on and deleted when you turn it off or delete your account. Information in your browser stays until you clear it.</p>
 
 <h2 id="rights">7. Your choices and rights</h2>
 <ul>
@@ -172,21 +175,30 @@ h3{font-size:16px;margin:20px 0 4px}
 ul{padding-left:22px}li{margin:4px 0}
 a{color:var(--link)}
 footer{margin-top:48px;color:var(--muted);font-size:14px}
+.post{padding:18px 0;border-top:1px solid var(--line)}.post h2{border:0;margin:0 0 4px;padding:0}.post .meta{margin:0 0 6px}
+.badge{display:inline-block;padding:1px 8px;border-radius:999px;font-size:12px;font-weight:700;background:var(--line);color:var(--fg);margin-right:6px}
+.badge.privacy{background:#3987e533}.badge.terms{background:#d9592633}.badge.devlog{background:#199e7033}
+pre{overflow:auto;padding:12px;border-radius:10px;background:var(--line)}code{font-size:.92em}img{max-width:100%}blockquote{margin:0;padding-left:14px;border-left:3px solid var(--line);color:var(--muted)}
+.back{margin-top:32px}
 `;
 
-export function renderLegalPage(page: LegalPage): string {
-	const other: LegalPage = page === "tos" ? "privacy" : "tos";
+/** The plain page every public document shares: the legal pages and the blog. `meta` and `body` are HTML. */
+export function legalShell({ title, description, heading, meta, body }: { title: string; description: string; heading: string; meta: string; body: string }): string {
 	return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>${TITLES[page]} · Fracital</title>
-<meta name="description" content="Fracital's ${TITLES[page]}.">
+<title>${escapeHtml(title)} · Fracital</title>
+<meta name="description" content="${escapeHtml(description)}">
 <link rel="icon" type="image/svg+xml" href="/icon.svg">
 <style>${STYLE}</style></head>
 <body><main>
-<nav><a class="brand" href="/">Fracital</a><a href="/${other}">${TITLES[other]}</a></nav>
-<h1>${TITLES[page]}</h1>
-<p class="meta">Effective ${EFFECTIVE}</p>
-${page === "tos" ? TOS : PRIVACY}
-<footer>© Fracital 2026 · <a href="/tos">Terms</a> · <a href="/privacy">Privacy</a> · ${mail}</footer>
+<nav><a class="brand" href="/">Fracital</a><a href="/blog">Blog</a><a href="/tos">Terms</a><a href="/privacy">Privacy</a></nav>
+<h1>${escapeHtml(heading)}</h1>
+${meta ? `<p class="meta">${meta}</p>` : ""}
+${body}
+<footer>© Fracital 2026 · <a href="/blog">Blog</a> · <a href="/tos">Terms</a> · <a href="/privacy">Privacy</a> · ${mail}</footer>
 </main></body></html>`;
+}
+
+export function renderLegalPage(page: LegalPage): string {
+	return legalShell({ title: TITLES[page], description: `Fracital's ${TITLES[page]}.`, heading: TITLES[page], meta: `Effective ${EFFECTIVE}`, body: page === "tos" ? TOS : PRIVACY });
 }

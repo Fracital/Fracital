@@ -1,7 +1,7 @@
 import { ClipboardIcon, StarIcon as StarOutlineIcon } from "@heroicons/react/24/outline";
 import { ArchiveBoxIcon, ArrowDownTrayIcon, ArrowsPointingInIcon, ArrowsPointingOutIcon, ChevronLeftIcon, ChevronRightIcon, FolderIcon, FunnelIcon, PencilIcon, PhotoIcon, PlayIcon, PlusIcon, SpeakerWaveIcon, SpeakerXMarkIcon, StarIcon, TrashIcon, XMarkIcon } from "@heroicons/react/24/solid";
 import { createId } from "@paralleldrive/cuid2";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { HolyText } from "../components/common/HolyText";
 import { GameCloudSave } from "../components/GameCloudSave";
 import { GameInstaller } from "../components/GameInstaller";
@@ -9,27 +9,14 @@ import { GameBarButton, GameStage } from "../components/GameStage";
 import { HTMLPlayer } from "../components/HTMLPlayer";
 import { RufflePlayer } from "../components/RufflePlayer";
 import { updatePageTab } from "../libs/aboutPages";
+import { postGameEvent, recordGamePlay } from "../libs/gameHistory";
 import { prepareGame, syncGame, trackGameSession } from "../libs/gameSaves";
+import { ensureInstalledGames, type InstalledGame, loadGameData, refreshInstalledGames, toggleFavorite as toggleFavoriteGame, useFavoriteGames, useInstalledGames } from "../libs/installedGames";
 import { useSettingsStore, useTabsStore } from "../store";
 import { GamesPath } from "../types";
 
-interface Game {
-	id: string;
-	title: string;
-	url?: string;
-	data?: ArrayBuffer;
-	folderPath?: string;
-	thumbnail?: string;
-	type: "flash" | "html5";
-	folderName: string;
-	author?: string;
-	version?: string;
-	description?: string;
-	tags?: string[];
-	isFavorite?: boolean;
-	createdAt?: string;
-	modifiedAt?: string;
-}
+/** An installed game (src/libs/installedGames.ts) with this browser's favorite mark. */
+type Game = InstalledGame & { isFavorite?: boolean };
 
 interface UploadModalData {
 	file?: File;
@@ -65,8 +52,12 @@ const Games = ({ query, className }: GamesProps) => {
 	const tabs = useTabsStore(state => state.tabs);
 	const currentTab = tabs.find(tab => tab.current === true);
 	const [selectedGame, setSelectedGame] = useState<Game | null>(null);
-	const [games, setGames] = useState<Game[]>([]);
-	const [loading, setLoading] = useState(true);
+	const installed = useInstalledGames(s => s.games);
+	const loading = useInstalledGames(s => !s.ready);
+	const favorites = useFavoriteGames(s => s.favorites);
+	const games: Game[] = useMemo(() => installed.map(g => ({ ...g, isFavorite: favorites.includes(g.folderName) })), [installed, favorites]);
+	/** The open Flash game's bytes, read when it's opened. */
+	const [swf, setSwf] = useState<ArrayBuffer | null>(null);
 	const [deleting, setDeleting] = useState(false);
 	const [uploadModal, setUploadModal] = useState<UploadModalData | null>(null);
 	const [editModal, setEditModal] = useState<EditModalData | null>(null);
@@ -86,11 +77,22 @@ const Games = ({ query, className }: GamesProps) => {
 		if (!selectedGame) return;
 		const id = selectedGame.id;
 		let cancelled = false;
+		recordGamePlay(selectedGame);
+		// Counted for the site once it's really been played, like a song after 30 seconds.
+		const eventTimer = window.setTimeout(() => void postGameEvent(selectedGame), 30_000);
+		setSwf(null);
+		if (selectedGame.type === "flash")
+			loadGameData(selectedGame)
+				.then(data => {
+					if (!cancelled) setSwf(data);
+				})
+				.catch(err => console.error("Could not read the game:", err));
 		void prepareGame(selectedGame).finally(() => {
 			if (!cancelled) setSavesReadyFor(id);
 		});
 		return () => {
 			cancelled = true;
+			window.clearTimeout(eventTimer);
 			setSavesReadyFor(null);
 		};
 		// eslint-disable-next-line react-hooks/exhaustive-deps
@@ -125,124 +127,8 @@ const Games = ({ query, className }: GamesProps) => {
 		} catch {}
 	}, [detailsCollapsed]);
 
-	const readGames = async () => {
-		setLoading(true);
-		try {
-			const folders = await window.fr.fs.promises.readdir(GamesPath);
-			const gamesList: Game[] = [];
-			const favoriteGames = JSON.parse(localStorage.getItem("favoriteGames") || "[]");
-
-			for (const folderName of folders) {
-				try {
-					const folderPath = `${GamesPath}/${folderName}`;
-					const entries = await window.fr.fs.promises.readdir(folderPath);
-					const metadataPath = `${folderPath}/index.json`;
-
-					let metadata: any = {};
-					try {
-						if (entries.includes("index.json")) {
-							const metadataContent = await window.fr.fs.promises.readFile(metadataPath, "utf8");
-							metadata = JSON.parse(metadataContent);
-						}
-					} catch (err) {
-						console.warn(`No metadata for ${folderName}:`, err);
-					}
-
-					if (!metadata.thumbnail) {
-						const thumbnailName = ["index.png", "icon.png", "thumbnail.png"].find(name => entries.includes(name));
-						if (thumbnailName) {
-							try {
-								const imageData = await window.fr.fs.promises.readFile(`${folderPath}/${thumbnailName}`);
-								metadata.thumbnail = `data:image/png;base64,${window.fr.buffer.from(imageData).toString("base64")}`;
-							} catch (err) {
-								console.warn(`Could not read thumbnail for ${folderName}:`, err);
-							}
-						}
-					}
-
-					const gameType = metadata.type || "flash";
-					if (gameType === "flash") {
-						const swfFileName = entries.find(name => name.toLowerCase().endsWith(".swf"));
-						if (!swfFileName) continue;
-
-						const swfPath = `${folderPath}/${swfFileName}`;
-						const swfData = await window.fr.fs.promises.readFile(swfPath);
-
-						let uint8Array: Uint8Array;
-						if (swfData instanceof Uint8Array) {
-							uint8Array = swfData;
-						} else if (swfData.buffer && swfData.buffer instanceof ArrayBuffer) {
-							uint8Array = new Uint8Array(swfData.buffer, swfData.byteOffset, swfData.byteLength);
-						} else {
-							uint8Array = new Uint8Array(swfData);
-						}
-
-						gamesList.push({
-							id: folderName,
-							folderName: folderName,
-							title: metadata.title || folderName,
-							data: uint8Array.buffer as ArrayBuffer,
-							thumbnail: metadata.thumbnail,
-							author: metadata.author,
-							version: metadata.version,
-							description: metadata.description,
-							tags: metadata.tags,
-							type: "flash",
-							isFavorite: favoriteGames.includes(folderName),
-							createdAt: metadata.createdAt,
-							modifiedAt: metadata.modifiedAt,
-						});
-					} else if (gameType === "html5") {
-						const gameFile = metadata.gameFile || "index.html";
-
-						if (!entries.includes(gameFile)) continue;
-
-						const game = {
-							id: folderName,
-							folderName: folderName,
-							title: metadata.title || folderName,
-							folderPath: folderPath,
-							thumbnail: metadata.thumbnail,
-							author: metadata.author,
-							version: metadata.version,
-							description: metadata.description,
-							tags: metadata.tags,
-							type: "html5" as const,
-							isFavorite: favoriteGames.includes(folderName),
-							createdAt: metadata.createdAt,
-							modifiedAt: metadata.modifiedAt,
-						};
-						console.log("[readGames] Adding HTML5 game:", game);
-						gamesList.push(game);
-					}
-				} catch (err) {
-					console.error(`Error reading game folder ${folderName}:`, err);
-				}
-			}
-
-			setGames(gamesList);
-		} catch (err) {
-			console.error("Failed to read games directory:", err);
-		} finally {
-			setLoading(false);
-		}
-	};
-
 	useEffect(() => {
-		readGames();
-
-		// Without the file system (it failed to start) the list stays empty instead of taking the app down.
-		const watcher = window.fr?.fs
-			? // @ts-expect-error types
-				window.fr.fs.watch(GamesPath, { recursive: true }, () => {
-					readGames();
-				})
-			: null;
-
-		return () => {
-			// @ts-expect-error types
-			if (watcher) watcher.close();
-		};
+		ensureInstalledGames();
 	}, []);
 
 	useEffect(() => {
@@ -329,7 +215,7 @@ const Games = ({ query, className }: GamesProps) => {
 			if (selectedGame?.folderName === game.folderName) {
 				setSelectedGame(null);
 			}
-			await readGames();
+			await refreshInstalledGames();
 		} catch (err) {
 			console.error("Failed to delete game:", err);
 			alert("Failed to delete game");
@@ -338,20 +224,7 @@ const Games = ({ query, className }: GamesProps) => {
 		}
 	};
 
-	const toggleFavorite = (game: Game) => {
-		const favoriteGames = JSON.parse(localStorage.getItem("favoriteGames") || "[]");
-		const isFavorited = favoriteGames.includes(game.folderName);
-
-		if (isFavorited) {
-			const updated = favoriteGames.filter((name: string) => name !== game.folderName);
-			localStorage.setItem("favoriteGames", JSON.stringify(updated));
-		} else {
-			favoriteGames.push(game.folderName);
-			localStorage.setItem("favoriteGames", JSON.stringify(favoriteGames));
-		}
-
-		setGames(games.map(g => (g.folderName === game.folderName ? { ...g, isFavorite: !isFavorited } : g)));
-	};
+	const toggleFavorite = (game: Game) => toggleFavoriteGame(game.folderName);
 
 	const handleFolderUpload = async (files: FileList) => {
 		try {
@@ -612,7 +485,7 @@ const Games = ({ query, className }: GamesProps) => {
 						)}
 					</div>
 					{activeTab === "download" ? (
-						<GameInstaller onComplete={() => readGames()} />
+						<GameInstaller onComplete={() => void refreshInstalledGames()} />
 					) : (
 						<div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 auto-rows-min gap-3 md:gap-4">
 							{loading ? (
@@ -756,7 +629,7 @@ const Games = ({ query, className }: GamesProps) => {
 									</>
 								}
 							>
-								{!savesReady ? (
+								{!savesReady || (selectedGame.type === "flash" && !swf) ? (
 									<div className="absolute inset-0 flex items-center justify-center bg-(--primary)">
 										<div className="flex flex-col items-center gap-3">
 											<div className="size-12 border-4 border-(--accent) border-t-transparent rounded-full animate-spin" />
@@ -765,7 +638,7 @@ const Games = ({ query, className }: GamesProps) => {
 									</div>
 								) : selectedGame.type === "flash" ? (
 									<RufflePlayer
-										data={selectedGame.data}
+										data={swf ?? undefined}
 										className="w-full h-full"
 										autoplay={true}
 										quality="high"
@@ -897,7 +770,7 @@ const Games = ({ query, className }: GamesProps) => {
 													{selectedGame.folderName} <ClipboardIcon className="inline-block size-3.5 opacity-0 group-hover:opacity-100 duration-150" />{" "}
 												</button>
 											</div>
-											{selectedGame.data && <p>Size: {(selectedGame.data.byteLength / 1024 / 1024).toFixed(2)} MB</p>}
+											{swf && <p>Size: {(swf.byteLength / 1024 / 1024).toFixed(2)} MB</p>}
 											{selectedGame.createdAt && <p>Added: {new Date(selectedGame.createdAt).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</p>}
 											{selectedGame.modifiedAt && <p>Modified: {new Date(selectedGame.modifiedAt).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</p>}
 										</div>
@@ -1088,7 +961,7 @@ const Games = ({ query, className }: GamesProps) => {
 											await window.fr.fs.promises.writeFile(`${folderPath}/index.json`, JSON.stringify(metadata, null, 2));
 
 											setUploadModal(null);
-											await readGames();
+											await refreshInstalledGames();
 										} catch (err) {
 											console.error("Failed to upload game:", err);
 											alert("Failed to upload game");
@@ -1242,7 +1115,7 @@ const Games = ({ query, className }: GamesProps) => {
 											};
 											await window.fr.fs.promises.writeFile(metadataPath, JSON.stringify(metadata, null, 2));
 											setEditModal(null);
-											await readGames();
+											await refreshInstalledGames();
 										} catch (err) {
 											console.error("Failed to update game:", err);
 											alert("Failed to update game");

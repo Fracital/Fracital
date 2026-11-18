@@ -13,8 +13,8 @@
  */
 
 import type { Context, MiddlewareHandler } from "hono";
-import { generateSeed, encodeSeed, WCS_COOKIE_NAME } from "../libs/seal-codec";
-import { deriveApiKeys, sealText, seedFromCookieHeader, API_CRYPTO_HEADER, API_CRYPTO_TOKEN, API_CRYPTO_CONTENT_TYPE } from "../libs/api-crypto-codec";
+import { generateSeed, encodeSeed, WCS_COOKIE_NAME } from "../libs/seal-codec.ts";
+import { deriveApiKeys, sealText, seedFromCookieHeader, API_CRYPTO_HEADER, API_CRYPTO_TOKEN, API_CRYPTO_CONTENT_TYPE } from "../libs/api-crypto-codec.ts";
 
 function hasSeedCookie(c: Context): boolean {
 	return seedFromCookieHeader(c.req.header("cookie")) !== null;

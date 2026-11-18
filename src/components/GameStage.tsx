@@ -1,7 +1,7 @@
 import { ChevronDownIcon, ChevronUpIcon, LockClosedIcon, LockOpenIcon } from "@heroicons/react/24/solid";
 import { type ReactNode, type RefObject, useRef } from "react";
 import { useHolyAttr } from "../libs/holy-attr";
-import { BarOpenHandle, BarSettingsMenu, useCollapsibleBar, useHoverReveal } from "./CollapsibleBar";
+import { BarHoldContext, BarOpenHandle, BarSettingsMenu, useCollapsibleBar, useHoverReveal } from "./CollapsibleBar";
 
 /**
  * A bar icon button whose label is obfuscated (it's also the button's only accessible name). `quiet` drops its
@@ -69,48 +69,52 @@ export const GameStage = ({ containerRef, barStart, barEnd, dark, fullscreen, ch
 		target: () => containerRef.current,
 		frames: () => containerRef.current,
 		edge: () => containerRef.current?.getBoundingClientRect().top ?? 0,
-		barBottom: () => barRef.current?.getBoundingClientRect().bottom ?? 0,
+		bar: () => barRef.current,
+		revealed: bar.revealed,
+		held: bar.held,
 		setRevealed: bar.setRevealed,
 	});
 
 	const surface = dark ? "bg-[#1e1e1ef0] border border-[#ffffff1a]" : "bg-[#fafafaf0] border border-[#00000014]";
 
 	const content = (
-		<div ref={barRef} className={`flex items-center justify-between gap-2 p-1.5 rounded-xl ${bar.inFlow ? (dark ? "bg-[#ffffff10]" : "bg-[#00000010]") : `${surface} shadow-[0_8px_30px_#00000060] backdrop-blur-md`}`}>
-			<div className="flex min-w-0 items-center gap-2">{barStart}</div>
-			<div className="flex shrink-0 items-center gap-1">
-				{barEnd}
-				<span className={`mx-1 h-5 w-px ${dark ? "bg-[#ffffff22]" : "bg-[#00000022]"}`} />
-				{/* Like the top bar's: pin (or close) the bar, with its settings dropping down from the chevron beside it. */}
-				<BarSettingsMenu
-					bar={bar}
-					dark={dark}
-					title="Game bar"
-					trigger={(toggle, open) => {
-						const openMenu = (e: React.MouseEvent) => {
-							e.preventDefault();
-							toggle();
-						};
-						return (
-							<div className={`flex items-center rounded-lg duration-150 ${open ? (dark ? "bg-[#ffffff18]" : "bg-[#00000012]") : ""}`}>
-								{bar.mode === "hover" ? (
-									<GameBarButton label={bar.pinned ? "Auto-hide the bar" : "Keep the bar open"} active={bar.pinned} shape="p-2 rounded-lg" onClick={() => bar.setPinned(!bar.pinned)} onContextMenu={openMenu} dark={dark}>
-										{bar.pinned ? <LockClosedIcon className="size-5" /> : <LockOpenIcon className="size-5" />}
+		<BarHoldContext.Provider value={bar.hold}>
+			<div ref={barRef} className={`flex items-center justify-between gap-2 p-1.5 rounded-xl ${bar.inFlow ? (dark ? "bg-[#ffffff10]" : "bg-[#00000010]") : `${surface} shadow-[0_8px_30px_#00000060] backdrop-blur-md`}`}>
+				<div className="flex min-w-0 items-center gap-2">{barStart}</div>
+				<div className="flex shrink-0 items-center gap-1">
+					{barEnd}
+					<span className={`mx-1 h-5 w-px ${dark ? "bg-[#ffffff22]" : "bg-[#00000022]"}`} />
+					{/* Like the top bar's: pin (or close) the bar, with its settings dropping down from the chevron beside it. */}
+					<BarSettingsMenu
+						bar={bar}
+						dark={dark}
+						title="Game bar"
+						trigger={(toggle, open) => {
+							const openMenu = (e: React.MouseEvent) => {
+								e.preventDefault();
+								toggle();
+							};
+							return (
+								<div className={`flex items-center rounded-lg duration-150 ${open ? (dark ? "bg-[#ffffff18]" : "bg-[#00000012]") : ""}`}>
+									{bar.mode === "hover" ? (
+										<GameBarButton label={bar.pinned ? "Auto-hide the bar" : "Keep the bar open"} active={bar.pinned} shape="p-2 rounded-lg" onClick={() => bar.setPinned(!bar.pinned)} onContextMenu={openMenu} dark={dark}>
+											{bar.pinned ? <LockClosedIcon className="size-5" /> : <LockOpenIcon className="size-5" />}
+										</GameBarButton>
+									) : (
+										<GameBarButton label="Close the bar" shape="p-2 rounded-lg" onClick={() => bar.setOpen(false)} onContextMenu={openMenu} dark={dark}>
+											<ChevronUpIcon className="size-5" />
+										</GameBarButton>
+									)}
+									<GameBarButton label="Bar settings" expanded={open} quiet shape="self-stretch pl-0.5 pr-1.5 rounded-r-lg" onClick={toggle} dark={dark}>
+										<ChevronDownIcon className={`size-4 duration-200 ${open ? "rotate-180" : "group-hover:translate-y-0.5"}`} />
 									</GameBarButton>
-								) : (
-									<GameBarButton label="Close the bar" shape="p-2 rounded-lg" onClick={() => bar.setOpen(false)} onContextMenu={openMenu} dark={dark}>
-										<ChevronUpIcon className="size-5" />
-									</GameBarButton>
-								)}
-								<GameBarButton label="Bar settings" expanded={open} quiet shape="self-stretch pl-0.5 pr-1.5 rounded-r-lg" onClick={toggle} dark={dark}>
-									<ChevronDownIcon className={`size-4 duration-200 ${open ? "rotate-180" : "group-hover:translate-y-0.5"}`} />
-								</GameBarButton>
-							</div>
-						);
-					}}
-				/>
+								</div>
+							);
+						}}
+					/>
+				</div>
 			</div>
-		</div>
+		</BarHoldContext.Provider>
 	);
 
 	return (

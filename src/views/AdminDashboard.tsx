@@ -1,16 +1,18 @@
-import { CheckBadgeIcon, CheckIcon, MagnifyingGlassIcon, NoSymbolIcon, ShieldCheckIcon, TrashIcon, XMarkIcon } from "@heroicons/react/24/solid";
+import { CheckBadgeIcon, CheckIcon, MagnifyingGlassIcon, NoSymbolIcon, PencilIcon, PlusIcon, ShieldCheckIcon, TrashIcon, XMarkIcon } from "@heroicons/react/24/solid";
 import { createId } from "@paralleldrive/cuid2";
-import { useEffect, useState } from "react";
-import { admin, type AdminClaim, type AdminPromo, type AdminPromoWinner, type AdminUser } from "../libs/artistPanel";
+import { useEffect, useMemo, useState } from "react";
+import { type ActivityHour, admin, type AdminBlogPost, type AdminClaim, type AdminPromo, type AdminPromoWinner, type AdminUser } from "../libs/artistPanel";
+import { KIND_LABELS, POST_KINDS, type PostKind, postDate, renderMarkdownSafe } from "../libs/blog";
 import { HolyText } from "../components/common/HolyText";
 import { HolyDynamic, HolyRich } from "../components/common/HolyRich";
 import { getMe } from "../libs/auth";
 import { formatCount, searchTracks, type MusicArtist } from "../libs/music-service";
 import { useSettingsStore, useTabsStore } from "../store";
+import { ActivityPanel, PlaysPanel } from "./AdminActivity";
 import { StatCard } from "./ArtistPanel";
 import { commentAge, comments as commentsApi, type ReportedComment } from "../libs/comments";
 
-type Tab = "overview" | "claims" | "artists" | "users" | "promo" | "comments";
+type Tab = "overview" | "claims" | "artists" | "users" | "promo" | "comments" | "blog";
 
 const openTab = (url: string, title: string) => useTabsStore.getState().newTab({ id: createId(), url, displayUrl: url, title, icon: null, current: true });
 const ago = (d: string | null) => {
@@ -25,7 +27,7 @@ const ago = (d: string | null) => {
 export const AdminDashboard = ({ query }: { query?: string }) => {
 	const dark = useSettingsStore(s => s.settings.brightness) !== "light";
 	const initial = (new URLSearchParams(query || "").get("tab") as Tab) || "overview";
-	const [tab, setTab] = useState<Tab>(["overview", "claims", "artists", "users", "promo", "comments"].includes(initial) ? initial : "overview");
+	const [tab, setTab] = useState<Tab>(["overview", "claims", "artists", "users", "promo", "comments", "blog"].includes(initial) ? initial : "overview");
 	const [allowed, setAllowed] = useState<boolean | undefined>(undefined);
 
 	useEffect(() => {
@@ -53,7 +55,7 @@ export const AdminDashboard = ({ query }: { query?: string }) => {
 						<ShieldCheckIcon className="size-8" /> Admin Dashboard
 					</h1>
 					<div className="flex gap-1.5">
-						{(["overview", "claims", "artists", "users", "promo", "comments"] as Tab[]).map(t => (
+						{(["overview", "claims", "artists", "users", "promo", "comments", "blog"] as Tab[]).map(t => (
 							<button key={t} className={`${chip(tab === t)} capitalize`} onClick={() => setTab(t)}>
 								{t}
 							</button>
@@ -66,6 +68,7 @@ export const AdminDashboard = ({ query }: { query?: string }) => {
 				{tab === "users" && <Users dark={dark} />}
 				{tab === "promo" && <Promo dark={dark} />}
 				{tab === "comments" && <ReportedComments dark={dark} />}
+				{tab === "blog" && <BlogAdmin dark={dark} />}
 			</div>
 		</div>
 	);
@@ -89,15 +92,21 @@ const Err = ({ e }: { e: string }) => (e ? <div className="p-2.5 rounded-xl bg-r
 const Overview = ({ dark, goTo }: { dark: boolean; goTo: (t: Tab) => void }) => {
 	const [data, setData] = useState<Awaited<ReturnType<typeof admin.overview>> | null>(null);
 	const [error, setError] = useState("");
+	// The hourly series feeds both chart panels; fetched once, and its failure leaves the rest of the overview up.
+	const [hours, setHours] = useState<ActivityHour[] | null>(null);
+	const [hoursError, setHoursError] = useState("");
 	useEffect(() => {
 		admin
 			.overview()
 			.then(setData)
 			.catch(e => setError(e.message));
+		admin
+			.activity()
+			.then(r => setHours(r.hours))
+			.catch(e => setHoursError(e.message));
 	}, []);
 	if (error) return <Err e={error} />;
 	if (!data) return <span className="text-sm text-(--text-tertiary)">Loading…</span>;
-	const max = Math.max(1, ...data.daily.map(d => d.plays));
 	return (
 		<div className="flex flex-col gap-4">
 			{data.pending_claims > 0 && (
@@ -115,20 +124,22 @@ const Overview = ({ dark, goTo }: { dark: boolean; goTo: (t: Tab) => void }) => 
 				<StatCard label="Plays · 7 days" value={data.plays7} sub={`${formatCount(data.plays1)} today · ${formatCount(data.plays28)} in 28 days`} />
 				<StatCard label="Listeners · 7 days" value={data.listeners7} sub={`${data.banned} banned accounts`} />
 			</div>
-			<div className="grid lg:grid-cols-[1.6fr_1fr] gap-4">
-				<Panel dark={dark} className="flex flex-col gap-3">
-					<h2 className="font-bold">Plays per day (last 28 days)</h2>
-					<div className="flex items-end gap-1 h-36">
-						{data.daily.map(d => (
-							<div key={d.day} className="flex-1 flex flex-col justify-end h-full" title={`${d.day}: ${d.plays} plays`}>
-								<div className="rounded-t bg-[#3d91ff] min-h-0.5" style={{ height: `${(d.plays / max) * 100}%` }} />
-							</div>
-						))}
-					</div>
-				</Panel>
-				<Panel dark={dark} className="flex flex-col gap-1">
-					<h2 className="font-bold mb-1">Top artists · 7 days</h2>
-					{data.topArtists.length === 0 && <span className="text-sm text-(--text-tertiary)">No plays yet.</span>}
+			{hoursError ? (
+				<Err e={hoursError} />
+			) : (
+				<>
+					<Panel dark={dark}>
+						<ActivityPanel hours={hours} dark={dark} />
+					</Panel>
+					<Panel dark={dark}>
+						<PlaysPanel hours={hours} dark={dark} />
+					</Panel>
+				</>
+			)}
+			<Panel dark={dark} className="flex flex-col gap-1">
+				<h2 className="font-bold mb-1">Top artists · 7 days</h2>
+				{data.topArtists.length === 0 && <span className="text-sm text-(--text-tertiary)">No plays yet.</span>}
+				<div className="grid md:grid-cols-2 gap-x-8">
 					{data.topArtists.map((a, i) => (
 						<div key={a.artist} className="flex items-center gap-3 text-sm py-1">
 							<span className="w-5 text-right font-bold text-(--text-tertiary)">{i + 1}</span>
@@ -136,8 +147,8 @@ const Overview = ({ dark, goTo }: { dark: boolean; goTo: (t: Tab) => void }) => 
 							<span className="tabular-nums text-(--text-tertiary)">{formatCount(a.plays)} plays</span>
 						</div>
 					))}
-				</Panel>
-			</div>
+				</div>
+			</Panel>
 		</div>
 	);
 };
@@ -490,7 +501,8 @@ const Promo = ({ dark }: { dark: boolean }) => {
 							Streak promo: <HolyDynamic>{state}</HolyDynamic>
 						</HolyRich>
 						<HolyRich className="text-sm text-(--text-tertiary)">
-							First <HolyDynamic>{promo.slots}</HolyDynamic> accounts to a <HolyDynamic>{promo.days}</HolyDynamic>-day streak (10 minutes a day, days end at midnight US Eastern) get <HolyDynamic>{promo.rewardDays}</HolyDynamic> days of premium. Only days since the start count.
+							First <HolyDynamic>{promo.slots}</HolyDynamic> accounts to a <HolyDynamic>{promo.days}</HolyDynamic>-day streak (10 minutes a day, days end at midnight US Eastern; weekends never break a streak) get <HolyDynamic>{promo.rewardDays}</HolyDynamic> days of premium. Only days since the start
+							count.
 						</HolyRich>
 						{promo.startsAt && (
 							<HolyRich className="text-xs text-(--text-tertiary)">
@@ -603,6 +615,156 @@ const ReportedComments = ({ dark }: { dark: boolean }) => {
 					</Panel>
 				))
 			)}
+		</div>
+	);
+};
+
+// --- Blog ---
+
+type BlogDraft = { slug: string; title: string; kind: PostKind; summary: string; bodyMd: string; published: boolean; source: "file" | "db" | "new" };
+
+/** The blog: posts shipped as files (saving one makes a row that replaces it) and posts written here, as drafts or published. */
+const BlogAdmin = ({ dark }: { dark: boolean }) => {
+	const [posts, setPosts] = useState<AdminBlogPost[] | null>(null);
+	const [draft, setDraft] = useState<BlogDraft | null>(null);
+	const [error, setError] = useState("");
+	const [busy, setBusy] = useState(false);
+	const load = () =>
+		admin
+			.blog()
+			.then(setPosts)
+			.catch(e => setError(String((e as Error).message)));
+	useEffect(() => {
+		void load();
+	}, []);
+	const preview = useMemo(() => (draft ? renderMarkdownSafe(draft.bodyMd) : ""), [draft?.bodyMd]);
+
+	const field = `w-full rounded-xl px-3 py-2 text-sm outline-none ${dark ? "bg-[#ffffff0d] focus:bg-[#ffffff14]" : "bg-[#0000000a] focus:bg-[#00000012]"}`;
+	const edit = (p: AdminBlogPost) => setDraft({ slug: p.slug, title: p.title, kind: p.kind, summary: p.summary, bodyMd: p.bodyMd, published: p.published, source: p.source });
+	const save = async (published: boolean) => {
+		if (!draft) return;
+		setBusy(true);
+		setError("");
+		try {
+			await admin.saveBlog(draft.slug, { title: draft.title, kind: draft.kind, summary: draft.summary, bodyMd: draft.bodyMd, published });
+			await load();
+			setDraft(null);
+		} catch (e) {
+			setError(String((e as Error).message));
+		} finally {
+			setBusy(false);
+		}
+	};
+	const remove = async () => {
+		if (!draft || !window.confirm(`Delete "${draft.title}"?`)) return;
+		setBusy(true);
+		try {
+			await admin.deleteBlog(draft.slug);
+			await load();
+			setDraft(null);
+		} catch (e) {
+			setError(String((e as Error).message));
+		} finally {
+			setBusy(false);
+		}
+	};
+	const slugOk = /^[a-z0-9-]{1,80}$/.test(draft?.slug ?? "");
+	const file = draft?.source === "file";
+
+	return (
+		<div className="flex flex-col gap-4">
+			<Err e={error} />
+			<div className="grid gap-4 lg:grid-cols-[1fr_1.5fr]">
+				<Panel dark={dark} className="flex flex-col gap-2">
+					<div className="flex items-center justify-between gap-2">
+						<HolyText as="h2" className="font-bold" text="Posts" />
+						<Btn kind="primary" onClick={() => setDraft({ slug: "", title: "", kind: "devlog", summary: "", bodyMd: "", published: false, source: "new" })}>
+							<PlusIcon className="size-4" />
+							<HolyText text="New post" />
+						</Btn>
+					</div>
+					{!posts && <HolyText className="text-sm text-(--text-tertiary)" text="Loading…" />}
+					{posts?.map(p => (
+						<button key={p.slug} type="button" className={`flex flex-col gap-0.5 rounded-xl px-3 py-2 text-left cursor-pointer duration-150 ${draft?.slug === p.slug ? (dark ? "bg-[#ffffff14]" : "bg-[#00000010]") : "hover:bg-[#8881]"}`} onClick={() => edit(p)}>
+							{/* The post's title, slug and date: data values. */}
+							<span className="font-semibold leading-tight">{p.title}</span>
+							<span className="flex flex-wrap items-center gap-1.5 text-xs text-(--text-tertiary)">
+								<HolyText className={`rounded-full px-1.5 py-px font-bold ${dark ? "bg-[#ffffff14]" : "bg-[#00000010]"}`} text={KIND_LABELS[p.kind]} />
+								<HolyText className={`rounded-full px-1.5 py-px font-bold ${p.source === "file" ? "bg-[#3987e5]/20 text-[#7eb3f5]" : p.published ? "bg-green-500/15 text-green-400" : "bg-amber-500/15 text-amber-300"}`} text={p.source === "file" ? "File" : p.published ? "Published" : "Draft"} />
+								<span>{postDate(p.date)}</span>
+								<span className="font-mono">/{p.slug}</span>
+							</span>
+						</button>
+					))}
+				</Panel>
+				<Panel dark={dark} className="flex flex-col gap-3">
+					{!draft ? (
+						<HolyText className="text-sm text-(--text-tertiary)" text="Pick a post to edit it, or start a new one. Posts are written in Markdown; raw HTML is shown as text." />
+					) : (
+						<>
+							<div className="flex flex-wrap items-center justify-between gap-2">
+								<HolyText as="h2" className="font-bold" text={draft.source === "new" ? "New post" : file ? "Shipped with the code" : draft.published ? "Published post" : "Draft"} />
+								{file && <HolyText className="text-xs text-(--text-tertiary)" text="Saving makes a copy that replaces the file until it's deleted." />}
+							</div>
+							<label className="flex flex-col gap-1 text-xs font-semibold text-(--text-tertiary)">
+								<HolyText text="Slug (the address: /blog/slug)" />
+								<input className={`${field} font-mono`} value={draft.slug} disabled={draft.source !== "new"} onChange={e => setDraft({ ...draft, slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, "-") })} />
+							</label>
+							<label className="flex flex-col gap-1 text-xs font-semibold text-(--text-tertiary)">
+								<HolyText text="Title" />
+								<input className={field} value={draft.title} onChange={e => setDraft({ ...draft, title: e.target.value })} />
+							</label>
+							<div className="grid gap-3 sm:grid-cols-[auto_1fr]">
+								<label className="flex flex-col gap-1 text-xs font-semibold text-(--text-tertiary)">
+									<HolyText text="Kind" />
+									{/* The options are form values the user must read. */}
+									<select className={field} value={draft.kind} onChange={e => setDraft({ ...draft, kind: e.target.value as PostKind })}>
+										{POST_KINDS.map(k => (
+											<option key={k} value={k}>
+												{KIND_LABELS[k]}
+											</option>
+										))}
+									</select>
+								</label>
+								<label className="flex flex-col gap-1 text-xs font-semibold text-(--text-tertiary)">
+									<HolyText text="Summary (shown in the list and the home page notice)" />
+									<input className={field} value={draft.summary} onChange={e => setDraft({ ...draft, summary: e.target.value })} />
+								</label>
+							</div>
+							<div className="grid gap-3 lg:grid-cols-2">
+								<label className="flex flex-col gap-1 text-xs font-semibold text-(--text-tertiary)">
+									<HolyText text="Markdown" />
+									<textarea className={`${field} min-h-80 resize-y font-mono text-xs leading-relaxed`} value={draft.bodyMd} onChange={e => setDraft({ ...draft, bodyMd: e.target.value })} />
+								</label>
+								<div className="flex flex-col gap-1 text-xs font-semibold text-(--text-tertiary)">
+									<HolyText text="Preview" />
+									{/* The admin's own post, rendered and sanitized. */}
+									<div className={`blog-post min-h-80 rounded-xl p-3 text-sm font-normal text-(--text-primary) ${dark ? "bg-[#ffffff08]" : "bg-[#00000006]"}`} dangerouslySetInnerHTML={{ __html: preview }} />
+								</div>
+							</div>
+							<div className="flex flex-wrap items-center gap-2">
+								<Btn kind="primary" disabled={busy || !slugOk || !draft.title.trim()} onClick={() => void save(true)}>
+									<CheckIcon className="size-4" />
+									<HolyText text={draft.published ? "Save and keep published" : "Publish"} />
+								</Btn>
+								<Btn disabled={busy || !slugOk || !draft.title.trim()} onClick={() => void save(false)}>
+									<PencilIcon className="size-4" />
+									<HolyText text={draft.published ? "Unpublish (keep as draft)" : "Save draft"} />
+								</Btn>
+								{draft.source === "db" && (
+									<Btn kind="danger" disabled={busy} onClick={() => void remove()}>
+										<TrashIcon className="size-4" />
+										<HolyText text="Delete" />
+									</Btn>
+								)}
+								<Btn disabled={busy} onClick={() => setDraft(null)}>
+									<HolyText text="Cancel" />
+								</Btn>
+							</div>
+						</>
+					)}
+				</Panel>
+			</div>
 		</div>
 	);
 };

@@ -1,4 +1,4 @@
-import { ChatBubbleLeftRightIcon, CheckBadgeIcon, ClockIcon, Cog6ToothIcon, DocumentIcon, FolderIcon, GlobeAltIcon, MusicalNoteIcon, NoSymbolIcon, PlayCircleIcon, PlayIcon, PuzzlePieceIcon, ShieldCheckIcon, SignalIcon, UserCircleIcon } from "@heroicons/react/24/solid";
+import { ChatBubbleLeftRightIcon, CheckBadgeIcon, ClockIcon, Cog6ToothIcon, DocumentIcon, FolderIcon, GlobeAltIcon, MusicalNoteIcon, NewspaperIcon, NoSymbolIcon, PlayCircleIcon, PlayIcon, PuzzlePieceIcon, ShieldCheckIcon, SignalIcon, UserCircleIcon } from "@heroicons/react/24/solid";
 import { createId } from "@paralleldrive/cuid2";
 import { lazy, type ReactNode } from "react";
 import { NowPlayingTabIcon } from "../components/NowPlayingTabIcon";
@@ -12,6 +12,7 @@ const Account = lazy(() => import("../views/Account").then(m => ({ default: m.Ac
 const AdminDashboard = lazy(() => import("../views/AdminDashboard").then(m => ({ default: m.AdminDashboard })));
 const ArtistPanel = lazy(() => import("../views/ArtistPanel").then(m => ({ default: m.ArtistPanel })));
 const Blocked = lazy(() => import("../views/Blocked"));
+const Blog = lazy(() => import("../views/Blog"));
 const Chat = lazy(() => import("../views/Chat"));
 const DigitalLibrary = lazy(() => import("../views/DigitalLibrary").then(m => ({ default: m.DigitalLibrary })));
 const Extensions = lazy(() => import("../views/Extensions"));
@@ -66,6 +67,8 @@ export const aboutPages: Record<string, AboutPage> = {
 		component: Home,
 		icon: <GlobeAltIcon className="size-5" />,
 		title: "New Tab",
+		// about:newtab?fyp is the For You mode.
+		hasQuery: true,
 	},
 	settings: {
 		name: "settings",
@@ -130,6 +133,13 @@ export const aboutPages: Record<string, AboutPage> = {
 		component: History,
 		icon: <ClockIcon className="size-5" />,
 		title: "History",
+	},
+	blog: {
+		name: "blog",
+		component: Blog,
+		icon: <NewspaperIcon className="size-5" />,
+		title: "Blog",
+		hasQuery: true,
 	},
 	subscriptions: {
 		name: "subscriptions",

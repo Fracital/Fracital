@@ -16,9 +16,9 @@ import type { Hono } from "hono";
 import type { Pool } from "pg";
 import Stripe from "stripe";
 import * as z from "zod";
-import type { Env } from "./accounts";
-import { userMeta } from "./artists";
-import { ownOrigin } from "./cross-site";
+import type { Env } from "./accounts.ts";
+import { userMeta } from "./artists.ts";
+import { ownOrigin } from "./cross-site.ts";
 
 export type Plan = "monthly" | "annual";
 

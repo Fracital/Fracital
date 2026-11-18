@@ -5,6 +5,7 @@
  * untouched so animations survive.
  */
 import Compressor from "compressorjs";
+import { bannerBytes } from "./banner-limits";
 
 export interface CompressOptions {
 	/** Longest side in pixels. */
@@ -59,6 +60,23 @@ export async function compressImage(file: File, { maxDimension, maxBytes }: Comp
 		// Too big: drop quality first, then dimensions.
 		if (quality > 0.55) quality -= 0.12;
 		else dimension = Math.round(dimension * 0.75);
+	}
+	throw new Error("Couldn't shrink that image enough. Try a smaller one.");
+}
+
+const toBlob = (canvas: HTMLCanvasElement, type: string, quality: number) => new Promise<Blob | null>(resolve => canvas.toBlob(resolve, type, quality));
+
+/**
+ * Encodes the crop dialog's canvas (already the banner's size) to a file under the tier's cap: WebP, and sharper for
+ * premium, whose cap leaves room for it. Quality steps down until it fits; JPEG when the browser can't write WebP.
+ */
+export async function encodeBanner(canvas: HTMLCanvasElement, premium: boolean): Promise<File> {
+	const cap = bannerBytes(premium);
+	for (let quality = premium ? 0.95 : 0.82; quality >= 0.5; quality -= 0.1) {
+		let out = await toBlob(canvas, "image/webp", quality);
+		if (out?.type !== "image/webp") out = await toBlob(canvas, "image/jpeg", quality);
+		if (!out) throw new Error("That image couldn't be encoded. Try another file.");
+		if (out.size <= cap) return new File([out], out.type === "image/webp" ? "banner.webp" : "banner.jpg", { type: out.type });
 	}
 	throw new Error("Couldn't shrink that image enough. Try a smaller one.");
 }

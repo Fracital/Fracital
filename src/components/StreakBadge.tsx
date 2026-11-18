@@ -58,7 +58,7 @@ export const StreakCard = () => {
 				</div>
 			</div>
 			{streak.activeToday ? (
-				<HolyText className="text-sm text-(--text-secondary)" text="Today counts. Come back tomorrow to keep it going." />
+				<HolyText className="text-sm text-(--text-secondary)" text="Today counts. Come back on the next school day to keep it going; weekends never break a streak." />
 			) : (
 				<div className="flex flex-col gap-1.5">
 					<HolyRich className="text-sm text-(--text-secondary)">
@@ -101,7 +101,7 @@ export const StreakWinNotice = () => {
 				<FireIcon className="size-14 text-[#ff8a3d]" />
 				<HolyText as="h2" className="text-xl font-bold" text="You made the streak promo!" />
 				<HolyRich as="p" className="text-sm text-(--text-secondary)">
-					You were one of the first to keep a <HolyDynamic>{promo?.need ?? 7}</HolyDynamic>-day streak. Premium is on until <HolyDynamic>{promo?.premiumUntil ? dateText(promo.premiumUntil) : ""}</HolyDynamic>.
+					You were one of the first to keep a <HolyDynamic>{promo?.need ?? 5}</HolyDynamic>-day streak. Premium is on until <HolyDynamic>{promo?.premiumUntil ? dateText(promo.premiumUntil) : ""}</HolyDynamic>.
 				</HolyRich>
 				<button className="mt-1 px-4 py-2 rounded-lg bg-(--accent) text-white font-semibold cursor-pointer" onClick={closeModal}>
 					<HolyText text="Nice" />

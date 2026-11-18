@@ -36,7 +36,7 @@ import { setSessionCookie } from "better-auth/cookies";
 import type { Context, Hono } from "hono";
 import { getCookie, setCookie } from "hono/cookie";
 import * as z from "zod";
-import { servedHosts } from "./cloak-routing";
+import { servedHosts } from "./cloak-routing.ts";
 
 const CODE_TTL_MS = 2 * 60 * 1000;
 const HUB_TTL_S = 60 * 60 * 24 * 30;

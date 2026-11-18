@@ -3,11 +3,11 @@ import { homedir } from "node:os";
 import { extname, resolve, sep } from "node:path";
 import type { MiddlewareHandler } from "hono";
 import type { Plugin, UserConfig, ViteDevServer } from "vite";
-import { parseRequestUrl } from "./request-url";
-import { appPath, injectUncloakScript, uncloakScriptPath } from "./cloak-endpoints";
-import { injectClientConfig } from "./relay-gate";
-import { injectAdTag } from "./ad-tag";
-import { ensureSeedCookie } from "./api-crypto";
+import { parseRequestUrl } from "./request-url.ts";
+import { appPath, injectUncloakScript, uncloakScriptPath } from "./cloak-endpoints.ts";
+import { injectClientConfig } from "./relay-gate.ts";
+import { injectAdTag } from "./ad-tag.ts";
+import { ensureSeedCookie } from "./api-crypto.ts";
 
 // The loader is served at a per-domain path from cloak-endpoints.ts (the decoy's
 // own "analytics" script). This file only owns finding the source on disk.

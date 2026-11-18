@@ -15,7 +15,7 @@ import { randomBytes } from "node:crypto";
 import type { Hono, MiddlewareHandler } from "hono";
 import type { Pool } from "pg";
 import * as z from "zod";
-import type { Env } from "./accounts";
+import type { Env } from "./accounts.ts";
 
 // ============================================================
 // Schema
@@ -99,6 +99,7 @@ export async function migrateArtistTables(pool: Pool) {
 		);
 		create index if not exists music_play_events_artist on music_play_events (artist_key, at desc);
 		create index if not exists music_play_events_listener on music_play_events (listener, at desc);
+		create index if not exists music_play_events_user on music_play_events (user_id, at desc);
 		alter table fracital_user_meta add column if not exists username text;
 		alter table fracital_user_meta add column if not exists premium boolean not null default false;
 		-- Premium for a while (the streak promo's reward), on top of the admin's on/off premium.
@@ -272,6 +273,45 @@ export function sniff(bytes: Buffer): string | null {
 	if (tag === "wOFF") return "font/woff";
 	if (tag === "OTTO") return "font/otf";
 	if (hex.startsWith("00010000") || tag === "true") return "font/ttf";
+	return null;
+}
+
+/** The pixel size in an image's header, for the formats sniff() knows; null when it can't be read (a truncated or odd file). */
+export function imageSize(bytes: Buffer, mime: string): { width: number; height: number } | null {
+	try {
+		if (mime === "image/png") return bytes.length >= 24 && bytes.subarray(12, 16).toString("ascii") === "IHDR" ? { width: bytes.readUInt32BE(16), height: bytes.readUInt32BE(20) } : null;
+		if (mime === "image/gif") return bytes.length >= 10 ? { width: bytes.readUInt16LE(6), height: bytes.readUInt16LE(8) } : null;
+		if (mime === "image/jpeg") {
+			// Walk the segments to the first frame header (SOFn), which carries the size.
+			let i = 2;
+			while (i + 9 < bytes.length) {
+				if (bytes[i] !== 0xff) return null;
+				const marker = bytes[i + 1];
+				if (marker === 0xff) {
+					i += 1;
+					continue;
+				}
+				if (marker === 0xd8 || marker === 0x01 || (marker >= 0xd0 && marker <= 0xd7)) {
+					i += 2;
+					continue;
+				}
+				if (marker >= 0xc0 && marker <= 0xcf && marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc) return { height: bytes.readUInt16BE(i + 5), width: bytes.readUInt16BE(i + 7) };
+				i += 2 + bytes.readUInt16BE(i + 2);
+			}
+			return null;
+		}
+		if (mime === "image/webp" && bytes.length >= 30) {
+			const chunk = bytes.subarray(12, 16).toString("ascii");
+			if (chunk === "VP8 ") return { width: bytes.readUInt16LE(26) & 0x3fff, height: bytes.readUInt16LE(28) & 0x3fff };
+			if (chunk === "VP8L") {
+				const bits = bytes.readUInt32LE(21);
+				return { width: (bits & 0x3fff) + 1, height: ((bits >>> 14) & 0x3fff) + 1 };
+			}
+			if (chunk === "VP8X") return { width: bytes.readUIntLE(24, 3) + 1, height: bytes.readUIntLE(27, 3) + 1 };
+		}
+	} catch {
+		// A header shorter than the format promises.
+	}
 	return null;
 }
 
@@ -627,8 +667,7 @@ export function registerArtistRoutes(app: Hono<Env>, { init, requireUser }: Deps
 			(select count(distinct listener) from music_play_events where at > now() - interval '7 days')::int listeners7,
 			(select count(*) from fracital_user_meta where banned_at is not null)::int banned`);
 		const top = await pool.query("select min(artist) artist, count(*)::int plays from music_play_events where at > now() - interval '7 days' group by artist_key order by plays desc limit 10");
-		const daily = await pool.query("select to_char(d, 'YYYY-MM-DD') as day, coalesce(count(e.id), 0)::int plays from generate_series(current_date - 27, current_date, interval '1 day') d left join music_play_events e on e.at::date = d::date group by d order by d");
-		return c.json({ ...rows[0], topArtists: top.rows, daily: daily.rows });
+		return c.json({ ...rows[0], topArtists: top.rows });
 	});
 
 	app.get("/api/admin/claims", async c => {

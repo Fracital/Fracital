@@ -2,7 +2,7 @@
  * Now Playing details: release date (iTunes), optional Last.fm bio/stats, and
  * credits — writers, producers, engineers and musicians (MusicBrainz).
  */
-import { musicbrainz } from "./artist-extras";
+import { musicbrainz } from "./artist-extras.ts";
 
 const TTL = 24 * 60 * 60_000;
 
@@ -80,7 +80,7 @@ export async function songInfo(title: string, artist: string, albumId?: string):
 		}
 		return releaseDate;
 	};
-	const trackInfoRequest = import("./lastfm")
+	const trackInfoRequest = import("./lastfm.ts")
 		.then(({ lastfmCall }) => lastfmCall<LfmTrack>({ method: "track.getInfo", artist, track: title, autocorrect: "1" }))
 		.catch(error => {
 			console.warn("Last.fm track info lookup failed:", error);
@@ -237,7 +237,7 @@ type LfmAlbum = { album?: { listeners?: string; playcount?: string; url?: string
 type MbRelease = { id: string; title: string; score?: number; status?: string; "track-count"?: number; "label-info"?: { label?: { name: string } }[]; relations?: MbRelation[]; media?: { tracks?: { recording?: MbRecording }[] }[] };
 
 async function lastfmAlbum(title: string, artist: string): Promise<LfmAlbum["album"] | null> {
-	const { lastfmCall } = await import("./lastfm");
+	const { lastfmCall } = await import("./lastfm.ts");
 	const res = await lastfmCall<LfmAlbum>({ method: "album.getInfo", artist, album: title, autocorrect: "1" }).catch(() => null);
 	return res?.album ?? null;
 }

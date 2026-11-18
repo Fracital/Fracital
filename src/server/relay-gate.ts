@@ -13,7 +13,7 @@
  * server) starts and hands upgrades to; RELAY_OPTIONS is its config for both.
  */
 import type { holyWispOptions } from "holywisp";
-import { chatPath } from "./chat-relay";
+import { chatPath } from "./chat-relay.ts";
 
 const RELAY_SEGMENT = "pipe";
 const LEGACY_PATH = "/wisp/";

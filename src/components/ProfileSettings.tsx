@@ -1,11 +1,19 @@
 import { ArrowTopRightOnSquareIcon, ComputerDesktopIcon, MusicalNoteIcon, PhotoIcon, PlusIcon, TrashIcon, UserCircleIcon, XMarkIcon } from "@heroicons/react/24/solid";
+import { createId } from "@paralleldrive/cuid2";
 import { useEffect, useRef, useState } from "react";
+import { getMe } from "../libs/auth";
+import { BANNER_BYTES, BANNER_SIZE, bannerMb } from "../libs/banner-limits";
 import { replaceShortcodes } from "../libs/emoji";
 import { useHolyAttr } from "../libs/holy-attr";
 import { type ProfileInterest, type ProfileSection, profiles, type ProfileSettings as Settings } from "../libs/profiles";
+import { BannerCropDialog } from "./BannerCropDialog";
+import { HolyDynamic, HolyRich } from "./common/HolyRich";
 import { HolyText } from "./common/HolyText";
+import { Switch } from "./common/Switch";
 import { EmojiTextarea } from "./EmojiTextarea";
+import { useModal } from "./Modal/ModalContext";
 import { InterestChip, openProfilePage, ProfileBanner, SocialIcon, socialOf } from "./ProfileCard";
+import { useTabsStore } from "../store";
 
 const BIO_MAX = 300;
 const INTERESTS_MAX = 8;
@@ -20,28 +28,11 @@ const SECTIONS: { id: ProfileSection; label: string; note?: string }[] = [
 	{ id: "playlists", label: "Playlists" },
 	{ id: "listening", label: "Listening now", note: "Also needs sharing turned on in Social." },
 	{ id: "discord", label: "Discord activity", note: "Also needs On Discord turned on below." },
+	{ id: "lastfm", label: "Last.fm profile link", note: "Also needs Last.fm connected." },
 ];
 
 const field = "min-w-0 flex-1 rounded-xl px-3 py-2 text-sm bg-[#ffffff0d] outline-none inset-shadow-[0_0_0_1.5px_#ffffff18] focus:inset-shadow-[0_0_0_1.5px_var(--accent)] duration-150";
 const pill = "flex items-center gap-1.5 text-sm font-semibold px-3 py-1.5 rounded-full bg-[#ffffff15] hover:bg-[#ffffff25] disabled:opacity-50 cursor-pointer duration-150 shrink-0";
-
-const Switch = ({ on, label, disabled, onChange }: { on: boolean; label: string; disabled?: boolean; onChange: (on: boolean) => void }) => {
-	const { ref, placeholder } = useHolyAttr({ "aria-label": label });
-	return (
-		<button
-			ref={ref}
-			{...placeholder}
-			type="button"
-			role="switch"
-			aria-checked={on}
-			disabled={disabled}
-			onClick={() => onChange(!on)}
-			className={`relative inline-block w-12 h-7 shrink-0 rounded-full transition-colors duration-200 disabled:opacity-50 cursor-pointer ${on ? "bg-(--accent)" : "bg-[#ffffff15] hover:bg-[#ffffff25]"}`}
-		>
-			<span className={`absolute left-1 top-1 size-5 rounded-full bg-white shadow transition-transform duration-200 ${on ? "translate-x-5" : ""}`} />
-		</button>
-	);
-};
 
 const RemoveButton = ({ label, disabled, onClick, className = "" }: { label: string; disabled: boolean; onClick: () => void; className?: string }) => {
 	const { ref, placeholder } = useHolyAttr({ "aria-label": label, title: label });
@@ -148,6 +139,9 @@ export const ProfileSettings = ({ user }: { user: { id: string; name: string; us
 	const [bio, setBio] = useState("");
 	const [busy, setBusy] = useState(false);
 	const [error, setError] = useState<string | null>(null);
+	// Premium raises the banner's size cap (src/libs/banner-limits.ts).
+	const [premium, setPremium] = useState(false);
+	const { openModal } = useModal();
 	const file = useRef<HTMLInputElement>(null);
 	const { ref: bioRef, placeholder: bioAttrs } = useHolyAttr({ placeholder: "Tell people a little about yourself", "aria-label": "Bio" });
 	const { ref: colorRef, placeholder: colorAttrs } = useHolyAttr({ title: "Custom color", "aria-label": "Custom banner color" });
@@ -160,6 +154,7 @@ export const ProfileSettings = ({ user }: { user: { id: string; name: string; us
 			},
 			(e: Error) => setError(e.message),
 		);
+		void getMe().then(me => setPremium(!!me?.premium));
 	}, []);
 
 	const run = async (action: () => Promise<Settings>) => {
@@ -176,8 +171,19 @@ export const ProfileSettings = ({ user }: { user: { id: string; name: string; us
 		}
 	};
 
+	// The crop dialog frames the image, encodes it (or keeps a GIF) and uploads; its result is the new settings.
 	const upload = (picked: File | undefined) => {
-		if (picked) void run(() => profiles.uploadBanner(picked));
+		if (picked)
+			openModal(
+				<BannerCropDialog
+					file={picked}
+					premium={premium}
+					onDone={next => {
+						setSettings(next);
+						setError(null);
+					}}
+				/>,
+			);
 		if (file.current) file.current.value = "";
 	};
 
@@ -201,7 +207,17 @@ export const ProfileSettings = ({ user }: { user: { id: string; name: string; us
 				<>
 					<div className="flex flex-col gap-2">
 						<HolyText as="h3" className="text-sm font-semibold text-(--text-secondary)" text="Banner" />
-						<ProfileBanner profile={settings} className="h-31 w-full rounded-xl" />
+						<ProfileBanner profile={settings} className="aspect-[5/2] w-full rounded-xl" />
+						<p className="flex flex-col text-xs text-(--text-tertiary)">
+							<HolyRich>
+								Shown at 2.5:1 (<HolyDynamic>{`${BANNER_SIZE.width}×${BANNER_SIZE.height}`}</HolyDynamic>) <HolyDynamic>{String(bannerMb(BANNER_BYTES.free))}</HolyDynamic> MB.
+							</HolyRich>
+							<button type="button" className="self-start text-left text-(--accent) cursor-pointer hover:underline" onClick={() => useTabsStore.getState().newTab({ id: createId(), url: "about:subscriptions", displayUrl: "about:subscriptions", title: "Premium", icon: null, current: true })}>
+								<HolyRich>
+									Up to <HolyDynamic>{String(bannerMb(BANNER_BYTES.premium))}</HolyDynamic> MB with Premium.
+								</HolyRich>
+							</button>
+						</p>
 						<div className="flex flex-wrap items-center gap-2">
 							<input ref={file} type="file" accept="image/*" className="hidden" onChange={e => upload(e.target.files?.[0])} />
 							<button type="button" className={pill} disabled={busy} onClick={() => file.current?.click()}>

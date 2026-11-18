@@ -30,6 +30,7 @@ import { TabView } from "./gui/TabView";
 import { View } from "./gui/View";
 import { aboutPages, getPageFromUrl, getQueryFromUrl, openLibraryPage } from "./libs/aboutPages";
 import { startGameSaveSync } from "./libs/gameSaves";
+import { startHistoryBackup } from "./libs/historyBackup";
 import { init, quickLinks } from "./libs/init";
 import { applyMotionSetting, MOTION_SETTING } from "./libs/motion";
 import { startProfileRules } from "./libs/profileRules";
@@ -259,6 +260,7 @@ const App = () => {
 			const theme = initTheme();
 			await init();
 			await theme;
+			startHistoryBackup();
 			// After the bundled games are on disk, so their saves can be matched.
 			void window.gamesReady?.then(startGameSaveSync);
 		})();

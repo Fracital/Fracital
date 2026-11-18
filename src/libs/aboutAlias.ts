@@ -14,5 +14,8 @@ export function normalizeAboutUrl(url: string | undefined): string | undefined {
 	const player = /^about:player(?:\?(.*))?$/.exec(url);
 	if (player) return `about:music?player${player[1] ? `&${player[1]}` : ""}`;
 	if (url === "about:premium") return "about:subscriptions";
+	// The blog holds the dev log and the policy changes.
+	const blog = /^about:(?:devlog|changelog)(\?.*)?$/.exec(url);
+	if (blog) return `about:blog${blog[1] ?? ""}`;
 	return url;
 }

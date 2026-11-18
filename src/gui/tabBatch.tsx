@@ -2,6 +2,7 @@ import { ChevronDownIcon, ChevronRightIcon, PlusIcon, RectangleStackIcon, XMarkI
 import { createId } from "@paralleldrive/cuid2";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { useHoldBar } from "../components/CollapsibleBar";
 import { ContextMenu } from "../components/ContextMenu";
 import { HolyText } from "../components/common/HolyText";
 import { GroupIcon } from "../components/GroupIcon";
@@ -393,6 +394,8 @@ export const BatchAdd = ({ area, at, kind, onAdd, onLinks, onClose, fixed }: Bat
  */
 const SplitAddButton = ({ kind, title, moreLabel, onMain, children, className = "" }: { kind: "tabs" | "groups"; title: string; moreLabel: string; onMain: () => void; children: React.ReactNode; className?: string }) => {
 	const [at, setAt] = useState<{ x: number; y: number; top: number } | null>(null);
+	// Where this sits in a collapsible bar, its panel (drawn outside the bar) keeps the bar up.
+	useHoldBar(!!at);
 	const openLinks = useOpenLinks();
 	const openAt = (anchor: HTMLElement) => {
 		const r = anchor.getBoundingClientRect();

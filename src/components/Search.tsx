@@ -1,13 +1,15 @@
-import { useEffect, useLayoutEffect, useState, useRef, type ChangeEvent } from "react";
-import { XMarkIcon, MagnifyingGlassIcon, Cog6ToothIcon, FolderIcon, MusicalNoteIcon, IdentificationIcon, DocumentIcon } from "@heroicons/react/24/solid";
-import type { TabProps } from "./Tab";
-import { useTabsStore } from "../store";
-import { navigationEvent } from "../libs/eventBus";
-import { useNavigate } from "react-router-dom";
+import { MagnifyingGlassIcon } from "@heroicons/react/24/solid";
 import { createId } from "@paralleldrive/cuid2";
-import XOR from "../libs/XOR";
+import { type ChangeEvent, type ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { aboutPages, getPageFromUrl, getQueryFromUrl } from "../libs/aboutPages";
 import { appRoot } from "../libs/cloak";
+import { navigationEvent } from "../libs/eventBus";
 import { isSearchQuery, searchUrl, urlFromInput } from "../libs/searchEngines";
+import XOR from "../libs/XOR";
+import { useTabsStore } from "../store";
+import { HolyText } from "./common/HolyText";
+import { type OmniTarget, useOmniBox } from "./OmniBox";
+import type { TabProps } from "./Tab";
 
 /**
  * Large screens: the bar fits its URL, between 22rem and half the screen, leaving room for the rest of the
@@ -15,12 +17,19 @@ import { isSearchQuery, searchUrl, urlFromInput } from "../libs/searchEngines";
  */
 const URL_WIDTH = "xl:flex-none xl:w-[clamp(22rem,var(--url-w),50vw)]";
 
+/** An about: page's tab title and icon, from the registry (the new tab page keeps no icon). */
+const pageInfo = (url: string): { title: string; icon: ReactNode | null } => {
+	const page = aboutPages[getPageFromUrl(url) ?? ""];
+	if (!page || page.name === "newtab") return { title: "New Tab", icon: null };
+	const q = getQueryFromUrl(url);
+	return { title: page.titleFor?.(q) ?? page.title ?? "New Tab", icon: page.iconFor?.(q) ?? page.icon ?? null };
+};
+
 interface SearchProps {
 	tab?: TabProps;
 }
 
 export const Search = ({ tab }: SearchProps) => {
-	const navigate = useNavigate();
 	const tabs = useTabsStore(state => state.tabs);
 	const currentTab = tabs.find(tab => tab.current === true);
 	const newTab = useTabsStore(state => state.newTab);
@@ -31,72 +40,28 @@ export const Search = ({ tab }: SearchProps) => {
 	const [searchFocused, setSearchFocused] = useState(false);
 	const [hasQuery, setHasQuery] = useState(XOR.decode(tab?.displayUrl ?? "") || false);
 
+	/** Opens a page in this tab (or a first tab), as a browser does, and gives the page the focus. */
+	const openUrl = ({ url, displayUrl, title, icon }: OmniTarget) => {
+		if (tabs.length < 1) newTab({ title, id: createId(), url, current: true, displayUrl, icon });
+		else navigationEvent({ url, icon, title, displayUrl, id: tab?.id ?? currentTab?.id ?? "" });
+		setHasQuery(true);
+		// Done typing, as in a browser. An auto-hidden top bar stays up while the address bar has focus (Shell).
+		inputRef.current?.blur();
+	};
+
+	/** What was typed, as an address or a search. */
 	const searchHandler = (query: string) => {
-		if (query.length > 0) {
-			const getAboutPageInfo = (url: string): { title: string; icon: React.ReactNode | null } => {
-				const page = url.replace("about:", "").split("?")[0];
-				switch (page) {
-					case "newtab":
-						return { title: "New Tab", icon: null };
-					case "settings":
-						return { title: "Settings", icon: <Cog6ToothIcon className="size-5" /> };
-					case "music":
-						return { title: "Music Library", icon: <MusicalNoteIcon className="size-5" /> };
-					case "files":
-						return { title: "File Manager", icon: <FolderIcon className="size-5" /> };
-					case "account":
-						return { title: "Account Management", icon: <IdentificationIcon className="size-5" /> };
-					case "text":
-						return { title: "Text Editor", icon: <DocumentIcon className="size-5" /> };
-					default:
-						return { title: "New Tab", icon: null };
-				}
-			};
-
-			let finalUrl: string;
-			let displayUrl: string;
-			let pageTitle = "New Tab";
-			let pageIcon: React.ReactNode | null = null;
-
-			if (isSearchQuery(query)) {
-				finalUrl = searchUrl(query);
-				displayUrl = query;
-			} else {
-				finalUrl = urlFromInput(query);
-				displayUrl = query;
-
-				if (finalUrl.includes("about:")) {
-					const info = getAboutPageInfo(finalUrl);
-					pageTitle = info.title;
-					pageIcon = info.icon;
-				}
-			}
-
-			if (tabs.length < 1) {
-				newTab({
-					title: pageTitle,
-					id: createId(),
-					url: finalUrl,
-					current: true,
-					displayUrl: displayUrl,
-					icon: pageIcon,
-				});
-				setHasQuery(true);
-			} else {
-				navigationEvent({
-					url: finalUrl,
-					icon: pageIcon,
-					title: pageTitle,
-					displayUrl: displayUrl,
-					id: tab?.id ?? currentTab?.id ?? "",
-				});
-				setHasQuery(true);
-			}
-		}
+		const q = query.trim();
+		if (!q) return;
+		const url = isSearchQuery(q) ? searchUrl(q) : urlFromInput(q);
+		const info = url.includes("about:") ? pageInfo(url) : { title: "New Tab", icon: null };
+		openUrl({ url, displayUrl: q, title: info.title, icon: info.icon });
 	};
 
 	// On large screens the bar is sized to its text (see URL_WIDTH below), so track what it shows.
 	const [text, setText] = useState("");
+	/** What the user has typed since focusing: the suggestions are for this, not for the address already shown. */
+	const [typed, setTyped] = useState("");
 	const measureRef = useRef<HTMLSpanElement>(null);
 	const [textWidth, setTextWidth] = useState(0);
 	useLayoutEffect(() => {
@@ -108,8 +73,26 @@ export const Search = ({ tab }: SearchProps) => {
 			inputRef.current.value = currentTab.displayUrl;
 			setHasQuery(!!currentTab.displayUrl);
 			setText(currentTab.displayUrl);
+			setTyped("");
 		}
 	}, [currentTab]);
+
+	// Only the bar of the tab on screen can have focus, so the hidden copies never open a dropdown.
+	const isCurrent = !tab || tab.current === true;
+	const omni = useOmniBox({
+		inputRef,
+		anchorRef: searchRef,
+		query: typed,
+		enabled: searchFocused && isCurrent,
+		onNavigate: openUrl,
+		onFill: value => {
+			if (inputRef.current) inputRef.current.value = value;
+			setText(value);
+			setTyped(value);
+			setHasQuery(!!value);
+		},
+		onSubmitPlain: searchHandler,
+	});
 
 	return (
 		<div
@@ -144,7 +127,7 @@ export const Search = ({ tab }: SearchProps) => {
 				<div className={"relative flex flex-1 min-w-0 items-center justify-start h-full z-10 overflow-hidden duration-150"}>
 					{/* Invisible copy of the text, only used to measure its width. */}
 					<span ref={measureRef} aria-hidden className="invisible absolute left-0 top-0 whitespace-pre font-semibold pointer-events-none">
-						{text || "Search or enter a URL"}
+						{text ? text : <HolyText text="Search or enter a URL" />}
 					</span>
 					<span
 						className={
@@ -156,12 +139,13 @@ export const Search = ({ tab }: SearchProps) => {
                     `
 						}
 					>
-						Search or enter a URL
+						<HolyText text="Search or enter a URL" />
 					</span>
 					<input
 						id="input"
 						ref={inputRef}
 						type="text"
+						{...omni.inputProps}
 						className="size-full min-w-0 pl-4 text-(--text-secondary) font-medium focus:outline-none focus:ring-0 z-10"
 						onFocus={() => {
 							setSearchFocused(true);
@@ -172,39 +156,29 @@ export const Search = ({ tab }: SearchProps) => {
 						onChange={(e: ChangeEvent) => {
 							const value = (e.target as HTMLInputElement).value;
 							setText(value);
-							if (value !== "") {
-								setHasQuery(true);
-							} else {
-								setHasQuery(false);
-							}
+							setTyped(value);
+							setHasQuery(value !== "");
 						}}
-						onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => {
-							if (e.key === "Enter") {
-								if (typeof inputRef.current?.value === "string") {
-									searchHandler(inputRef.current?.value);
-								}
-							}
-						}}
+						onKeyDown={omni.onKeyDown}
 					/>
 				</div>
 				<div className={"p-1.5 pl-0"}>
 					<button
+						type="button"
 						className={"group flex items-center justify-center pl-1 p-2 cursor-pointer z-20"}
 						onClick={() => {
 							if (inputRef.current?.value === "") {
 								inputRef.current?.focus();
 								return;
 							}
-							if (typeof inputRef.current?.value === "string") {
-								console.log(inputRef.current.value);
-								searchHandler(inputRef.current?.value);
-							}
+							if (typeof inputRef.current?.value === "string") searchHandler(inputRef.current.value);
 						}}
 					>
 						<MagnifyingGlassIcon className="size-5 text-(--text-tertiary) group-hover:text-(--text-primary) stroke-current stroke-1 duration-150 pointer-events-none" />
 					</button>
 				</div>
 			</div>
+			{omni.dropdown}
 		</div>
 	);
 };

@@ -190,6 +190,12 @@ export async function searchTracks(query: string, limit = 24, signal?: AbortSign
 	return { ...res, tracks: preferExplicit(res.tracks ?? []) };
 }
 
+/** The omnibox's typeahead: a few songs and their artists, no albums or pictures, so it answers quickly. */
+export async function searchTracksBrief(query: string, limit = 6, signal?: AbortSignal): Promise<SearchResults> {
+	const res = await apiFetch<SearchResults>(`/search?q=${encodeURIComponent(query)}&limit=${limit}&brief=1`, signal);
+	return { ...res, tracks: preferExplicit(res.tracks ?? []) };
+}
+
 // --- Albums ---
 
 export async function getAlbum(id: string): Promise<AlbumDetail> {

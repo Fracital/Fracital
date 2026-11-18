@@ -3,6 +3,7 @@ import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { ChatBubbleOvalLeftIcon, CheckBadgeIcon, ChevronDownIcon, EyeSlashIcon, FireIcon, HeartIcon, LockClosedIcon, MusicalNoteIcon, PencilIcon, PlayIcon, QueueListIcon, SignalIcon, SparklesIcon } from "@heroicons/react/24/solid";
 import { createId } from "@paralleldrive/cuid2";
 import { useCallback, useEffect, useState } from "react";
+import { HolyDynamic, HolyRich } from "../components/common/HolyRich";
 import { HolyText } from "../components/common/HolyText";
 import { FollowButton, FollowCounts, InterestChip, PROFILE_CHIP, ProfileAvatar, ProfileBanner, SocialLink, useFollow } from "../components/ProfileCard";
 import { NameStreak } from "../components/StreakBadge";
@@ -87,8 +88,8 @@ const Profile = ({ query }: { query?: string }) => {
 	return (
 		<div className="h-full w-full overflow-y-auto @container">
 			<div className="mx-auto flex w-full max-w-5xl flex-col gap-4 p-4">
-				{/* The banner fills the whole header and fades into the card under the details. */}
-				<header className="relative isolate flex flex-col overflow-hidden rounded-2xl bg-(--tertiary)">
+				{/* The banner fills the whole header, which keeps the banner's 2.5:1 shape (growing only when the details need more room), and fades into the card under the details. */}
+				<header className="relative isolate flex aspect-[5/2] flex-col justify-end overflow-hidden rounded-2xl bg-(--tertiary)">
 					<ProfileBanner profile={profile} className="absolute inset-0 -z-10 size-full" />
 					<div className="absolute inset-0 -z-10" style={{ background: "linear-gradient(to bottom, transparent 30%, color-mix(in srgb, var(--tertiary) 60%, transparent) 62%, var(--tertiary) 84%)" }} />
 					<div className="absolute right-4 top-4">
@@ -101,9 +102,10 @@ const Profile = ({ query }: { query?: string }) => {
 							<FollowButton follow={follow} />
 						)}
 					</div>
-					<div className="flex flex-col gap-3 px-5 pb-5 pt-32 @2xl:px-7 @2xl:pt-52">
+					<div className="flex flex-col gap-3 px-5 pb-5 pt-16 @2xl:px-7">
 						<div className={`flex flex-col gap-4 @xl:flex-row @xl:items-center @2xl:gap-5 ${profile.banner ? "[text-shadow:0_1px_10px_rgb(0_0_0/0.35)]" : ""}`}>
-							<ProfileAvatar user={user} className="size-28 @2xl:size-40 shadow-xl" />
+							{/* No fill and a filter shadow: a transparent picture keeps its shape and still stands off any banner. */}
+							<ProfileAvatar user={user} className="size-28 @2xl:size-40 drop-shadow-xl" />
 							<div className="flex min-w-0 flex-col">
 								{/* Their name and handle: data values. */}
 								<span className="flex min-w-0 items-center gap-2">
@@ -127,28 +129,30 @@ const Profile = ({ query }: { query?: string }) => {
 								)}
 							</div>
 						</div>
-						<div className="flex flex-wrap items-center gap-x-5 gap-y-1">
-							<FollowCounts followers={follow.followers} following={profile.following} />
-							<span className="text-sm text-(--text-tertiary)">
-								<HolyText text="Joined" /> {new Date(user.joinedAt).toLocaleDateString(undefined, { month: "long", day: "numeric", year: "numeric" })}
-							</span>
-						</div>
-						{(!!profile.interests?.length || !!profile.links?.length) && (
-							<div className="flex flex-wrap items-end justify-between gap-3">
-								<div className="flex min-w-0 flex-wrap gap-2">
-									{profile.interests?.map(interest => (
-										<InterestChip key={`${interest.kind}-${interest.name}`} interest={interest} />
-									))}
-								</div>
-								{!!profile.links?.length && (
-									<div className="ml-auto flex items-center gap-3">
-										{profile.links.map(url => (
-											<SocialLink key={url} url={url} className="size-10 @2xl:size-12" />
-										))}
-									</div>
-								)}
+						{!!profile.interests?.length && (
+							<div className="flex min-w-0 flex-wrap gap-2">
+								{profile.interests.map(interest => (
+									<InterestChip key={`${interest.kind}-${interest.name}`} interest={interest} />
+								))}
 							</div>
 						)}
+						{/* The bottom row: who follows them on the left, where else to find them on the right. */}
+						<div className="mt-3 @2xl:mt-6 flex flex-wrap items-center justify-between gap-3">
+							<div className="flex flex-wrap items-center gap-x-5 gap-y-1">
+								<FollowCounts followers={follow.followers} following={profile.following} className="text-base" />
+								<span className="text-base text-(--text-tertiary)">
+									<HolyText text="Joined" /> {new Date(user.joinedAt).toLocaleDateString(undefined, { month: "long", day: "numeric", year: "numeric" })}
+								</span>
+							</div>
+							{(!!profile.links?.length || !!profile.lastfm) && (
+								<div className="flex items-center gap-3">
+									{profile.links?.map(url => (
+										<SocialLink key={url} url={url} className="size-7 @2xl:size-8" />
+									))}
+									{profile.lastfm && <SocialLink url={profile.lastfm.url} className="size-7 @2xl:size-8" />}
+								</div>
+							)}
+						</div>
 					</div>
 				</header>
 
@@ -178,20 +182,48 @@ const Profile = ({ query }: { query?: string }) => {
 
 const Listening = ({ profile }: { profile: ProfileData }) => {
 	const now = profile.listening;
+	const recent = profile.recentPlays ?? [];
+	const openSong = (title: string, artist: string) => openLibraryPage(`track=${encodeURIComponent(title)}&by=${encodeURIComponent(artist)}`, title);
 	return (
 		<section className={card}>
 			<Heading icon={<SignalIcon className="size-5" />} title="Listening now" profile={profile} section="listening" />
 			{now ? (
-				<button type="button" className="flex items-center gap-3 rounded-xl text-left cursor-pointer hover:bg-[#8881] -m-1.5 p-1.5 duration-150" onClick={() => openLibraryPage(`track=${encodeURIComponent(now.song.title)}&by=${encodeURIComponent(now.song.artist)}`, now.song.title)}>
+				<button type="button" className="flex items-center gap-3 rounded-xl text-left cursor-pointer hover:bg-[#8881] -m-1.5 p-1.5 duration-150" onClick={() => openSong(now.song.title, now.song.artist)}>
 					{now.song.artwork ? <img src={now.song.artwork} alt="" className="size-14 shrink-0 rounded-lg object-cover" /> : <MusicalNoteIcon className="size-14 shrink-0 rounded-lg bg-[#8882] p-3 text-(--text-tertiary)" />}
 					{/* The song: data values. */}
 					<span className="flex min-w-0 flex-col">
 						<span className="truncate font-semibold">{now.song.title}</span>
 						<span className="truncate text-sm text-(--text-secondary)">{now.song.artist}</span>
+						{now.plays > 0 && (
+							<HolyRich className="truncate text-xs text-(--text-tertiary)">
+								<HolyDynamic>{now.plays.toLocaleString()}</HolyDynamic> {now.plays === 1 ? "stream" : "streams"} this week
+							</HolyRich>
+						)}
 					</span>
 				</button>
 			) : (
 				<HolyText as="p" className="text-sm text-(--text-tertiary)" text="Not listening to anything right now." />
+			)}
+			{!!recent.length && (
+				<div className="flex flex-col gap-1">
+					<HolyText as="h3" className="text-xs font-semibold text-(--text-tertiary)" text="Played this week" />
+					<ol className="flex flex-col">
+						{recent.map(t => (
+							<li key={`${t.artist}\n${t.title}`}>
+								<button type="button" className="flex w-full items-center gap-2.5 rounded-lg px-1.5 py-1 text-left text-sm cursor-pointer hover:bg-[#8881] duration-150" onClick={() => openSong(t.title, t.artist)}>
+									{/* The song, its stream count and when it last played: data values. */}
+									<span className="flex min-w-0 flex-1 flex-col">
+										<span className="truncate font-semibold">{t.title}</span>
+										<span className="truncate text-xs text-(--text-secondary)">{t.artist}</span>
+									</span>
+									<span className="shrink-0 text-xs tabular-nums text-(--text-tertiary)">
+										{t.plays.toLocaleString()}× · {commentAge(t.last)}
+									</span>
+								</button>
+							</li>
+						))}
+					</ol>
+				</div>
 			)}
 		</section>
 	);

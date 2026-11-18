@@ -1,4 +1,4 @@
-import { faApple, faBandcamp, faBluesky, faDiscord, faFacebook, faGithub, faInstagram, faPinterest, faReddit, faSnapchat, faSoundcloud, faSpotify, faSteam, faThreads, faTiktok, faTwitch, faXTwitter, faYoutube, type IconDefinition } from "@fortawesome/free-brands-svg-icons";
+import { faApple, faBandcamp, faBluesky, faDiscord, faFacebook, faGithub, faInstagram, faLastfm, faPinterest, faReddit, faSnapchat, faSoundcloud, faSpotify, faSteam, faThreads, faTiktok, faTwitch, faXTwitter, faYoutube, type IconDefinition } from "@fortawesome/free-brands-svg-icons";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { ArrowTopRightOnSquareIcon, CheckBadgeIcon, ComputerDesktopIcon, GlobeAltIcon, LockClosedIcon, MusicalNoteIcon, UserCircleIcon, UserMinusIcon, UserPlusIcon } from "@heroicons/react/24/solid";
 import { createId } from "@paralleldrive/cuid2";
@@ -24,12 +24,18 @@ export const openProfilePage = (user: Pick<ProfileUser, "id" | "username" | "nam
 const openSignIn = () => useTabsStore.getState().newTab({ id: createId(), url: "about:account", displayUrl: "about:account", title: "Fracital Account", icon: null, current: true });
 
 // The person's picture: their own data (alt is empty, their name is next to it).
-export const ProfileAvatar = ({ user, className }: { user: Pick<ProfileUser, "image">; className: string }) =>
-	user.image ? <img src={user.image} alt="" className={`${className} shrink-0 rounded-full object-cover bg-(--tertiary)`} /> : <UserCircleIcon className={`${className} shrink-0 text-(--text-tertiary) bg-(--secondary) rounded-full`} />;
+export const ProfileAvatar = ({ user, className }: { user: Pick<ProfileUser, "image">; className: string }) => (user.image ? <img src={user.image} alt="" className={`${className} shrink-0 rounded-full object-cover`} /> : <UserCircleIcon className={`${className} shrink-0 text-(--text-tertiary) rounded-full`} />);
 
-/** The banner: their image, their color, or (with neither) a wash of the accent color. */
-export const ProfileBanner = ({ profile, className }: { profile: Pick<Profile, "banner" | "bannerColor"> | null; className: string }) =>
-	profile?.banner ? (
+/**
+ * The banner: their image, their color, or (with neither) a wash of the accent color. A GIF banner carries the window
+ * its owner framed (fractions of the image); the image is sized and offset so that window fills the box.
+ */
+export const ProfileBanner = ({ profile, className }: { profile: Pick<Profile, "banner" | "bannerColor" | "bannerCrop"> | null; className: string }) =>
+	profile?.banner && profile.bannerCrop ? (
+		<div className={`${className} relative overflow-hidden`}>
+			<img src={profile.banner} alt="" className="absolute max-w-none" style={{ width: `${100 / profile.bannerCrop.w}%`, height: `${100 / profile.bannerCrop.h}%`, left: `${(-profile.bannerCrop.x / profile.bannerCrop.w) * 100}%`, top: `${(-profile.bannerCrop.y / profile.bannerCrop.h) * 100}%` }} />
+		</div>
+	) : profile?.banner ? (
 		<img src={profile.banner} alt="" className={`${className} object-cover`} />
 	) : (
 		<div className={className} style={{ background: profile?.bannerColor ? profile.bannerColor : "linear-gradient(135deg, color-mix(in srgb, var(--accent) 55%, transparent), color-mix(in srgb, var(--accent) 15%, transparent))" }} />
@@ -70,6 +76,7 @@ const SOCIALS: { hosts: string[]; name: string; icon: IconDefinition; color?: st
 	{ hosts: ["soundcloud.com"], name: "SoundCloud", icon: faSoundcloud, color: "#ff5500" },
 	{ hosts: ["music.apple.com"], name: "Apple Music", icon: faApple, color: "#fa243c" },
 	{ hosts: ["bandcamp.com"], name: "Bandcamp", icon: faBandcamp, color: "#1da0c3" },
+	{ hosts: ["last.fm"], name: "Last.fm", icon: faLastfm, color: "#d51007" },
 	{ hosts: ["steamcommunity.com", "steampowered.com"], name: "Steam", icon: faSteam },
 	{ hosts: ["github.com"], name: "GitHub", icon: faGithub },
 	{ hosts: ["reddit.com"], name: "Reddit", icon: faReddit, color: "#ff4500" },
@@ -140,8 +147,8 @@ export const FollowButton = ({ follow, className = "" }: { follow: ReturnType<ty
 );
 
 /** "12 followers · 3 following": counts are data values. */
-export const FollowCounts = ({ followers, following }: { followers: number; following: number }) => (
-	<span className="flex items-center gap-3 text-sm text-(--text-secondary)">
+export const FollowCounts = ({ followers, following, className = "text-sm" }: { followers: number; following: number; className?: string }) => (
+	<span className={`flex items-center gap-3 text-(--text-secondary) ${className}`}>
 		<span>
 			<span className="font-bold text-(--text-primary)">{followers.toLocaleString()}</span> <HolyText text={followers === 1 ? "follower" : "followers"} />
 		</span>
@@ -200,7 +207,7 @@ const ProfileCard = ({ user, anchor }: { user: ProfileUser; anchor: { top: numbe
 
 	return (
 		<div ref={panel} role="dialog" className="fixed z-50 flex flex-col overflow-hidden rounded-2xl text-(--text-primary) bg-(--secondary) inset-shadow-(--inset-shadow-primary) shadow-xl" style={{ left, top, width, visibility: height ? "visible" : "hidden" }}>
-			<ProfileBanner profile={profile} className="h-26.5 w-full" />
+			<ProfileBanner profile={profile} className="aspect-[5/2] w-full" />
 			<div className="flex flex-col gap-2.5 px-4 pb-4">
 				<div className="-mt-8 flex items-end justify-between gap-2">
 					<button type="button" className="cursor-pointer rounded-full ring-4 ring-(--secondary)" onClick={view}>

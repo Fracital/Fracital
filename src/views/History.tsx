@@ -3,6 +3,7 @@ import { createId } from "@paralleldrive/cuid2";
 import { useEffect, useMemo, useState } from "react";
 import { HolyText } from "../components/common/HolyText";
 import { clearHistory, type HistoryVisit, removeVisit, useBrowsingHistory } from "../libs/browsingHistory";
+import { useHistoryBackup } from "../libs/historyBackup";
 import { useHolyAttr } from "../libs/holy-attr";
 import { handleImg } from "../libs/imgHandler";
 import { useSettingsStore, useTabsStore } from "../store";
@@ -108,6 +109,7 @@ const History = ({ className = "" }: { className?: string }) => {
 		return new Date(day).toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric", ...(new Date(day).getFullYear() === new Date().getFullYear() ? {} : { year: "numeric" }) });
 	};
 
+	const backup = useHistoryBackup();
 	const pill = `flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-semibold cursor-pointer duration-150 ${dark ? "bg-[#ffffff10] hover:bg-[#ffffff1c]" : "bg-[#00000010] hover:bg-[#0000001c]"}`;
 	const clear = (since?: number) => {
 		clearHistory(since);
@@ -119,7 +121,12 @@ const History = ({ className = "" }: { className?: string }) => {
 			<div className="mx-auto flex max-w-3xl flex-col gap-4">
 				<div className="flex flex-col gap-1">
 					<HolyText as="h1" className="text-3xl font-bold" text="History" />
-					<HolyText as="p" className="text-sm text-(--text-secondary)" text="The sites you've visited. It's kept in this browser only." />
+					<HolyText as="p" className="text-sm text-(--text-secondary)" text={backup.enabled ? "The sites you've visited, backed up to your account." : "The sites you've visited. It's kept in this browser only."} />
+					{backup.enabled === false && (
+						<button type="button" className="self-start text-sm text-(--accent) cursor-pointer hover:underline" onClick={() => useTabsStore.getState().newTab({ id: createId(), url: "about:account", displayUrl: "about:account", title: "Fracital Account", icon: null, current: true })}>
+							<HolyText text="Back it up to your account" />
+						</button>
+					)}
 				</div>
 
 				<div className="flex flex-wrap items-center gap-2">

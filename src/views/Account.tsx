@@ -7,6 +7,7 @@ import { useEffect, useRef, useState } from "react";
 import { HolyDynamic, HolyRich } from "../components/common/HolyRich";
 import { HolyText } from "../components/common/HolyText";
 import { Input } from "../components/Input";
+import { HistoryBackupCard } from "../components/HistoryBackupCard";
 import { ProfileSettings } from "../components/ProfileSettings";
 import { StreakCard } from "../components/StreakBadge";
 import {
@@ -450,6 +451,8 @@ const Manage = ({ me, notice, onChange, onDeleted }: { me: Me; notice?: string; 
 
 				<ProfileSettings user={{ id: me.user.id, name: me.user.name, username: me.username ?? null }} />
 
+				<HistoryBackupCard />
+
 				{me.discordActivity && <DiscordActivityCard me={me} options={options} busy={busy} run={run} />}
 
 				<ConnectedServices me={me} options={options} busy={busy} run={run} canDisconnect={signInMethods > 1 || !providers.has("lastfm") || emailRecovery} />
@@ -543,7 +546,7 @@ const DeleteAccount = ({ onDeleted }: { onDeleted: (res: { download?: string; ex
 			{step === "idle" && (
 				<div className="flex items-center gap-3">
 					<span className="flex-1 text-sm text-(--text-tertiary)">
-						<HolyText text="Permanently delete your account, your saved music, playlists, settings and game backups, and disconnect every service you've connected. We'll email you a link to download a copy of your data, kept for 30 days and then erased for good." />
+						<HolyText text="Permanently delete your account, your saved music, playlists, settings, game backups and history backup, and disconnect every service you've connected. We'll email you a link to download a copy of your data, kept for 30 days and then erased for good." />
 					</span>
 					<button className={danger} onClick={() => setStep("confirm")}>
 						<HolyText text="Delete account" />

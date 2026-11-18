@@ -1,6 +1,8 @@
 /**
- * Browsing history (about:history): the sites tabs visited, newest first. Kept in this browser only, in
- * localStorage under "fracital:" (so game-save sync skips it); it never goes to the account.
+ * Browsing history (about:history): the sites tabs visited, newest first. Kept in this browser, in localStorage
+ * under "fracital:" (so game-save sync skips it). It goes to the account only when the account has turned on
+ * history backup (historyBackup.ts), which merges every device's copy; deletions are remembered as tombstones so a
+ * merge never brings them back.
  *
  * The tabs store records a visit whenever a tab reports where it is (pushHistory / replaceHistory). A page's
  * title and icon usually arrive just after its URL, so a report for the URL a tab is already on updates that
@@ -8,19 +10,17 @@
  */
 import { createId } from "@paralleldrive/cuid2";
 import { create } from "zustand";
+import { emptyTombstones, HISTORY_CAP, type HistoryTombstones, type HistoryVisit, TOMBSTONE_LIMITS } from "./history-limits";
 
-export interface HistoryVisit {
-	id: string;
-	url: string;
-	title: string;
-	/** The page's icon URL, when it has one. */
-	icon?: string;
-	/** When it was visited (ms since epoch). */
-	at: number;
-}
+export type { HistoryVisit } from "./history-limits";
 
 const STORAGE_KEY = "fracital:history";
-const MAX_VISITS = 5000;
+const TOMBSTONES_KEY = "fracital:history-tombstones";
+/** Visits kept: the free cap, raised by historyBackup.ts for a Premium account with backup on. */
+let maxVisits: number = HISTORY_CAP.free;
+export const setHistoryCap = (n: number) => {
+	maxVisits = n;
+};
 /** The same page again in the same tab within this long is the same visit (a reload, its title arriving). */
 const SAME_VISIT_MS = 30 * 60_000;
 /** What a proxied tab shows before the page has a title. */
@@ -37,7 +37,43 @@ const load = (): HistoryVisit[] => {
 	}
 };
 
+const loadTombstones = (): HistoryTombstones => {
+	try {
+		const saved = JSON.parse(localStorage.getItem(TOMBSTONES_KEY) || "null");
+		return saved && Array.isArray(saved.ids) && Array.isArray(saved.ranges) && typeof saved.clearedBefore === "number" ? saved : emptyTombstones();
+	} catch {
+		return emptyTombstones();
+	}
+};
+
+let tombstones: HistoryTombstones = typeof window === "undefined" ? emptyTombstones() : loadTombstones();
+export const getTombstones = () => tombstones;
+const setTombstones = (next: HistoryTombstones) => {
+	tombstones = { ids: next.ids.slice(-TOMBSTONE_LIMITS.ids), ranges: next.ranges.slice(-TOMBSTONE_LIMITS.ranges), clearedBefore: next.clearedBefore };
+	try {
+		localStorage.setItem(TOMBSTONES_KEY, JSON.stringify(tombstones));
+	} catch {}
+};
+
 export const useBrowsingHistory = create<{ visits: HistoryVisit[] }>(() => ({ visits: typeof window === "undefined" ? [] : load() }));
+
+// A change made by the backup (adopting the account's copy) must not be sent back as a new change.
+let applying = false;
+/** Replaces the history with the merged copy from the account, deletions included. */
+export const applyRemote = (visits: HistoryVisit[], remoteTombstones: HistoryTombstones) => {
+	setTombstones(remoteTombstones);
+	applying = true;
+	try {
+		useBrowsingHistory.setState({ visits: visits.slice(0, maxVisits) });
+	} finally {
+		applying = false;
+	}
+};
+/** Runs after each change the user made here (a visit, a deletion, a clear); not after applyRemote. */
+export const onHistoryChange = (cb: () => void) =>
+	useBrowsingHistory.subscribe(() => {
+		if (!applying) cb();
+	});
 
 if (typeof window !== "undefined") {
 	// Written a moment after the last change: a page load reports its URL, title and icon one after another.
@@ -84,11 +120,18 @@ export const recordVisit = (tabId: string, entry: { url: string; title?: string;
 		}
 		const visit: HistoryVisit = { id: createId(), url: entry.url, title: title || hostOf(entry.url), icon, at: now };
 		lastByTab.set(tabId, visit.id);
-		return { visits: [visit, ...visits].slice(0, MAX_VISITS) };
+		return { visits: [visit, ...visits].slice(0, maxVisits) };
 	});
 };
 
-export const removeVisit = (id: string) => useBrowsingHistory.setState(({ visits }) => ({ visits: visits.filter(v => v.id !== id) }));
+export const removeVisit = (id: string) => {
+	setTombstones({ ...tombstones, ids: [...tombstones.ids, id] });
+	useBrowsingHistory.setState(({ visits }) => ({ visits: visits.filter(v => v.id !== id) }));
+};
 
 /** Clears visits from `since` (ms since epoch) on; with no `since`, all of them. */
-export const clearHistory = (since?: number) => useBrowsingHistory.setState(({ visits }) => ({ visits: since === undefined ? [] : visits.filter(v => v.at < since) }));
+export const clearHistory = (since?: number) => {
+	const now = Date.now();
+	setTombstones(since === undefined ? { ...tombstones, clearedBefore: now } : { ...tombstones, ranges: [...tombstones.ranges, { from: since, to: now }] });
+	useBrowsingHistory.setState(({ visits }) => ({ visits: since === undefined ? [] : visits.filter(v => v.at < since) }));
+};

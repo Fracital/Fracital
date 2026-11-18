@@ -50,11 +50,12 @@ export async function buildExport(pool: Pool, userId: string): Promise<Record<st
 		many(`select name, "deviceType" as device_type, "createdAt" as created_at from passkey where "userId" = $1`),
 		many(`select "createdAt" as signed_in_at, "expiresAt" as expires_at, "ipAddress" as ip_address, "userAgent" as user_agent from session where "userId" = $1`),
 	]);
-	const [settings, savedItems, savedArtists, gameSaves, playlists, feedback, listenbrainz, discord, plays, artistPages, artistClaims] = await Promise.all([
+	const [settings, savedItems, savedArtists, gameSaves, historyBackup, playlists, feedback, listenbrainz, discord, plays, artistPages, artistClaims] = await Promise.all([
 		rows(pool, table("fracital_settings"), userId),
 		rows(pool, table("fracital_saved_items", [], "t.created_at"), userId),
 		rows(pool, table("fracital_saved_artists", [], "t.created_at"), userId),
 		rows(pool, table("fracital_game_saves"), userId),
+		rows(pool, table("fracital_history_backup"), userId),
 		many(`select p.name, p.created_at, coalesce((select jsonb_agg(pt.data order by pt.position) from fracital_playlist_tracks pt where pt.playlist_id = p.id), '[]'::jsonb) as songs from fracital_playlists p where p.user_id = $1 order by p.created_at`),
 		rows(pool, table("fracital_track_feedback", [], "t.updated_at"), userId),
 		rows(pool, table("fracital_listenbrainz", ["token"]), userId),
@@ -76,6 +77,7 @@ export async function buildExport(pool: Pool, userId: string): Promise<Record<st
 		saved: savedItems,
 		followed_artists: savedArtists,
 		game_saves: gameSaves,
+		history_backup: historyBackup,
 		playlists,
 		likes_and_dislikes: feedback,
 		listenbrainz,

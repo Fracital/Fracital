@@ -21,24 +21,29 @@ import { getMigrations } from "better-auth/db/migration";
 import { type Context, Hono, type MiddlewareHandler } from "hono";
 import { Pool } from "pg";
 import * as z from "zod";
-import { asArray, lastfmCall, LastfmError, lastfmImage, lastfmKey, lastfmSecret, toCount } from "./lastfm";
-import { findDeezerArtist, findDeezerTrack, type RadioTrack } from "./music-radio";
-import { assignBaseUsername, backfillUsernames, isBanned, migrateArtistTables, registerArtistRoutes, userMeta } from "./artists";
-import { billingSummary, cancelBillingForUser, migrateBilling, registerBillingRoutes } from "./billing";
-import { mailEnabled, sendAccountDeletedEmail, sendDeleteAccountEmail, sendPasswordResetEmail, sendVerificationEmail } from "./mail";
-import { enabledSocialProviders, passkeyPlugin, passkeyRpId, socialProviders, terbiumEnabled, terbiumPlugin } from "./auth-providers";
-import { setStatStore } from "./music-stats";
-import { clientNegotiated } from "./api-crypto";
-import { authOrigin, handoffPlugin, hubOrigin, ownOrigin, registerHubRoutes } from "./cross-site";
-import { lbFeedback, lbListenCount, lbLookupRecording, lbLoved, lbRecent, lbRevoked, lbSubmit, lbTemporary, lbTopAlbums, lbTopArtists, lbTopTracks, lbValidateToken, type ListenTrack } from "./listenbrainz";
-import { migrateSocial, registerSocialRoutes } from "./social";
-import { migrateComments, registerCommentRoutes } from "./comments";
-import { migrateProfiles, registerProfileRoutes } from "./profiles";
-import { migrateStreaks, publicPromo, registerStreakRoutes } from "./streaks";
-import { discordPresenceEnabled, hasPresenceScope, migratePresence, readPresence, sendPresence, writePresence, type NowPlaying } from "./discord-presence";
-import { discordBotStatus, discordBotToken, discordPresenceFor } from "./discord-bot";
-import { migratePlaylists, registerPlaylistRoutes } from "./playlists";
-import { buildExport, migrateExports, purgeExpiredExports, registerExportRoutes, saveExport } from "./data-export";
+import { asArray, lastfmCall, LastfmError, lastfmImage, lastfmKey, lastfmSecret, toCount } from "./lastfm.ts";
+import { findDeezerArtist, findDeezerTrack, type RadioTrack } from "./music-radio.ts";
+import { assignBaseUsername, backfillUsernames, isBanned, migrateArtistTables, registerArtistRoutes, userMeta } from "./artists.ts";
+import { billingSummary, cancelBillingForUser, migrateBilling, registerBillingRoutes } from "./billing.ts";
+import { mailEnabled, sendAccountDeletedEmail, sendDeleteAccountEmail, sendPasswordResetEmail, sendVerificationEmail } from "./mail.ts";
+import { enabledSocialProviders, passkeyPlugin, passkeyRpId, socialProviders, terbiumEnabled, terbiumPlugin } from "./auth-providers.ts";
+import { setStatStore } from "./music-stats.ts";
+import { clientNegotiated } from "./api-crypto.ts";
+import { authOrigin, handoffPlugin, hubOrigin, ownOrigin, registerHubRoutes } from "./cross-site.ts";
+import { lbFeedback, lbListenCount, lbLookupRecording, lbLoved, lbRecent, lbRevoked, lbSubmit, lbTemporary, lbTopAlbums, lbTopArtists, lbTopTracks, lbValidateToken, type ListenTrack } from "./listenbrainz.ts";
+import { migrateSocial, registerSocialRoutes } from "./social.ts";
+import { migrateComments, registerCommentRoutes } from "./comments.ts";
+import { migrateProfiles, registerProfileRoutes } from "./profiles.ts";
+import { migrateActivity, registerActivityRoutes } from "./activity.ts";
+import { migrateBlog, registerBlogRoutes } from "./blog.ts";
+import { migrateHistoryBackup, registerHistoryBackupRoutes } from "./history-backup.ts";
+import { registerCompleteRoutes } from "./complete.ts";
+import { migrateGameEvents, registerForYouRoutes } from "./for-you.ts";
+import { migrateStreaks, publicPromo, registerStreakRoutes } from "./streaks.ts";
+import { discordPresenceEnabled, hasPresenceScope, migratePresence, readPresence, sendPresence, writePresence, type NowPlaying } from "./discord-presence.ts";
+import { discordBotStatus, discordBotToken, discordPresenceFor } from "./discord-bot.ts";
+import { migratePlaylists, registerPlaylistRoutes } from "./playlists.ts";
+import { buildExport, migrateExports, purgeExpiredExports, registerExportRoutes, saveExport } from "./data-export.ts";
 
 /** An account with a real email can always get back in: a password-reset link sets a password. */
 const canRecoverByEmail = (email: string | null | undefined) => !!email && !email.endsWith("@lastfm.invalid") && mailEnabled();
@@ -319,10 +324,15 @@ function poolConfig(url: string) {
 	parsed.searchParams.delete("sslmode");
 	const local = ["localhost", "127.0.0.1", "::1", "[::1]"].includes(parsed.hostname) || parsed.hostname === "";
 	const ssl = mode === "disable" ? false : mode === "verify-full" || mode === "verify-ca" ? { rejectUnauthorized: true } : mode || !local ? { rejectUnauthorized: false } : false;
-	return { connectionString: parsed.toString(), ssl, max: 10 };
+	// A host that drops packets (a firewall that doesn't know this machine's IP) would otherwise hold every
+	// request for the OS's connect timeout, over a minute; fail in seconds and say so instead.
+	return { connectionString: parsed.toString(), ssl, max: 10, connectionTimeoutMillis: 8_000 };
 }
 
 let ready: Promise<{ auth: Auth; pool: Pool } | null> | null = null;
+/** After a failed start, how long requests answer "disabled" at once before the next attempt. */
+const RETRY_AFTER_MS = 30_000;
+let failedAt = 0;
 
 /** Connects, runs migrations once, and returns the auth instance (null when DATABASE_URL is unset or unreachable). */
 function init() {
@@ -332,8 +342,11 @@ function init() {
 			console.log("Fracital Accounts disabled (no DATABASE_URL)");
 			return null;
 		}
+		if (Date.now() - failedAt < RETRY_AFTER_MS) return null;
+		let created: Pool | undefined;
 		try {
 			const pool = new Pool(poolConfig(url));
+			created = pool;
 			// Migrate before constructing auth, which checks the schema on startup.
 			const { runMigrations } = await getMigrations(authOptions(pool));
 			await runMigrations();
@@ -370,6 +383,7 @@ function init() {
 				primary key (user_id, game_key)
 			)`);
 			await migrateArtistTables(pool);
+			await migrateGameEvents(pool);
 			await migrateBilling(pool);
 			// ListenBrainz isn't a sign-in method, so its link lives here instead of in "account".
 			// An empty token means ListenBrainz rejected it; the row stays so a reconnect keeps the account.
@@ -385,6 +399,9 @@ function init() {
 			await migrateComments(pool);
 			await migrateProfiles(pool);
 			await migrateStreaks(pool);
+			await migrateActivity(pool);
+			await migrateHistoryBackup(pool);
+			await migrateBlog(pool);
 			// Deleted accounts' downloadable copies are erased after 30 days.
 			await migrateExports(pool);
 			setInterval(() => void purgeExpiredExports(pool), 6 * 60 * 60 * 1000).unref();
@@ -407,8 +424,10 @@ function init() {
 			void backfillUsernames(pool).catch(err => console.error("Username backfill failed:", err));
 			return { auth, pool };
 		} catch (err) {
-			console.error("Fracital Accounts failed to start:", err);
-			ready = null; // retry on the next request
+			console.error(`Fracital Accounts failed to start (retrying in ${RETRY_AFTER_MS / 1000}s):`, err instanceof Error ? err.message : err);
+			void created?.end().catch(() => undefined);
+			failedAt = Date.now();
+			ready = null; // retry on a later request
 			return null;
 		}
 	})();
@@ -618,6 +637,11 @@ else setTimeout(() => location.replace("/"), 1500);
 	registerCommentRoutes(app, { init });
 	registerProfileRoutes(app, { init });
 	registerStreakRoutes(app);
+	registerCompleteRoutes(app);
+	registerForYouRoutes(app, { init });
+	registerActivityRoutes(app);
+	registerHistoryBackupRoutes(app);
+	registerBlogRoutes(app, { init });
 	registerBillingRoutes(app, { init });
 
 	type Ctx = { get: <K extends keyof Env["Variables"]>(k: K) => Env["Variables"][K] };

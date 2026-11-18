@@ -1,4 +1,4 @@
-import { writeBootAccount } from "./libs/bootCache";
+import { writeBootAccount } from "./libs/bootCache.ts";
 import type { libcurl } from "libcurl.js";
 
 declare global {

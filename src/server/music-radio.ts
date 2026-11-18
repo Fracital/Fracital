@@ -9,9 +9,9 @@
  * the station is the seed artist vs. similar artists (and how far out it reaches).
  * Falls back to Deezer's related-artists graph when Last.fm isn't configured.
  */
-import { asArray, lastfmCall, lastfmKey } from "./lastfm";
+import { asArray, lastfmCall, lastfmKey } from "./lastfm.ts";
 import { createHash } from "node:crypto";
-import { playbackHints } from "./youtube-match";
+import { playbackHints } from "./youtube-match.ts";
 
 interface DeezerArtist {
 	id: number;
