@@ -12,7 +12,7 @@
  * the launch coupon, the portal configuration and the webhook endpoint).
  */
 import { randomBytes } from "node:crypto";
-import type { Hono } from "hono";
+import type { Context, Hono } from "hono";
 import type { Pool } from "pg";
 import Stripe from "stripe";
 import * as z from "zod";
@@ -216,7 +216,7 @@ const returnPage = (done: boolean) => `<!doctype html><html><head><meta charset=
 <style>body{margin:0;min-height:100vh;display:grid;place-items:center;font:16px system-ui,sans-serif;background:#1e1e1e;color:#eee;text-align:center}p{color:#aaa}</style></head>
 <body><div><h1>${done ? "All set" : "Nothing was charged"}</h1><p>You can close this tab and go back.</p></div><script>window.close()</script></body></html>`;
 
-export function registerBillingRoutes(app: Hono<Env>, deps: { init: () => Promise<{ pool: Pool } | null> }) {
+export function registerBillingRoutes(app: Hono<Env>, deps: { init: () => Promise<{ pool: Pool } | null>; down: (c: Context) => Response }) {
 	app.get("/api/billing/return", c => {
 		c.header("Cache-Control", "no-store");
 		return c.html(returnPage(c.req.query("status") !== "cancel"));
@@ -282,7 +282,7 @@ export function registerBillingRoutes(app: Hono<Env>, deps: { init: () => Promis
 		const secret = process.env.STRIPE_WEBHOOK_SECRET;
 		if (!s || !secret) return c.json({ error: "Not configured" }, 503);
 		const ctx = await deps.init();
-		if (!ctx) return c.json({ error: "Accounts aren't configured" }, 503);
+		if (!ctx) return deps.down(c);
 		// The signature covers the raw body, so it's read as text, never parsed first.
 		const payload = await c.req.text();
 		let event: Stripe.Event;

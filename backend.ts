@@ -23,7 +23,7 @@ import { ensureSeedCookie, sealApiResponses } from "./src/server/api-crypto";
 import { rankAlbums, rankArtists, rankTracks } from "./src/server/music-rank";
 import { artistBanner, artistBio, artistTopTracks, buildRadio, findDeezerArtist, relatedArtists } from "./src/server/music-radio";
 import { artistStats, lastfmKey, trackPlays } from "./src/server/music-stats";
-import { getAccountsApp, initAccounts } from "./src/server/accounts";
+import { accountsPool, getAccountsApp, initAccounts } from "./src/server/accounts";
 import { startDiscordBot } from "./src/server/discord-bot";
 import { artistExtras } from "./src/server/artist-extras";
 import { albumInfo, songCredits, songInfo } from "./src/server/song-info";
@@ -512,15 +512,14 @@ export function fsrv() {
 	app.get("/privacy", legal("privacy"));
 	app.get("/terms", (c, next) => (isDecoyHost(c.req.header("x-forwarded-host") || c.req.header("host") || "") ? next() : c.redirect("/tos", 301)));
 	// The blog (src/server/blog.ts): files in content/blog plus posts published from the admin dashboard. Never on a decoy host.
-	const blogPool = async () => (await initAccounts())?.pool ?? null;
 	app.get("/blog", async (c, next) => {
 		if (isDecoyHost(c.req.header("x-forwarded-host") || c.req.header("host") || "")) return next();
 		c.header("Cache-Control", "public, max-age=300");
-		return c.html(renderBlogIndex(await listPosts(await blogPool())));
+		return c.html(renderBlogIndex(await listPosts(await accountsPool())));
 	});
 	app.get("/blog/:slug", async (c, next) => {
 		if (isDecoyHost(c.req.header("x-forwarded-host") || c.req.header("host") || "")) return next();
-		const post = await getPost(await blogPool(), c.req.param("slug"));
+		const post = await getPost(await accountsPool(), c.req.param("slug"));
 		c.header("Cache-Control", "public, max-age=300");
 		return post ? c.html(renderBlogPostPage(post)) : c.html(renderBlogNotFound(), 404);
 	});

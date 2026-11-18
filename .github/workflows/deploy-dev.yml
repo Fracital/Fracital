@@ -18,8 +18,12 @@ permissions:
   contents: read
 
 env:
-  TERP_HOST: 5.188.124.62
+  # terp is VM 116 on divide (since 2026-11-16) with no public address: CI reaches it through divide,
+  # where the same key has a forwarding-only line (permitopen 172.16.5.62:22, no shell).
+  TERP_HOST: 172.16.5.62
   TERP_HOST_KEY: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIObUWrM7CxDC8VuXpP9FGykhelefOxfFj+cthroe5/c8
+  JUMP_HOST: 91.199.82.174
+  JUMP_HOST_KEY: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIM71k9bEMvZK8FPmBiwlLvfoELeFOqeRUHvmYZnHns1M
 
 jobs:
   build:
@@ -57,7 +61,21 @@ jobs:
           install -d -m 700 ~/.ssh
           printf '%s\n' "$TERP_DEPLOY_KEY" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
-          echo "$TERP_HOST $TERP_HOST_KEY" > ~/.ssh/known_hosts
+          {
+            echo "$TERP_HOST $TERP_HOST_KEY"
+            echo "$JUMP_HOST $JUMP_HOST_KEY"
+          } > ~/.ssh/known_hosts
+          cat > ~/.ssh/config <<EOF
+          Host terp
+            HostName $TERP_HOST
+            User deploy
+            ProxyJump root@$JUMP_HOST
+          Host *
+            IdentityFile ~/.ssh/id_ed25519
+            IdentitiesOnly yes
+            BatchMode yes
+            StrictHostKeyChecking yes
+          EOF
 
       - name: Deploy ${{ github.sha }} to dev.fracit.al
-        run: ssh -o BatchMode=yes "root@$TERP_HOST" deploy-dev "$GITHUB_SHA"
+        run: ssh terp deploy-dev "$GITHUB_SHA"

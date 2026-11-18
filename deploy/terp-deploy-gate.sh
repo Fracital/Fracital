@@ -1,8 +1,24 @@
 #!/bin/bash
 # Forced command for the CI deploy keys on terp (/usr/local/sbin/fracital-deploy-gate).
 # authorized_keys fixes the mode per key: `app` (deploy <sha>) or `cloaks` (rsync into $CLOAKS, reload).
+#
+# The keys log in as the unprivileged `deploy` user (/home/deploy/.ssh/authorized_keys, owned by root so
+# deploy cannot change its own restrictions):
+#
+#   restrict,command="/usr/local/sbin/fracital-deploy-gate app" ssh-ed25519 AAAA… terp-fracital-ci@github-actions
+#   restrict,command="/usr/local/sbin/fracital-deploy-gate cloaks" ssh-ed25519 AAAA… terp-cloaks-ci@github-actions
+#
+# git, npm and rsync run as deploy, which owns the checkouts and $CLOAKS but not the .env files (root 600).
+# Root does only what /usr/local/sbin/fracital-deploy-root (deploy/terp-deploy-root.sh) does through the
+# fixed rules in /etc/sudoers.d/deploy: re-own the trees, restart a pm2 app, print its logs. pm2 still
+# runs the apps as root, so a deploy still runs repo code as root; moving them off root is the next step.
+# Started as root (an old root key line), the gate drops to deploy first.
 set -euo pipefail
 umask 022
+
+if (( EUID == 0 )); then
+	exec runuser -u deploy -- "$0" "$@"
+fi
 
 REPO=/opt/fracital/repo
 STAGE=/opt/fracital/stage
@@ -14,13 +30,15 @@ CLOAKS=/opt/cloaks-fracital
 UPSTREAM=https://github.com/Fracital/Fracital.git
 LOG=/var/log/fracital-deploy.log
 STATE=/var/lib/fracital-deploy
+ROOT_HELPER=/usr/local/sbin/fracital-deploy-root
 
 mode=${1:-}
 read -r -a cmd <<<"${SSH_ORIGINAL_COMMAND:-}"
 
 log() { printf '%s [%s] %s\n' "$(date -u +%FT%TZ)" "$mode" "$*" | tee -a "$LOG" >&2; }
 
-exec 9>/run/lock/fracital-deploy.lock
+sudo -n "$ROOT_HELPER" prepare
+exec 9>"$STATE/deploy.lock"
 flock -w 900 9
 
 healthcheck() {
@@ -34,10 +52,10 @@ healthcheck() {
 
 restart_app() {
 	local name=${1:-fracital} port=${2:-8080}
-	pm2 restart "$name" --update-env >/dev/null
+	sudo -n "$ROOT_HELPER" restart "$name" >/dev/null
 	if ! healthcheck "$port"; then
 		log "health check failed after restarting $name"
-		pm2 logs "$name" --nostream --lines 40 >&2 || true
+		sudo -n "$ROOT_HELPER" logs "$name" >&2 || true
 		return 1
 	fi
 }
@@ -105,7 +123,6 @@ deploy_app() {
 
 # The cloak router reads the domain list at startup: restart only when the set changes.
 reload_cloaks() {
-	mkdir -p "$STATE"
 	local now
 	now=$(find "$CLOAKS" -mindepth 3 -maxdepth 3 -path '*/dist/index.html' -printf '%P\n' 2>/dev/null | cut -d/ -f1 | sort)
 	if [[ $now == "$(cat "$STATE/cloaks.set" 2>/dev/null)" ]]; then
@@ -121,7 +138,6 @@ case "$mode:${cmd[0]:-}" in
 app:deploy) deploy_app "${cmd[1]:-}" ;;
 app:deploy-dev) deploy_dev "${cmd[1]:-}" ;;
 cloaks:rsync)
-	mkdir -p "$CLOAKS"
 	exec /usr/bin/rrsync "$CLOAKS"
 	;;
 cloaks:reload) reload_cloaks ;;

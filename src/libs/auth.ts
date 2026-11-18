@@ -136,7 +136,8 @@ export function getMe(): Promise<Me | null> {
 
 /**
  * Re-reads the account, updates the cached profile used by the shell, and notifies listeners.
- * Only a definite "signed out" (401/503) clears the local login — a flaky network keeps it.
+ * Only a definite "signed out" (401, or 503 when accounts are off) clears the local login. A flaky
+ * network or a database that is briefly down (503 `accounts_unavailable`) keeps it.
  */
 export async function refreshMe(): Promise<Me | null> {
 	let me: Me | null = null;
@@ -146,8 +147,8 @@ export async function refreshMe(): Promise<Me | null> {
 		await saveLogin({ id: me.user.id, display: me.user.name, handle: me.username || me.lastfm?.username || me.listenbrainz?.username || me.user.email || me.user.name, avatar: me.user.image || me.lastfm?.image || null });
 	} catch (err) {
 		meCache = null;
-		const status = (err as { status?: number }).status;
-		if (status === 401 || status === 503) await clearLogin();
+		const { status, data } = err as { status?: number; data?: { code?: string } };
+		if (status === 401 || (status === 503 && data?.code !== "accounts_unavailable")) await clearLogin();
 	}
 	window.dispatchEvent(new Event("account-upd"));
 	return me;

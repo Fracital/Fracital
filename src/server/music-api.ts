@@ -4,7 +4,7 @@ import { rankAlbums, rankArtists, rankTracks } from "./music-rank.ts";
 import { artistBanner, artistBio, artistTopTracks, buildRadio, findDeezerArtist, relatedArtists } from "./music-radio.ts";
 import { artistStats, lastfmKey, trackPlays } from "./music-stats.ts";
 import { getRequestListener } from "@hono/node-server";
-import { getAccountsApp, initAccounts } from "./accounts.ts";
+import { accountsPool, getAccountsApp, initAccounts } from "./accounts.ts";
 import { startDiscordBot } from "./discord-bot.ts";
 import { isDecoyHost } from "./cloak-routing.ts";
 import { getPost, listPosts, renderBlogIndex, renderBlogNotFound, renderBlogPostPage } from "./blog.ts";
@@ -137,7 +137,7 @@ function registerMusicApi(server: { middlewares: ViteDevServer["middlewares"] },
 		const m = /^\/blog(?:\/([a-z0-9-]+))?\/?$/.exec(path);
 		if (!m || req.method !== "GET" || isDecoyHost(String(req.headers["x-forwarded-host"] || req.headers.host || ""))) return next();
 		void (async () => {
-			const pool = (await initAccounts())?.pool ?? null;
+			const pool = await accountsPool();
 			const html = m[1] ? await getPost(pool, m[1], { fresh: true }) : null;
 			const status = m[1] && !html ? 404 : 200;
 			res.writeHead(status, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-cache" });
