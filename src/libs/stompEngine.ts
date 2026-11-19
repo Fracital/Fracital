@@ -209,7 +209,16 @@ export const bootStomp = (): Promise<StompController> => {
 				// A descriptor: the controller imports and constructs the transport
 				// in its own worker, off this thread, which is what lets a proxied
 				// page's synchronous XHR complete.
-				transport: { module: TRANSPORT_MODULE, options: [{ wisp: wispURL }], http3: { module: H3_MODULE } },
+				transport: {
+					module: TRANSPORT_MODULE,
+					options: [{ wisp: wispURL }],
+					http3: { module: H3_MODULE },
+					// Wisp over the relay's WebTransport session (UDP), the WebSocket
+					// otherwise. The relay serves the session on the same host and
+					// gated path as its WebSocket, which is where STomp looks for it
+					// given only the wss: URL (https://<host>/pipe/<key>/).
+					webTransport: true,
+				},
 				directory: STOMP_DIRECTORY,
 				assets: STOMP_ASSETS,
 				id: controllerId(),

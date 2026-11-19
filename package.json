@@ -33,7 +33,7 @@
 		"@mercuryworkshop/scramjet-controller": "^0.0.14",
 		"@monaco-editor/react": "^4.7.0",
 		"@paralleldrive/cuid2": "^3.3.0",
-		"@sysce/stomp": "4.2.0-nightly.202611181626.g4b445e6",
+		"@sysce/stomp": "4.2.0-nightly.202611190245.g6a59a1d",
 		"@tailwindcss/vite": "^4.3.4",
 		"@titaniumnetwork-dev/ultraviolet": "3.2.10",
 		"audvis": "^0.2.4",

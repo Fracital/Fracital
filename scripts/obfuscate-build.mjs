@@ -559,6 +559,9 @@ export const STORE_NAMES = new Set([
 	"stompPermissions",
 	"stompDeviceGrants",
 	"stompPasskeys",
+	// stomp's transport worker: IndexedDB (whether the relay's WebTransport
+	// session worked, so the next page rides it or skips it at once)
+	"stomp-wisp-carrier",
 	// stomp's service worker: CacheStorage (the document bundles store is
 	// shared with the worker of the build before, on purpose)
 	"stomp-http-cache",
