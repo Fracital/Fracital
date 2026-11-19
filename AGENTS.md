@@ -157,10 +157,17 @@ passed. `stomp-update.yml` moves Fracital to each new nightly by itself:
   manual run that names a held version still tests it. It is empty
   today; take a version out once a newer nightly is pinned.
 - The check job holds no write token. It bumps `package.json` and
-  `package-lock.json` and fails when anything else changed, or anything in
-  `package.json` but the pin, so the updater never touches Fracital's own
-  settings: those in `src/libs/stompEngine.ts`, `webTransport` among
-  them, stay as `main` has them. Then it runs the checks an engine bump
+  `package-lock.json`: the pin, and `@mercuryworkshop/epoxy-transport` set
+  to exactly the spec the new version pins in its `devDependencies` (STomp
+  is built and tested with that transport but does not depend on it, so a
+  bump alone would never move it). A version that names no
+  epoxy-transport there, or names one that is neither a git url with a
+  full commit nor an exact version, fails the update. The commit says when
+  epoxy moved. `pnpm-lock.yaml` is not the updater's. The check fails when
+  anything else changed, or anything in `package.json` but those two, so
+  the updater never touches Fracital's own settings: those in
+  `src/libs/stompEngine.ts`, `webTransport` among them, stay as `main`
+  has them. Then it runs the checks an engine bump
   needs: `npm test`, no tsc errors beyond the pinned version's, two full
   builds with the protection pipeline (prune, obfuscate, canary check,
   dist-refs check),
@@ -209,7 +216,9 @@ still picks up every nightly within minutes. `stomp-lastfm-check.mjs` is
 left out, because it needs a database and a Last.fm key. A release that
 changes which files the engine needs (see `STOMP_FILES` in vite.config.ts
 and `STOMP_ASSETS` in `src/libs/stompEngine.ts`) fails here until someone
-updates the integration by hand.
+updates the integration by hand, as does an epoxy-transport whose files
+changed shape (vite.config.ts vendors its `dist/index.mjs` with the
+`epoxy.wasm` it loads, and stomp-h3 from `dist/h3/`).
 
 ## Obfuscation and security (mandatory for all changes)
 

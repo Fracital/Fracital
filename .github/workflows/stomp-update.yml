@@ -8,15 +8,16 @@
 # dispatch). The package only moves to a version published after the pinned one. A manual run may
 # name a version, and with dry_run it only tests (an older version only as a dry run).
 #
-# The probe job reads the pin and npm and stops there when the pin is current (seconds, no
-# install). The check job holds no write token. It bumps package.json and package-lock.json, fails
-# when anything else changed, and runs what an engine bump needs (AGENTS.md): the unit tests, no
-# tsc errors beyond the pinned version's, two full builds (npm run build: prune, obfuscate, canary
-# check, dist-refs check), deploy-check.mjs on those two builds (the swap between them in one
+# The probe job reads the pin and npm and stops there when the pin is current (seconds, no install).
+# The check job holds no write token. It bumps package.json and package-lock.json (the pin, and
+# @mercuryworkshop/epoxy-transport set to the spec the new version pins in its devDependencies),
+# fails when anything else changed, and runs what an engine bump needs (AGENTS.md): the unit tests,
+# no tsc errors beyond the pinned version's, two full builds (npm run build: prune, obfuscate,
+# canary check, dist-refs check), deploy-check.mjs on those two builds (the swap between them in one
 # browser profile, both engines), boot-check.mjs and stomp-check.mjs. stomp-check runs up to three
-# times, because Wikipedia answers a runner with 429; scripts/stomp-check-gate.mjs then wants
-# every check to have passed in one of the runs, except the known failures it lists and the checks
-# a site answered with 429 in every run (not tested, a warning in the run).
+# times, because Wikipedia answers a runner with 429; scripts/stomp-check-gate.mjs then wants every
+# check to have passed in one of the runs, except the known failures it lists and the checks a site
+# answered with 429 in every run (not tested, a warning in the run).
 #
 # When it passes, the publish job commits the two files as github-actions[bot] straight to main,
 # starts deploy.yml (a push made with GITHUB_TOKEN starts no workflow, a workflow_dispatch does)
@@ -72,6 +73,8 @@ defaults:
 env:
   ISSUE_TITLE: STomp update needs attention
   PACKAGE_NAME: "@sysce/stomp"
+  # the transport STomp is built and tested with; every bump sets Fracital's to STomp's own pin
+  EPOXY_NAME: "@mercuryworkshop/epoxy-transport"
   UPSTREAM: Fracital/powerMouse
   # never older than this, whatever a run is asked for (a dry run may test anything)
   FLOOR: 4.2.0-nightly.202611190245.g6a59a1d
@@ -293,17 +296,51 @@ jobs:
           echo "TSC_BEFORE=$n" >>"$GITHUB_ENV"
           echo "tsc: $n errors on the pinned version"
 
+      # the pin, and epoxy-transport set to the spec STomp pins as a devDependency: STomp's
+      # package does not depend on it, so a bump alone never moves it
       - name: Bump
         if: env.BUMP == 'true'
         run: |
           . "$RUNNER_TEMP/retry.sh"
-          retry npm install --prefer-online --save-exact "$PACKAGE_NAME@$VERSION" 2>&1 | tee -a "$RUNNER_TEMP/gate.log"
-          test "$(node -p 'require("./package.json").dependencies[process.env.PACKAGE_NAME]')" = "$VERSION"
-          mkdir -p "$RUNNER_TEMP/bump"
-          cp package.json package-lock.json "$RUNNER_TEMP/bump/"
+          {
+            retry npm view --prefer-online "$PACKAGE_NAME@$VERSION" devDependencies --json >"$RUNNER_TEMP/devdeps.json"
+            spec=$(node -p 'require(process.argv[1])?.[process.env.EPOXY_NAME] ?? ""' "$RUNNER_TEMP/devdeps.json")
+            git_spec='^git\+(https|ssh)://[^#[:space:]]+\.git#[0-9a-f]{40}$'
+            semver='^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'
+            if [[ -z $spec ]]; then
+              echo "::error::$PACKAGE_NAME@$VERSION names no $EPOXY_NAME in its devDependencies; Fracital cannot tell which transport it was built with"
+              exit 1
+            fi
+            if ! [[ $spec =~ $git_spec || $spec =~ $semver ]]; then
+              echo "::error::$PACKAGE_NAME@$VERSION pins $EPOXY_NAME as \"$spec\", neither a git url with a full commit nor an exact version"
+              exit 1
+            fi
+            before=$(node -p 'require("./package.json").dependencies[process.env.EPOXY_NAME]')
+            echo "EPOXY_SPEC=$spec" >>"$GITHUB_ENV"
+            # shellcheck disable=SC2016 # the single-quoted $ are JavaScript's
+            node -e '
+              const fs = require("fs");
+              const text = fs.readFileSync("package.json", "utf8");
+              const pkg = JSON.parse(text);
+              pkg.dependencies[process.env.EPOXY_NAME] = process.argv[1];
+              fs.writeFileSync("package.json", JSON.stringify(pkg, null, text.match(/^[ \t]+(?=")/m)?.[0] ?? "\t") + "\n");
+            ' "$spec"
+            retry npm install --prefer-online --save-exact "$PACKAGE_NAME@$VERSION"
+            test "$(node -p 'require("./package.json").dependencies[process.env.PACKAGE_NAME]')" = "$VERSION"
+            test "$(node -p 'require("./package.json").dependencies[process.env.EPOXY_NAME]')" = "$spec"
+            mkdir -p "$RUNNER_TEMP/bump"
+            cp package.json package-lock.json "$RUNNER_TEMP/bump/"
+            if [[ $spec != "$before" ]]; then
+              echo "$EPOXY_NAME $before -> $spec, as $PACKAGE_NAME@$VERSION pins it." >"$RUNNER_TEMP/bump/epoxy.txt"
+              echo "::notice::$EPOXY_NAME $before -> $spec"
+            else
+              echo "$EPOXY_NAME stays $spec"
+            fi
+          } 2>&1 | tee -a "$RUNNER_TEMP/gate.log"
 
-      # package.json and package-lock.json, and in package.json only the pin; src/libs/stompEngine.ts
-      # (webTransport among its settings) and every other file stay as main has them
+      # package.json and package-lock.json, and in package.json only the pin and epoxy-transport (to
+      # STomp's spec); src/libs/stompEngine.ts (webTransport among its settings) and every other
+      # file stay as main has them
       - name: Only the pin changed
         run: |
           {
@@ -319,12 +356,13 @@ jobs:
             # shellcheck disable=SC2016 # the single-quoted $ are JavaScript's
             node -e '
               const sorted = v => (v && typeof v === "object" && !Array.isArray(v) ? Object.fromEntries(Object.keys(v).sort().map(k => [k, sorted(v[k])])) : v);
-              const [baseFile, name, version] = process.argv.slice(1);
+              const [baseFile, name, version, epoxyName, epoxySpec] = process.argv.slice(1);
               const want = require(baseFile);
               want.dependencies[name] = version;
+              if (epoxySpec) want.dependencies[epoxyName] = epoxySpec;
               const now = require(`${process.cwd()}/package.json`);
               if (JSON.stringify(sorted(want)) !== JSON.stringify(sorted(now))) {
-                console.log(`::error::package.json changed beyond the ${name} pin`);
+                console.log(`::error::package.json changed beyond the ${name} pin and ${epoxyName}`);
                 process.exit(1);
               }
               const lock = require(`${process.cwd()}/package-lock.json`).packages[""];
@@ -332,8 +370,12 @@ jobs:
                 console.log(`::error::package-lock.json does not pin ${name} ${version}`);
                 process.exit(1);
               }
-              console.log(`only the ${name} pin changed (${version})`);
-            ' "$RUNNER_TEMP/package.base.json" "$PACKAGE_NAME" "$VERSION"
+              if (epoxySpec && lock.dependencies?.[epoxyName] !== epoxySpec) {
+                console.log(`::error::package-lock.json does not pin ${epoxyName} ${epoxySpec}`);
+                process.exit(1);
+              }
+              console.log(`only the ${name} pin (${version}) and ${epoxyName} (${epoxySpec || "unchanged"}) changed`);
+            ' "$RUNNER_TEMP/package.base.json" "$PACKAGE_NAME" "$VERSION" "$EPOXY_NAME" "${EPOXY_SPEC:-}"
           } 2>&1 | tee -a "$RUNNER_TEMP/gate.log"
 
       - uses: actions/upload-artifact@v4
@@ -512,6 +554,7 @@ jobs:
         id: push
         run: |
           cp "$RUNNER_TEMP/bump/package.json" "$RUNNER_TEMP/bump/package-lock.json" .
+          epoxy=$(cat "$RUNNER_TEMP/bump/epoxy.txt" 2>/dev/null || true)
           git add package.json package-lock.json
           changed=$(git diff --cached --name-only | sort | tr '\n' ' ')
           if [[ $changed != "package-lock.json package.json " ]]; then
@@ -519,7 +562,8 @@ jobs:
             exit 1
           fi
           git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
-            commit -q --no-verify -m "Update STomp to $VERSION" -m "$PACKAGE_NAME $CURRENT -> $VERSION, built from $UPSTREAM@$COMMIT."
+            commit -q --no-verify -m "Update STomp to $VERSION" -m "$PACKAGE_NAME $CURRENT -> $VERSION, built from $UPSTREAM@$COMMIT." \
+            ${epoxy:+-m "$epoxy"}
           # main must still be the commit the check tested on; a push can also lose that race
           git fetch --no-tags origin main
           if [[ $(git rev-parse FETCH_HEAD) == "$BASE" ]] && git push origin HEAD:main; then
