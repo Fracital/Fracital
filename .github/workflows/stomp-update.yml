@@ -37,6 +37,11 @@ name: STomp update
 on:
   repository_dispatch:
     types: [stomp-nightly]
+  # The same signal without a token: powerMouse's nightly pushes a commit whose message is the
+  # version to refs/heads/stomp-signal with a write deploy key (its secret FRACITAL_SIGNAL_KEY). A
+  # deploy-key push starts workflows; GitHub's schedule has never fired in this repository.
+  push:
+    branches: [stomp-signal]
   schedule:
     # GitHub runs no schedule more often than every 5 minutes; a current pin stops in seconds.
     - cron: "*/5 * * * *"
@@ -122,10 +127,12 @@ jobs:
           GH_REPO: ${{ github.repository }}
           EVENT: ${{ github.event_name }}
           REQUESTED: ${{ inputs.version }}
-          DISPATCHED: ${{ github.event.client_payload.version }}
+          DISPATCHED: ${{ github.event.client_payload.version || (github.event_name == 'push' && github.event.head_commit.message) || '' }}
           DRY_RUN_INPUT: ${{ inputs.dry_run == true }}
           RETRY: ${{ inputs.retry }}
         run: |
+          # a stomp-signal push carries the version as its commit message
+          DISPATCHED=$(printf '%s' "$DISPATCHED" | head -n 1 | tr -d '[:space:]')
           semver='^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'
           # npm view, with a few tries for a registry hiccup
           view() {
