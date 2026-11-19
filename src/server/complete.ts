@@ -17,9 +17,13 @@ const UPSTREAMS: Record<string, (q: string) => string> = {
 	duckduckgo: q => `https://duckduckgo.com/ac/?q=${q}&type=list`,
 	google: q => `https://suggestqueries.google.com/complete/search?client=firefox&q=${q}`,
 	bing: q => `https://www.bing.com/osjson.aspx?query=${q}`,
-	brave: q => `https://search.brave.com/api/suggest?q=${q}`,
 };
 UPSTREAMS.startpage = UPSTREAMS.duckduckgo;
+// Brave answers every request from Node (any headers, any TLS settings) with 429, as a bot check, and
+// curl from the same host with 200: so Google's completions stand in, as DuckDuckGo's do for Startpage.
+UPSTREAMS.brave = UPSTREAMS.google;
+/** Bing's endpoint answers 204 without a browser's User-Agent. */
+const USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/157.0 Safari/537.36";
 
 const fold = (s: string) => s.normalize("NFKD").toLowerCase().replace(/\s+/g, " ").trim();
 
@@ -50,7 +54,7 @@ async function complete(engine: string, q: string): Promise<string[]> {
 	if (hit && Date.now() - hit.at < TTL_MS) return hit.s;
 	let s: string[] = [];
 	try {
-		const res = await fetch(UPSTREAMS[engine](encodeURIComponent(q)), { headers: { Accept: "application/json" }, signal: AbortSignal.timeout(TIMEOUT_MS) });
+		const res = await fetch(UPSTREAMS[engine](encodeURIComponent(q)), { headers: { Accept: "application/json", "User-Agent": USER_AGENT }, signal: AbortSignal.timeout(TIMEOUT_MS) });
 		if (res.ok) s = parseCompletions(await res.json(), q);
 	} catch {
 		// Slow or down: nothing to suggest this time.
