@@ -19,8 +19,10 @@
  * as JSON, even when the run stops early (stomp-update.yml reads it through
  * scripts/stomp-check-gate.mjs). A check of a site that answered a page in the
  * engine with 429 (Too Many Requests) while it was checked also carries
- * rateLimited: true. Wikipedia rate-limits CI runners, and a page it refused
- * says nothing about the engine; its checks then fail without stopping the run.
+ * rateLimited: true. Wikipedia rate-limits the relay's shared exits on a
+ * cookieless first visit, so its checks follow one warm-up visit whose
+ * result is ignored; a page it still refused says nothing about the engine, and
+ * its checks then fail without stopping the run.
  */
 import { writeFileSync } from "node:fs";
 import { chromium } from "playwright-core";
@@ -244,15 +246,38 @@ const reloaded = await waitFor(
 ).catch(() => null);
 check("address bar: the page's own url reloads it", !!reloaded, JSON.stringify(reloaded));
 
-// Wikipedia answers some networks (CI runners) with 429; its checks then fail
-// marked rateLimited, and the run goes on to the checks after them.
+// Wikimedia rate-limits the relay's shared exits on a cookieless first visit:
+// that 429 sets cookies, and the next visit with them (this one context) gets
+// the article. So one warm-up visit first, whose result is ignored. It asks
+// for the article with a query, because submitting the page's own url does
+// not navigate (the known failure above), and its document is marked, so the
+// checks read only the document of the visit after it.
+const WIKI_URL = "https://en.wikipedia.org/wiki/Web_proxy";
+await go(`${WIKI_URL}?warmup=1`);
+await waitFor(
+	async () => {
+		const i = await frameInfo();
+		return i?.url?.startsWith("https://en.wikipedia.org/") && i.title ? i : null;
+	},
+	"the wikipedia warm-up",
+	60000,
+).catch(() => null);
+await (await engineFrame())
+	?.evaluate(() => {
+		window.__wikiWarmup = 1;
+	})
+	.catch(() => {});
+// A 429 on the visit after the warm-up still fails its checks marked
+// rateLimited, and the run goes on to the checks after them.
 const tooManyBefore = tooManyRequests;
 const wikiCheck = (name, pass, detail) => check(name, pass, detail, tooManyRequests > tooManyBefore);
-await go("https://en.wikipedia.org/wiki/Web_proxy");
+await go(WIKI_URL);
 info = await waitFor(
 	async () => {
 		const i = await frameInfo();
-		return i?.url?.startsWith("https://en.wikipedia.org/wiki/") && /Wikipedia/.test(i.title || "") ? i : null;
+		if (!(i?.url?.startsWith("https://en.wikipedia.org/wiki/") && /Wikipedia/.test(i.title || ""))) return null;
+		const fresh = await (await engineFrame())?.evaluate(() => !window.__wikiWarmup).catch(() => false);
+		return fresh ? i : null;
 	},
 	"wikipedia to report",
 	60000,

@@ -175,7 +175,11 @@ passed. `stomp-update.yml` moves Fracital to each new nightly by itself:
   runs, except the known failures in its `KNOWN` list, which also fail on
   the pinned version (today only "address bar: the page's own url reloads
   it"). When a known failure passes again, the gate says so; take it out of
-  `KNOWN`. Wikipedia answers GitHub's runners with 429 (Too Many Requests).
+  `KNOWN`. Wikimedia answers a cookieless first visit from the relay's
+  shared exits with 429 (Too Many Requests), and that answer sets the
+  cookies the next visit gets the article with, so stomp-check makes one
+  warm-up visit to the Wikipedia article in its one browser context and
+  ignores its result before the Wikipedia checks. As a safety net,
   stomp-check marks a check that failed while the site answered a page in
   the engine with 429 (`rateLimited`) and goes on to the checks after it. A
   check that failed that way in every run was not tested: the gate tries
