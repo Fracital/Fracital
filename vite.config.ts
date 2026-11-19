@@ -41,12 +41,29 @@ const buildStamp = randomBytes(4).toString("hex");
 const stamped = (name: string) => name.replace(/\.(?=[^.]+$)/, `.${buildStamp}.`);
 // The two engine scripts the app shell (index.html) loads.
 const SHELL_SCRIPTS = ["/vendor/core.js", "/vendor/ctl.js"];
+// Every file the engine serves (its Assets, node_modules/@sysce/stomp/dist/
+// types/config.d.ts) plus the controller module the app imports. Since the
+// rewriter is wasm only, the core module and the light rewriter library are
+// needed to proxy anything; the blocker, WebRTC, site pool and controller
+// frame files are loaded only when a page or an option asks for them.
 const STOMP_FILES: [string, string][] = [
 	["serviceWorker.js", stamped("sw.js")],
 	["injectDocument.js", stamped("doc.js")],
 	["injectWorker.js", stamped("wk.js")],
+	["injectDocumentFull.js", stamped("df.js")],
+	["injectWorkerFull.js", stamped("wf.js")],
 	["transportWorker.js", stamped("tw.js")],
 	["rewriteWorker.js", stamped("rw.js")],
+	["rewriterLib.js", stamped("rl.js")],
+	["core.wasm", stamped("rx.wasm")],
+	["blocker.wasm", stamped("bk.wasm")],
+	["adblock-resources.json", stamped("bk.json")],
+	["rtcWorker.js", stamped("cw.js")],
+	["rtcStack.js", stamped("cs.js")],
+	["rtc.wasm", stamped("cn.wasm")],
+	["siteFrame.js", stamped("sf.js")],
+	["controllerFrame.js", stamped("fr.js")],
+	["controllerFrame.html", stamped("fr.html")],
 	["controller.mjs", stamped("api.mjs")],
 ];
 // Source maps are pruned from dist; drop the pointer so nothing references a
@@ -229,14 +246,27 @@ export default defineConfig({
 							rename: { stripBase: true, name: stamped("ctl.frame.js") },
 							overwrite: true,
 						},
-						// The stomp engine: the service worker, the two inject bundles, the
-						// transport worker and the controller module, under neutral names.
+						// The stomp engine: every file it serves and the controller module,
+						// under neutral names (STOMP_FILES).
+						// Only scripts carry a source map pointer; the wasm and json files are
+						// copied as they are (a function transform reads the file as text).
 						...STOMP_FILES.map(([from, to]) => ({
 							src: `${stompPath}/${from}`.replace(/\\/g, "/"),
 							dest: STOMP_DIR,
 							rename: { stripBase: true as const, name: to },
 							overwrite: true,
-							transform: stripSourceMap,
+							...(/\.m?js$/.test(from) ? { transform: stripSourceMap } : {}),
+							// The controller frame falls back to its script's package name
+							// when the URL names none (?script=); it is told fr.js.
+							...(from === "controllerFrame.html"
+								? {
+										transform: (content: string | Buffer) => {
+											const text = content.toString();
+											if (!text.includes("'controllerFrame.js'")) throw new Error("controllerFrame.html no longer falls back to 'controllerFrame.js' (stomp build changed shape)");
+											return text.split("'controllerFrame.js'").join(JSON.stringify(stamped("fr.js")));
+										},
+									}
+								: {}),
 						})),
 						// The engine's error page, given the name of the global the service
 						// worker sets on it (names.error); see src/stomp/error.html.
@@ -252,11 +282,24 @@ export default defineConfig({
 							},
 						},
 						// The transport module stomp's transport worker imports: epoxy over
-						// the relay, the Fracital build (wasm inlined, one file).
+						// the relay, the Fracital build. It loads its wasm next to itself
+						// (new URL("epoxy.wasm", import.meta.url)), so that name is
+						// rewritten to the wasm's neutral one, as for stomp-h3.
 						{
 							src: "node_modules/@mercuryworkshop/epoxy-transport/dist/index.mjs",
 							dest: STOMP_DIR,
 							rename: { stripBase: true, name: stamped("link.mjs") },
+							overwrite: true,
+							transform: (content: string | Buffer) => {
+								const text = content.toString();
+								if (!text.includes('"epoxy.wasm"')) throw new Error("epoxy-transport no longer names epoxy.wasm (epoxy build changed shape)");
+								return text.split('"epoxy.wasm"').join(JSON.stringify(stamped("link.wasm")));
+							},
+						},
+						{
+							src: "node_modules/@mercuryworkshop/epoxy-transport/dist/epoxy.wasm",
+							dest: STOMP_DIR,
+							rename: { stripBase: true, name: stamped("link.wasm") },
 							overwrite: true,
 						},
 						// UV's files, its config, and the loader the service worker imports

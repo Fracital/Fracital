@@ -269,6 +269,11 @@ export function registerHubRoutes<E extends object>(app: Hono<{ Variables: E }>,
 		if (!onHub(c)) return c.notFound();
 		c.header("Cache-Control", "no-store");
 		c.header("Referrer-Policy", "no-referrer");
+		// A cross-origin isolated page (SystemYA's browser, /?2) loads a frame only when it has an
+		// embedder policy and lets other origins embed it. The frame loads nothing but its own
+		// endpoints, so require-corp costs it nothing.
+		c.header("Cross-Origin-Embedder-Policy", "require-corp");
+		c.header("Cross-Origin-Resource-Policy", "cross-origin");
 		return c.html(FRAME_HTML);
 	});
 

@@ -6,7 +6,8 @@
  * page through the proxy, the auth page request must carry rule 0 (the
  * first-party Origin/Referer rule) while a login POST carries none, and when
  * the frame reaches our callback URL with a token the host must intercept it
- * (the proxy refuses its own origin), call the callback first-party, surface
+ * (the engine's block rule for it, the last of STOMP_RULES in
+ * src/libs/stompEngine.ts), call the callback first-party, surface
  * the server's answer in the Account page, and close the tab.
  *
  * The server needs accounts configured (DATABASE_URL) and a Last.fm key; with a
@@ -203,8 +204,10 @@ check("empty login POST went through the proxy without a rule (no credentials se
 // --- the callback plumbing with a synthetic token ---
 const tabsWithLastfm = await tabCount();
 await go(`${cb || `${origin}/api/auth/lastfm/callback`}?token=fake`);
-const refused = await waitFor(async () => (await requestLog()).find(r => r.url.startsWith(`${origin}/api/auth/lastfm/callback`)), "the refused callback report", 30000).catch(() => null);
-check("proxy refused our own origin and reported the callback URL", !!refused && refused.kind === "refused", JSON.stringify(refused));
+// The callback's block rule is the last of STOMP_RULES (src/libs/stompEngine.ts).
+const CALLBACK_RULE = 2;
+const blocked = await waitFor(async () => (await requestLog()).find(r => r.url.startsWith(`${origin}/api/auth/lastfm/callback`)), "the blocked callback report", 30000).catch(() => null);
+check("proxy blocked our own callback by its rule and reported the callback URL", !!blocked && blocked.kind === "blocked" && blocked.rule === CALLBACK_RULE, JSON.stringify(blocked));
 const closed = await waitFor(async () => ((await tabCount()) < tabsWithLastfm ? true : null), "the Last.fm tab to close", 20000).catch(() => false);
 check("host closed the Last.fm tab", closed === true, `${tabsWithLastfm} -> ${await tabCount()}`);
 const cbCall = await waitFor(() => firstParty.find(f => f.url.includes("/api/auth/lastfm/callback") && f.url.includes("token=fake") && f.status !== undefined) || null, "the first-party callback call", 20000).catch(() => null);
@@ -220,7 +223,7 @@ const errorText = await waitFor(
 	20000,
 ).catch(() => null);
 check("the exchange failure surfaces in the Account page", !!errorText && errorText.trim().length > 0, JSON.stringify(errorText));
-const proxiedCallback = (await requestLog()).filter(r => r.url.startsWith(origin) && r.status && r.status !== 0 && r.kind !== "refused");
+const proxiedCallback = (await requestLog()).filter(r => r.url.startsWith(origin) && r.status && r.status !== 0 && r.kind !== "blocked");
 check("no proxied request ever reached our origin", proxiedCallback.length === 0, JSON.stringify(proxiedCallback.slice(0, 2)));
 
 console.log("--- request flow (proxied, as reported):");

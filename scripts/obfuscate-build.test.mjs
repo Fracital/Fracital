@@ -14,7 +14,7 @@ import assert from "node:assert/strict";
 import vm from "node:vm";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { obfuscateJs, decoderSource, obfuscateSvg, wrapCdata, shouldProcessJs, obfuscateProxyJs, mapProxyText, mapWasmBytes, isProxyVendor, hasProxyName, STORE_NAMES, mapStoreName } from "./obfuscate-build.mjs";
+import { obfuscateJs, decoderSource, obfuscateSvg, wrapCdata, shouldProcessJs, obfuscateProxyJs, mapProxyText, mapWasmBytes, mapWasmBase64, mapProxyMarkup, mapProxyRegex, isProxyVendor, hasProxyName, STORE_NAMES, mapStoreName } from "./obfuscate-build.mjs";
 
 function evalScript(code) {
 	const sandbox = { atob, TextDecoder, Uint8Array, Uint32Array, String, Math, Object, Array, JSON, Date, result: undefined };
@@ -388,6 +388,8 @@ test("proxy: the engines' store names keep one name in every build, never the pa
 test("proxy: a database opened under an unlisted proxy name fails the build", () => {
 	assert.throws(() => obfuscateProxyJs(`indexedDB.open("stompNew", 1);`, "script", "t"), /STORE_NAMES/);
 	assert.throws(() => obfuscateProxyJs(`self.indexedDB.open("__scramjet_other");`, "script", "t"), /STORE_NAMES/);
+	assert.throws(() => obfuscateProxyJs(`caches.open("stomp-new-cache");`, "script", "t"), /STORE_NAMES/);
+	assert.equal(obfuscateProxyJs(`self.caches.open("stomp-adblock");`, "script", "t").changed, true);
 	// idb's openDB, whatever the minifier named it
 	assert.throws(() => obfuscateProxyJs(`Tt("stompNew", 1, { upgrade: e => e.createObjectStore("x") });`, "script", "t"), /STORE_NAMES/);
 	assert.equal(obfuscateProxyJs(`Tt("stompCookies", 2, { upgrade: e => e.createObjectStore("x") });`, "script", "t").changed, true);
@@ -450,6 +452,42 @@ test("proxy: embedded wasm export names are renamed in the binary, and the modul
 	assert.equal(names[0].length, "scramjet_add".length);
 });
 
+test("proxy: embedded wasm in URL-safe base64 is mapped and written back in its own alphabet", () => {
+	// stomp's inject bundles carry their codec module as unpadded URL-safe
+	// base64 (`-` and `_`), which a standard-alphabet reading cut short at
+	// the first `_` ("section past the end").
+	const name = Buffer.from("stomp_add");
+	const exp = Buffer.concat([Buffer.from([0x01, name.length]), name, Buffer.from([0x00, 0x00])]);
+	const sec = (id, body) => Buffer.concat([Buffer.from([id, body.length]), body]);
+	// a custom section of 0xff bytes, so the text is sure to hold `_`
+	const custom = sec(0x00, Buffer.concat([Buffer.from([0x01, 0x78]), Buffer.alloc(7, 0xff)]));
+	const wasm = Buffer.concat([Buffer.from([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00]), sec(0x01, Buffer.from([0x01, 0x60, 0x00, 0x00])), sec(0x03, Buffer.from([0x01, 0x00])), sec(0x07, exp), sec(0x0a, Buffer.from([0x01, 0x02, 0x00, 0x0b])), custom]);
+	assert.equal(WebAssembly.validate(wasm), true);
+	const b64 = wasm.toString("base64url");
+	assert.match(b64, /_/);
+	assert.doesNotMatch(b64, /[+/=]/);
+	const src = `function Yk(){try{return${JSON.stringify(b64)}}catch{return}}
+    const bytes = Uint8Array.from(atob(Yk().replace(/-/g, "+").replace(/_/g, "/")), c => c.charCodeAt(0));
+    globalThis.names = WebAssembly.Module.exports(new WebAssembly.Module(bytes)).map(e => e.name);`;
+	assert.ok(b64.length > 64);
+	const out = obfuscateProxyJs(src, "script", "t");
+	assert.equal(out.code.includes(b64), false, "the wasm blob is not shipped as plaintext base64");
+	assert.deepEqual([...evalWith(out.code, { WebAssembly }).names], [mapProxyText("stomp_add")]);
+	const mapped = mapWasmBase64(b64);
+	assert.equal(mapped.length, b64.length, "same length, no padding added");
+	assert.doesNotMatch(mapped, /[+/=]/, "still the URL-safe alphabet");
+	assert.equal(Buffer.from(mapped, "base64url").includes(Buffer.from(mapProxyText("stomp_add"))), true);
+	// the standard alphabet, padded, keeps its form too
+	const std = Buffer.concat([wasm, Buffer.from([0x00, 0x01, 0x00])]);
+	assert.equal(WebAssembly.validate(std), true);
+	const stdMapped = mapWasmBase64(std.toString("base64"));
+	assert.equal(stdMapped.length, std.toString("base64").length);
+	assert.equal(Buffer.from(stdMapped, "base64").includes(Buffer.from(mapProxyText("stomp_add"))), true);
+	assert.doesNotMatch(stdMapped, /[-_]/);
+	// a literal that mixes the alphabets is refused rather than guessed at
+	assert.throws(() => mapWasmBase64(`${b64.slice(0, 20)}+${b64.slice(21)}`), /mixes/);
+});
+
 test("proxy: wasm mapping renames names and data only, never code bytes that happen to spell a name", () => {
 	// Ruffle's wasm spells "stomP" inside "initCustomPrototype" in its data
 	// section; its SIMD build does not validate at all on a build host without
@@ -495,6 +533,44 @@ test("proxy: wasm mapping renames names and data only, never code bytes that hap
 	const mappedUnvalidatable = mapWasmBytes(unvalidatable);
 	assert.equal(mappedUnvalidatable.includes(Buffer.from(mapped, "latin1")), true);
 	assert.equal(mappedUnvalidatable.toString("latin1").toLowerCase().includes("stomp"), false);
+});
+
+test("proxy: a vendored page's markup is renamed like its scripts, and its script bodies are left to the script transform", () => {
+	const html = `<!doctype html><title>Stomp controller</title><!-- stomp internals --><!-- @license stomp GPL --><meta name="stomp-allowed-origins" content="" /><script>var q = 'meta[name="stomp-allowed-origins"]';</script>`;
+	const out = mapProxyMarkup(html);
+	assert.equal(out.length < html.length, true);
+	assert.equal(out.includes("internals"), false, "a comment naming the engine goes");
+	assert.equal(out.includes("GPL"), true, "a legal comment stays");
+	assert.equal(out.includes(`<title>${mapProxyText("Stomp")} controller</title>`), true);
+	assert.equal(out.includes(`name="${mapProxyText("stomp-allowed-origins")}"`), true, "the meta is named as the renamed script reads it");
+	assert.equal(out.includes(`<script>var q = 'meta[name="stomp-allowed-origins"]';</script>`), true, "the script body is untouched here");
+});
+
+test("proxy: regular expression literals are renamed with the strings they match, so they behave the same", () => {
+	// stomp's service worker escapes its own server-timing entries and the
+	// inject bundles unescape them (powerMouse src/server, src/inject).
+	const src = `
+    const XHR = "stomp-xhr", CACHED = "stomp-cached";
+    const escape = v => v.replace(/("(?:[^"\\\\]|\\\\.)*")|((?:^|,)\\s*stomp-)/g, (m, q, s) => q ?? \`\${s}!\`);
+    const unescape = v => v.replace(/("(?:[^"\\\\]|\\\\.)*")|((?:^|,)\\s*stomp-)!/g, (m, q, s) => q ?? s);
+    const own = v => v.split(",").some(e => /^\\s*stomp-/.test(e));
+    const header = \`\${XHR};dur=1, page;desc="stomp-x", \${CACHED}\`;
+    const escaped = escape(header);
+    globalThis.result = [escaped.split("!").length - 1, unescape(escaped) === header, own(XHR), /STOMP/i.test(CACHED), "StompEntry".match(/^stompentry$/i) !== null];
+  `;
+	const plain = evalWith(src).result;
+	assert.deepEqual([...plain], [2, true, true, true, true]);
+	const out = obfuscateProxyJs(src, "script", "t");
+	assert.equal(/stomp/i.test(out.code), false, "no proxy token survives in plaintext");
+	assert.deepEqual([...evalWith(out.code).result], [...plain]);
+	assert.equal(mapProxyRegex("(?:^|,)\\s*stomp-", "g"), "(?:^|,)\\s*" + mapProxyText("stomp") + "-");
+	assert.equal(mapProxyRegex("^Stomp$", "i"), "^" + mapProxyText("Stomp") + "$");
+	// a name that is not spelled by plain pattern characters is refused
+	assert.throws(() => mapProxyRegex("[stomp]+"), /by hand/);
+	assert.throws(() => mapProxyRegex("\\stomp"), /by hand/);
+	assert.throws(() => mapProxyRegex("(?<stomp>x)\\k<stomp>"), /by hand/);
+	assert.equal(mapProxyRegex("[a-z]stomp"), "[a-z]" + mapProxyText("stomp"));
+	assert.equal(mapProxyRegex("\\]stomp"), "\\]" + mapProxyText("stomp"));
 });
 
 test("proxy: shared name with bare var declaration + assignment + reads (controller pattern)", () => {

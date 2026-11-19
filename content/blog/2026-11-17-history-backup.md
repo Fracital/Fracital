@@ -1,4 +1,5 @@
 ---
+
 title: Privacy Policy update: optional history backup
 kind: privacy
 summary: History backup is new and off by default. Turn it on to keep your browsing history the same on every device you sign in on. We never sell or read it.
@@ -8,7 +9,7 @@ Fracital has kept a browsing history for a few days now: the sites you open thro
 
 ## What's new
 
-You can now **back up your history to your Fracital account**. It's a switch on your account page, under *History backup*, and it is **off until you turn it on**.
+You can now **back up your history to your Fracital account**. It's a switch on your account page, under _History backup_, and it is **off until you turn it on**.
 
 With it on:
 

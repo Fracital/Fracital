@@ -584,6 +584,13 @@ export function fsrv() {
 			},
 		}),
 	);
+	// OpenResty keeps idle upstream connections to this port for 60 s. Node's
+	// default keep-alive (5 s) closed them first, and a request OpenResty sent
+	// on one just as Node closed it came back as a 502 ("upstream prematurely
+	// closed"). Keep idle connections longer than the proxy does, so the proxy
+	// always closes first; headersTimeout has to be above keepAliveTimeout.
+	server.keepAliveTimeout = 75_000;
+	server.headersTimeout = 76_000;
 
 	// Relay upgrades only on the gated path (legacy /wisp/ when no key is set,
 	// e.g. local dev), and the chat's socket under the chat path. Anything else

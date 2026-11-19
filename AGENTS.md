@@ -131,6 +131,95 @@ regression, even if the site still works.
   visit after the swap loads a file of the build before or when an engine
   does not start.
 
+## Keeping STomp current (`.github/workflows/stomp-update.yml`)
+
+powerMouse publishes its `master` branch to npm as `@sysce/stomp@nightly`
+at 07:17 UTC and on a manual run, and only publishes a commit whose CI
+passed. `stomp-update.yml` moves Fracital to each new nightly by itself:
+
+- Triggers. powerMouse's nightly workflow can send this repository a
+  `repository_dispatch` of type `stomp-nightly` with the version it
+  published in `client_payload.version`, so the update starts within
+  minutes of the publish. The schedule checks every 5 minutes (GitHub's
+  shortest), the fallback for a lost dispatch and while powerMouse has no
+  dispatch token. "Run workflow" tries now, optionally with a specific
+  `version` and with `dry_run`, which runs every check (on the pin itself
+  when it is current) and pushes nothing.
+- The probe job reads the pin on `main` and npm, and stops in seconds when
+  the pin is current. A dispatched version can take minutes to reach the
+  registry, so the probe waits for it, up to 20 minutes. The pin only moves
+  to a version published after the pinned one, and never to one older than
+  `4.2.0-nightly.202611190245.g6a59a1d` (`FLOOR`); a manual run may test an
+  older version only as a dry run.
+- `HOLD` lists versions (space-separated) the updater never moves to by
+  itself: while npm's newest nightly is one of them, the probe stops and
+  `main` keeps its pin; the next nightly after it is tested as usual. A
+  manual run that names a held version still tests it. It is empty
+  today; take a version out once a newer nightly is pinned.
+- The check job holds no write token. It bumps `package.json` and
+  `package-lock.json`: the pin, and `@mercuryworkshop/epoxy-transport` set
+  to exactly the spec the new version pins in its `devDependencies` (STomp
+  is built and tested with that transport but does not depend on it, so a
+  bump alone would never move it). A version that names no
+  epoxy-transport there, or names one that is neither a git url with a
+  full commit nor an exact version, fails the update. The commit says when
+  epoxy moved. `pnpm-lock.yaml` is not the updater's. The check fails when
+  anything else changed, or anything in `package.json` but those two, so
+  the updater never touches Fracital's own settings: those in
+  `src/libs/stompEngine.ts`, `webTransport` among them, stay as `main`
+  has them. Then it runs the checks an engine bump
+  needs: `npm test`, no tsc errors beyond the pinned version's, two full
+  builds with the protection pipeline (prune, obfuscate, canary check,
+  dist-refs check),
+  `scripts/deploy-check.mjs` on those two builds, `scripts/boot-check.mjs`
+  and `scripts/stomp-check.mjs`. Installs get four tries (a tarball can 404
+  for a while after publish) and deploy-check two (it loads example.com
+  through the relay).
+- stomp-check runs up to three times. `scripts/stomp-check-gate.mjs` then
+  wants every check `stomp-check.mjs` names to have passed in one of the
+  runs, except the known failures in its `KNOWN` list, which also fail on
+  the pinned version (today only "address bar: the page's own url reloads
+  it"). When a known failure passes again, the gate says so; take it out of
+  `KNOWN`. Wikimedia answers a cookieless first visit from the relay's
+  shared exits with 429 (Too Many Requests), and that answer sets the
+  cookies the next visit gets the article with, so stomp-check makes one
+  warm-up visit to the Wikipedia article in its one browser context and
+  ignores its result before the Wikipedia checks. As a safety net,
+  stomp-check marks a check that failed while the site answered a page in
+  the engine with 429 (`rateLimited`) and goes on to the checks after it. A
+  check that failed that way in every run was not tested: the gate tries
+  once more, then lists it as a warning in the run and passes. The
+  Wikipedia checks (title, heading, favicon, and the rewrite workers, which
+  only Wikipedia's scripts exercise) are then untested by the updater; run
+  stomp-check from a network Wikipedia serves to cover them. Any other
+  failure fails the update.
+- If all of that passes, `github-actions[bot]` commits the two files to
+  `main`. A push made with `GITHUB_TOKEN` starts no workflow, so the publish
+  job starts `deploy.yml` with `gh workflow run`, finds that run and waits
+  for it to pass (following a newer deploy that cancelled it, as long as
+  that one contains the update).
+- If `main` moved during the check, nothing is pushed: the publish job
+  starts the workflow again, which bumps and tests on top of the new
+  `main`, up to three times in a row. Runs wait for each other (one
+  concurrency group), so two updates never race.
+- If a check fails, `main` keeps its pin and the workflow opens an issue
+  titled "STomp update needs attention", or comments on the one already
+  open, with the error lines, the failed step and how to reproduce it. If
+  the deploy fails, the issue says so. The schedule retests a version that
+  failed every 6 hours; a new nightly, a dispatch or a manual run tests at
+  once. The next update that passes closes the issue, as does a scheduled
+  probe that finds `main` current and its last deploy passed.
+
+The workflow needs no secrets beyond `GITHUB_TOKEN`. The dispatch is sent
+from powerMouse with a token of its own; without it the 5-minute schedule
+still picks up every nightly within minutes. `stomp-lastfm-check.mjs` is
+left out, because it needs a database and a Last.fm key. A release that
+changes which files the engine needs (see `STOMP_FILES` in vite.config.ts
+and `STOMP_ASSETS` in `src/libs/stompEngine.ts`) fails here until someone
+updates the integration by hand, as does an epoxy-transport whose files
+changed shape (vite.config.ts vendors its `dist/index.mjs` with the
+`epoxy.wasm` it loads, and stomp-h3 from `dist/h3/`).
+
 ## Obfuscation and security (mandatory for all changes)
 
 The client is protected on purpose. Every change must preserve this. A change
@@ -166,7 +255,13 @@ in any user-facing copy.
   `scripts/obfuscate-build.mjs`), never code: a name list entry can match
   bytes in any vendored wasm (Ruffle's data spells `stomP`), and
   `WebAssembly.validate` depends on the build host's CPU (terp has no SSE4.1,
-  so V8 rejects Ruffle's SIMD build there). Never reintroduce a `/scramjet/`, `/stomp/`,
+  so V8 rejects Ruffle's SIMD build there). Embedded wasm is read and
+  written back in its literal's own base64 alphabet (stomp's codec module
+  is URL-safe). A regular expression literal that names an engine is
+  renamed with the strings it matches (`mapProxyRegex`), and a name it
+  spells across an escape, a class or a group name fails the build. A
+  vendored engine page (stomp's controller frame) gets the same renaming in
+  its markup (`mapProxyMarkup`). Never reintroduce a `/scramjet/`, `/stomp/`,
   `/controller/`, or similar fingerprint path, and never ship `.map`/`.d.ts`
   artifacts (`scripts/prune-dist.mjs` removes them; if it removed something,
   find out what shipped them).
