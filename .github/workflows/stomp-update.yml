@@ -75,6 +75,10 @@ env:
   UPSTREAM: Fracital/powerMouse
   # never older than this, whatever a run is asked for (a dry run may test anything)
   FLOOR: 4.2.0-nightly.202611190245.g6a59a1d
+  # versions the updater never moves to by itself (space-separated): a newer nightly moves past
+  # them as usual, and a manual run that names one still tests it. 202611190550 hangs every
+  # proxied page after the first with webTransport on.
+  HOLD: 4.2.0-nightly.202611190550.g1e75f00
   # how long a dispatched version may take to appear on the registry
   NPM_WAIT_SECONDS: "1200"
   # a version that failed is tested again by the schedule after this long (a new nightly at once)
@@ -168,6 +172,11 @@ jobs:
           fi
           commit=$(view "$PACKAGE_NAME@$version" gitHead)
           package=false
+          if [[ -z $REQUESTED && $version != "$current" && " $HOLD " == *" $version "* ]]; then
+            echo "::notice::$PACKAGE_NAME $version is on hold (HOLD); main keeps $current until a newer nightly"
+            echo update=false >>"$GITHUB_OUTPUT"
+            exit 0
+          fi
           if [[ $version != "$current" ]]; then
             package=true
             # never go back: the candidate must have been published after the pin and not before

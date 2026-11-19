@@ -151,6 +151,13 @@ passed. `stomp-update.yml` moves Fracital to each new nightly by itself:
   to a version published after the pinned one, and never to one older than
   `4.2.0-nightly.202611190245.g6a59a1d` (`FLOOR`); a manual run may test an
   older version only as a dry run.
+- `HOLD` lists versions (space-separated) the updater never moves to by
+  itself: while npm's newest nightly is one of them, the probe stops and
+  `main` keeps its pin; the next nightly after it is tested as usual. A
+  manual run that names a held version still tests it. Today it holds
+  `4.2.0-nightly.202611190550.g1e75f00`, which hangs every proxied page
+  after the first with `webTransport` on. Take a version out once a newer
+  nightly is pinned.
 - The check job holds no write token. It bumps `package.json` and
   `package-lock.json` and fails when anything else changed, or anything in
   `package.json` but the pin, so the updater never touches Fracital's own
