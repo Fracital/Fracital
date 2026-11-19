@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useRef } from "react";
-import type { Frame } from "@mercuryworkshop/scramjet-controller";
 import { unrewriteUrl } from "@mercuryworkshop/scramjet";
-import { useTabAudioStore, useTabLoadingStore, useTabsStore } from "../store";
-import { decodeUvUrl, encodeUvUrl, UV_PREFIX } from "../libs/uvEngine";
+import type { Frame } from "@mercuryworkshop/scramjet-controller";
+import { useCallback, useEffect, useRef } from "react";
 import { applyPageStyles, runPageScripts } from "../extensions/runtime";
 import { ExtensionsPlugin } from "../extensions/scramjet";
+import { HistoryUrlPlugin } from "../libs/historyUrlPlugin";
+import { decodeUvUrl, encodeUvUrl, UV_PREFIX } from "../libs/uvEngine";
+import { useTabAudioStore, useTabLoadingStore, useTabsStore } from "../store";
 
 const LOAD_STUCK_MS = 45_000;
 // A single-page navigation's bar: shown at least SPA_MIN_MS, ended once the page's requests are quiet for
@@ -155,7 +156,7 @@ const ExternalSite = ({ url, className, current, id, engine = "sj" }: ExternalSi
 		const controller = window.scramjetController;
 		if (!controller) return null;
 		if (sjFrameRef.current?.element !== iframe) {
-			const frame = controller.createFrame(iframe, { plugins: [new ExtensionsPlugin()] });
+			const frame = controller.createFrame(iframe, { plugins: [new ExtensionsPlugin(), new HistoryUrlPlugin()] });
 			sjFrameRef.current = frame;
 			engineFrameRef.current = { prefix: frame.prefix, go: target => frame.go(target), unrewrite: href => unrewriteUrl(href, frame.context) };
 			navigatedUrlRef.current = undefined;

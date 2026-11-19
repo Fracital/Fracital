@@ -365,6 +365,7 @@ async function connectAccounts(url: string): Promise<AccountsContext> {
 			primary key (user_id, game_key)
 		)`);
 		await migrateArtistTables(pool);
+		await migrateGameEvents(pool);
 		await migrateBilling(pool);
 		// ListenBrainz isn't a sign-in method, so its link lives here instead of in "account".
 		// An empty token means ListenBrainz rejected it; the row stays so a reconnect keeps the account.

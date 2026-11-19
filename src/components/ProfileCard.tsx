@@ -32,8 +32,11 @@ export const ProfileAvatar = ({ user, className }: { user: Pick<ProfileUser, "im
  */
 export const ProfileBanner = ({ profile, className }: { profile: Pick<Profile, "banner" | "bannerColor" | "bannerCrop"> | null; className: string }) =>
 	profile?.banner && profile.bannerCrop ? (
-		<div className={`${className} relative overflow-hidden`}>
-			<img src={profile.banner} alt="" className="absolute max-w-none" style={{ width: `${100 / profile.bannerCrop.w}%`, height: `${100 / profile.bannerCrop.h}%`, left: `${(-profile.bannerCrop.x / profile.bannerCrop.w) * 100}%`, top: `${(-profile.bannerCrop.y / profile.bannerCrop.h) * 100}%` }} />
+		// The wrapper takes the caller's position (the profile header makes it absolute, so it must not become
+		// relative, which would turn it into a flex item squeezed above the details); the image is shifted with a
+		// transform, which needs no positioned parent. Percentages in translate are of the image's own size.
+		<div className={`${className} overflow-hidden`}>
+			<img src={profile.banner} alt="" className="block max-w-none" style={{ width: `${100 / profile.bannerCrop.w}%`, height: `${100 / profile.bannerCrop.h}%`, transform: `translate(${-profile.bannerCrop.x * 100}%, ${-profile.bannerCrop.y * 100}%)` }} />
 		</div>
 	) : profile?.banner ? (
 		<img src={profile.banner} alt="" className={`${className} object-cover`} />
