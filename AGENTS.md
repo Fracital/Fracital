@@ -162,13 +162,20 @@ passed. `stomp-update.yml` moves Fracital to each new nightly by itself:
   and `scripts/stomp-check.mjs`. Installs get four tries (a tarball can 404
   for a while after publish) and deploy-check two (it loads example.com
   through the relay).
-- stomp-check runs up to three times, because Wikipedia answers a runner
-  with 429 now and then. `scripts/stomp-check-gate.mjs` then wants every
-  check `stomp-check.mjs` names to have passed in one of the runs, except
-  the known failures in its `KNOWN` list, which also fail on the pinned
-  version (today only "address bar: the page's own url reloads it"). Any
-  other failure fails the update. When a known failure passes again, the
-  gate says so; take it out of `KNOWN`.
+- stomp-check runs up to three times. `scripts/stomp-check-gate.mjs` then
+  wants every check `stomp-check.mjs` names to have passed in one of the
+  runs, except the known failures in its `KNOWN` list, which also fail on
+  the pinned version (today only "address bar: the page's own url reloads
+  it"). When a known failure passes again, the gate says so; take it out of
+  `KNOWN`. Wikipedia answers GitHub's runners with 429 (Too Many Requests).
+  stomp-check marks a check that failed while the site answered a page in
+  the engine with 429 (`rateLimited`) and goes on to the checks after it. A
+  check that failed that way in every run was not tested: the gate tries
+  once more, then lists it as a warning in the run and passes. The
+  Wikipedia checks (title, heading, favicon, and the rewrite workers, which
+  only Wikipedia's scripts exercise) are then untested by the updater; run
+  stomp-check from a network Wikipedia serves to cover them. Any other
+  failure fails the update.
 - If all of that passes, `github-actions[bot]` commits the two files to
   `main`. A push made with `GITHUB_TOKEN` starts no workflow, so the publish
   job starts `deploy.yml` with `gh workflow run`, finds that run and waits

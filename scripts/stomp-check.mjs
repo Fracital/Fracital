@@ -16,7 +16,11 @@
  *   node scripts/stomp-check.mjs http://localhost:5173/
  *
  * STOMP_CHECK_RESULTS=<file> also writes every check's name and result there
- * as JSON, even when the run stops early (stomp-update.yml compares two runs).
+ * as JSON, even when the run stops early (stomp-update.yml reads it through
+ * scripts/stomp-check-gate.mjs). A check of a site that answered a page in the
+ * engine with 429 (Too Many Requests) while it was checked also carries
+ * rateLimited: true. Wikipedia rate-limits CI runners, and a page it refused
+ * says nothing about the engine; its checks then fail without stopping the run.
  */
 import { writeFileSync } from "node:fs";
 import { chromium } from "playwright-core";
@@ -30,10 +34,13 @@ if (!base) {
 const ENGINE_DIR = "/vendor/rt/";
 const results = [];
 if (process.env.STOMP_CHECK_RESULTS) process.on("exit", () => writeFileSync(process.env.STOMP_CHECK_RESULTS, `${JSON.stringify(results)}\n`));
-const check = (name, pass, detail = "") => {
-	results.push({ name, pass });
-	console.log(`${pass ? "PASS" : "FAIL"} ${name}${detail ? `: ${detail}` : ""}`);
+const check = (name, pass, detail = "", rateLimited = false) => {
+	results.push(rateLimited && !pass ? { name, pass, rateLimited } : { name, pass });
+	console.log(`${pass ? "PASS" : "FAIL"} ${name}${detail ? `: ${detail}` : ""}${rateLimited && !pass ? " (the site answered 429)" : ""}`);
 };
+// 429 answers to the engine's pages so far: a response under the engine directory, or the
+// console's "Failed to load resource" for one (the page's own ads load outside it).
+let tooManyRequests = 0;
 
 const browser = await chromium.launch({ executablePath: "/usr/bin/google-chrome", args: ["--no-sandbox", "--disable-gpu"] });
 const context = await browser.newContext({ viewport: { width: 1400, height: 900 } });
@@ -42,6 +49,10 @@ const errors = [];
 page.on("pageerror", e => errors.push(String(e.stack || e)));
 page.on("console", msg => {
 	if (msg.type() === "error" || msg.type() === "warning") console.log(`  [console.${msg.type()}] ${msg.text().slice(0, 200)}`);
+	if (/status of 429\b/.test(msg.text()) && (msg.location()?.url || "").includes(ENGINE_DIR)) tooManyRequests++;
+});
+page.on("response", response => {
+	if (response.status() === 429 && response.url().includes(ENGINE_DIR)) tooManyRequests++;
 });
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -233,6 +244,10 @@ const reloaded = await waitFor(
 ).catch(() => null);
 check("address bar: the page's own url reloads it", !!reloaded, JSON.stringify(reloaded));
 
+// Wikipedia answers some networks (CI runners) with 429; its checks then fail
+// marked rateLimited, and the run goes on to the checks after them.
+const tooManyBefore = tooManyRequests;
+const wikiCheck = (name, pass, detail) => check(name, pass, detail, tooManyRequests > tooManyBefore);
 await go("https://en.wikipedia.org/wiki/Web_proxy");
 info = await waitFor(
 	async () => {
@@ -241,16 +256,19 @@ info = await waitFor(
 	},
 	"wikipedia to report",
 	60000,
-);
-check("wikipedia: frame url", /^https:\/\/en\.wikipedia\.org\/wiki\/(Web_proxy|Proxy_server)/.test(info.url), info.url);
-check("wikipedia: frame title", /Wikipedia/.test(info.title), info.title);
+).catch(async error => {
+	console.log(`  ${error.message}${tooManyRequests > tooManyBefore ? " (the site answered 429)" : ""}`);
+	return (await frameInfo()) ?? {};
+});
+wikiCheck("wikipedia: frame url", /^https:\/\/en\.wikipedia\.org\/wiki\/(Web_proxy|Proxy_server)/.test(info.url || ""), info.url);
+wikiCheck("wikipedia: frame title", /Wikipedia/.test(info.title || ""), info.title);
 address = await addressBar().inputValue();
-check("wikipedia: address bar", /^https:\/\/en\.wikipedia\.org\/wiki\//.test(address), address);
+wikiCheck("wikipedia: address bar", /^https:\/\/en\.wikipedia\.org\/wiki\//.test(address), address);
 await sleep(1500);
-const wikiHeading = await (await engineFrame())?.evaluate(() => document.querySelector("h1")?.textContent?.trim());
-check("wikipedia: heading rendered", !!wikiHeading, wikiHeading);
+const wikiHeading = await (await engineFrame())?.evaluate(() => document.querySelector("h1")?.textContent?.trim()).catch(() => null);
+wikiCheck("wikipedia: heading rendered", !!wikiHeading && !/too many requests/i.test(wikiHeading), wikiHeading);
 // The icon comes from the page's own navigate report (NavigateInfo.icon), not from reading the frame's DOM.
-check("wikipedia: icon reported by the page", /^https:\/\/en\.wikipedia\.org\/.*favicon/.test(info.icon || ""), info.icon);
+wikiCheck("wikipedia: icon reported by the page", /^https:\/\/en\.wikipedia\.org\/.*favicon/.test(info.icon || ""), info.icon);
 const tabIcon = await waitFor(
 	() =>
 		page.evaluate(() => {
@@ -261,12 +279,13 @@ const tabIcon = await waitFor(
 	"the tab favicon image",
 	20000,
 ).catch(() => null);
-check("wikipedia: tab shows the favicon", !!tabIcon, tabIcon ? tabIcon.slice(0, 60) : "no img in the tab");
+wikiCheck("wikipedia: tab shows the favicon", !!tabIcon, tabIcon ? tabIcon.slice(0, 60) : "no img in the tab");
 // The engine's rewrite workers (rw.js, vendor/rt) took scripts off the service
 // worker: the request log reports where each script it rewrote was rewritten.
 // Missing from the build, every script would say "service-worker".
 const rewrittenIn = await page.evaluate(() => (window.stompRequestLog || []).filter(r => r.rewriteIn).map(r => r.rewriteIn));
-check("scripts are rewritten by the rewrite workers", rewrittenIn.includes("pool"), `${rewrittenIn.filter(w => w === "pool").length} pool, ${rewrittenIn.filter(w => w !== "pool").length} service worker`);
+// Wikipedia's scripts are the ones this counts (example.com has none).
+wikiCheck("scripts are rewritten by the rewrite workers", rewrittenIn.includes("pool"), `${rewrittenIn.filter(w => w === "pool").length} pool, ${rewrittenIn.filter(w => w !== "pool").length} service worker`);
 
 // --- the engine selector shows the controller's build ---
 const build = await page.evaluate(() => window.stompController?.build);
