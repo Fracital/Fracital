@@ -213,11 +213,14 @@ export const bootStomp = (): Promise<StompController> => {
 					module: TRANSPORT_MODULE,
 					options: [{ wisp: wispURL }],
 					http3: { module: H3_MODULE },
-					// Wisp over the relay's WebTransport session (UDP), the WebSocket
-					// otherwise. The relay serves the session on the same host and
-					// gated path as its WebSocket, which is where STomp looks for it
-					// given only the wss: URL (https://<host>/pipe/<key>/).
-					webTransport: true,
+					// Wisp over the relay's WebTransport session is off for now: a
+					// 20 MB download measured 148-160 Mbps over the WebSocket and
+					// 6.2 Mbps over the session, until holyWisp's congestion control
+					// is fixed. Off, the engine never reads what it remembered of a
+					// relay (stomp-wisp-carrier) and always takes the WebSocket.
+					// `true` turns it back on (https://<host>/pipe/<key>/, the same
+					// host and gated path as the WebSocket).
+					webTransport: false,
 				},
 				directory: STOMP_DIRECTORY,
 				assets: STOMP_ASSETS,
