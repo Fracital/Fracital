@@ -282,11 +282,24 @@ export default defineConfig({
 							},
 						},
 						// The transport module stomp's transport worker imports: epoxy over
-						// the relay, the Fracital build (wasm inlined, one file).
+						// the relay, the Fracital build. It loads its wasm next to itself
+						// (new URL("epoxy.wasm", import.meta.url)), so that name is
+						// rewritten to the wasm's neutral one, as for stomp-h3.
 						{
 							src: "node_modules/@mercuryworkshop/epoxy-transport/dist/index.mjs",
 							dest: STOMP_DIR,
 							rename: { stripBase: true, name: stamped("link.mjs") },
+							overwrite: true,
+							transform: (content: string | Buffer) => {
+								const text = content.toString();
+								if (!text.includes('"epoxy.wasm"')) throw new Error("epoxy-transport no longer names epoxy.wasm (epoxy build changed shape)");
+								return text.split('"epoxy.wasm"').join(JSON.stringify(stamped("link.wasm")));
+							},
+						},
+						{
+							src: "node_modules/@mercuryworkshop/epoxy-transport/dist/epoxy.wasm",
+							dest: STOMP_DIR,
+							rename: { stripBase: true, name: stamped("link.wasm") },
 							overwrite: true,
 						},
 						// UV's files, its config, and the loader the service worker imports

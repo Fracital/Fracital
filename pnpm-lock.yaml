@@ -39,8 +39,8 @@ importers:
         specifier: 2.1.9
         version: 2.1.9
       '@mercuryworkshop/epoxy-transport':
-        specifier: git+https://github.com/Fracital/EpoxyTransport.git#e2a70d6a2f0fe0f067da226433e9ff9f95544784
-        version: https://codeload.github.com/Fracital/EpoxyTransport/tar.gz/e2a70d6a2f0fe0f067da226433e9ff9f95544784
+        specifier: git+https://github.com/Fracital/EpoxyTransport.git#195094d70318b2fa453420391a78214d029440cb
+        version: https://codeload.github.com/Fracital/EpoxyTransport/tar.gz/195094d70318b2fa453420391a78214d029440cb
       '@mercuryworkshop/libcurl-transport':
         specifier: ^2.0.6
         version: 2.0.6
@@ -60,8 +60,8 @@ importers:
         specifier: ^3.3.0
         version: 3.3.0
       '@sysce/stomp':
-        specifier: 4.2.0-nightly.202611190245.g6a59a1d
-        version: 4.2.0-nightly.202611190245.g6a59a1d
+        specifier: 4.2.0-nightly.202611190550.g1e75f00
+        version: 4.2.0-nightly.202611190550.g1e75f00
       '@tailwindcss/vite':
         specifier: ^4.3.4
         version: 4.3.4(vite@8.3.6(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15))
@@ -780,8 +780,8 @@ packages:
   '@mercuryworkshop/bare-mux@2.1.9':
     resolution: {integrity: sha512-fiOqWm3VP0Bl8T+0l+qnb7ab9zO+PpKVbtJvOnMsefUv6kWIaoDtqyr9hd/t4gA8oBwgtyZVqIwO2J9nKY9ylw==}
 
-  '@mercuryworkshop/epoxy-transport@https://codeload.github.com/Fracital/EpoxyTransport/tar.gz/e2a70d6a2f0fe0f067da226433e9ff9f95544784':
-    resolution: {gitHosted: true, integrity: sha512-WfUBuyx/t5xGHG67G95zMzqFg3W3Ipj6bQCtJFfX3eRe2iOhW5TetnphUHJgGEnLfjoPiiLII0cVcchRJ4oeBA==, tarball: https://codeload.github.com/Fracital/EpoxyTransport/tar.gz/e2a70d6a2f0fe0f067da226433e9ff9f95544784}
+  '@mercuryworkshop/epoxy-transport@https://codeload.github.com/Fracital/EpoxyTransport/tar.gz/195094d70318b2fa453420391a78214d029440cb':
+    resolution: {gitHosted: true, integrity: sha512-Xh6/HCvmU6OZwPWrgm2YjtylqWgv5Zv5YCYC7sUUiHbXxLm4g/uoOShKvryeAUijnH0a3Q2Y0gcfI9N+YIDrzQ==, tarball: https://codeload.github.com/Fracital/EpoxyTransport/tar.gz/195094d70318b2fa453420391a78214d029440cb}
     version: 3.0.2-fracital.1
 
   '@mercuryworkshop/libcurl-transport@2.0.6':
@@ -1097,8 +1097,8 @@ packages:
   '@swc/types@0.1.28':
     resolution: {integrity: sha512-V6Mnml8v09QALx6K0elJ7o9K/MkVDtW3t6L+7Ou/JcWtb3xwId2AH4FeOceySd2JaO87IMw4+6vSZxLm34LPbw==}
 
-  '@sysce/stomp@4.2.0-nightly.202611190245.g6a59a1d':
-    resolution: {integrity: sha512-oP6mpeCWSTmCIlj5hfDfXlr3lmQTOYs1DnYkbQb2mEr82VXARdx6fMpJ6DzGP+T4y6UPO1FrYbslhUfnsdyG6w==}
+  '@sysce/stomp@4.2.0-nightly.202611190550.g1e75f00':
+    resolution: {integrity: sha512-1BcZ4IzQrxy/QwtrLUPwDvTWn4BoGHUTOQLFZ5aIDTzsqCRqeiJeOrPnMVZHZpFfIpjhsDt6cPqF+i2m/mvFug==}
     engines: {node: '>=22'}
 
   '@tailwindcss/node@4.3.4':
@@ -3076,7 +3076,7 @@ snapshots:
 
   '@mercuryworkshop/bare-mux@2.1.9': {}
 
-  '@mercuryworkshop/epoxy-transport@https://codeload.github.com/Fracital/EpoxyTransport/tar.gz/e2a70d6a2f0fe0f067da226433e9ff9f95544784': {}
+  '@mercuryworkshop/epoxy-transport@https://codeload.github.com/Fracital/EpoxyTransport/tar.gz/195094d70318b2fa453420391a78214d029440cb': {}
 
   '@mercuryworkshop/libcurl-transport@2.0.6':
     dependencies:
@@ -3364,7 +3364,7 @@ snapshots:
     dependencies:
       '@swc/counter': 0.1.3
 
-  '@sysce/stomp@4.2.0-nightly.202611190245.g6a59a1d':
+  '@sysce/stomp@4.2.0-nightly.202611190550.g1e75f00':
     dependencies:
       '@mercuryworkshop/proxy-transports': 1.0.2
       crypto-js: 4.2.0
