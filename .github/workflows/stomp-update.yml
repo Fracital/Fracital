@@ -312,7 +312,8 @@ jobs:
           {
             retry npm view --prefer-online "$PACKAGE_NAME@$VERSION" devDependencies --json >"$RUNNER_TEMP/devdeps.json"
             spec=$(node -p 'require(process.argv[1])?.[process.env.EPOXY_NAME] ?? ""' "$RUNNER_TEMP/devdeps.json")
-            git_spec='^git\+(https|ssh)://[^#[:space:]]+\.git#[0-9a-f]{40}$'
+            # a git url or npm's github: shorthand, either at a full commit
+            git_spec='^(git\+(https|ssh)://[^#[:space:]]+\.git|github:[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)#[0-9a-f]{40}$'
             semver='^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'
             if [[ -z $spec ]]; then
               echo "::error::$PACKAGE_NAME@$VERSION names no $EPOXY_NAME in its devDependencies; Fracital cannot tell which transport it was built with"
