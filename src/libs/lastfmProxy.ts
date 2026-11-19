@@ -4,10 +4,10 @@
  * from the done page. Under the stomp engine the same sign-in runs in a
  * Fracital tab instead: the server hands us Last.fm's auth URL (/lastfm/url),
  * the tab shows it through the proxy, and when Last.fm sends the browser to
- * our callback the proxy refuses to proxy its own origin, which is the signal
- * we wait for. The host then calls the callback first-party with the token,
- * so the server exchanges it exactly as it does for the popup, and closes
- * the tab.
+ * our callback the engine blocks it (a request rule, STOMP_RULES in
+ * stompEngine.ts) and reports its URL, which is the signal we wait for. The
+ * host then calls the callback first-party with the token, so the server
+ * exchanges it exactly as it does for the popup, and closes the tab.
  */
 import { createId } from "@paralleldrive/cuid2";
 import { cryptoFetch } from "./api-crypto-fetch";
@@ -89,8 +89,8 @@ export function connectLastfmInProxy(mode: "signin" | "link"): Promise<void> {
 				unsubscribe();
 				fn();
 			};
-			// The browser reached our callback through the proxy: the worker refused it
-			// (kind "refused", the real URL), and that URL carries the token.
+			// The browser reached our callback through the proxy: the worker blocked it
+			// (kind "blocked", the real URL), and that URL carries the token.
 			const sawUrl = (reported: string) => {
 				const token = tokenFrom(reported, callback);
 				if (token === null) return;

@@ -553,9 +553,18 @@ export const STORE_NAMES = new Set([
 	"stompConfig",
 	"stompServiceWorkers",
 	"stompClientOrigins",
-	// stomp's service worker: CacheStorage
+	"stompClientHints",
+	"stompMediaLoads",
+	"stompDeviceIds",
+	"stompPermissions",
+	"stompDeviceGrants",
+	"stompPasskeys",
+	// stomp's service worker: CacheStorage (the document bundles store is
+	// shared with the worker of the build before, on purpose)
 	"stomp-http-cache",
 	"stomp-rewrite-cache",
+	"stomp-adblock",
+	"stomp-document-bundles",
 	// Scramjet's controller: the cookie jar (IndexedDB)
 	"__scramjet_controller",
 ]);
@@ -575,17 +584,19 @@ export function mapStoreName(s) {
 // the build instead of leaving its store renamed per build again.
 const storeNamesSeen = new Set();
 let proxyFilesTransformed = 0;
-// A database the engine opens under a proxy name that is not listed: an
-// `indexedDB.open("…")`, or idb's `openDB("…", <version>, { upgrade })`
-// whatever the minifier called it.
+// A database or cache the engine opens under a proxy name that is not
+// listed: an `indexedDB.open("…")` or `caches.open("…")`, or idb's
+// `openDB("…", <version>, { upgrade })` whatever the minifier called it. (A
+// name the minifier left in a variable is not seen here; the list is checked
+// against the engine's source on every update.)
 function unlistedStoreOpen(node) {
 	if (node.type !== "CallExpression") return null;
 	const [first, second, third] = node.arguments;
 	if (!first || first.type !== "Literal" || typeof first.value !== "string" || !hasProxyName(first.value) || STORE_NAMES.has(first.value)) return null;
 	const callee = node.callee;
-	const indexedDBOpen = callee.type === "MemberExpression" && !callee.computed && callee.property.name === "open" && ((callee.object.type === "Identifier" && callee.object.name === "indexedDB") || (callee.object.type === "MemberExpression" && callee.object.property?.name === "indexedDB"));
+	const opensOn = name => callee.type === "MemberExpression" && !callee.computed && callee.property.name === "open" && ((callee.object.type === "Identifier" && callee.object.name === name) || (callee.object.type === "MemberExpression" && callee.object.property?.name === name));
 	const idbOpen = second?.type === "Literal" && typeof second.value === "number" && third?.type === "ObjectExpression" && third.properties.some(p => p.type === "Property" && !p.computed && (p.key.name ?? p.key.value) === "upgrade");
-	return indexedDBOpen || idbOpen ? first.value : null;
+	return opensOn("indexedDB") || opensOn("caches") || idbOpen ? first.value : null;
 }
 export function isProxyVendor(full) {
 	const p = full.split(sep).join("/");
@@ -768,13 +779,81 @@ export function mapWasmBytes(buf) {
 	return out;
 }
 
-function mapWasmBase64(value) {
-	const buf = Buffer.from(value, "base64");
+// An embedded module is base64 in either alphabet: the standard one (`+`,
+// `/`, padded) or the URL-safe one (`-`, `_`, usually unpadded; stomp's
+// codec module since 2026-11). The mapped module is written back in the
+// literal's own alphabet and padding, so the bundle's decoder reads it as it
+// read the original. A literal in neither alphabet, or one whose alphabet
+// cannot be told and whose mapped text would need to know, is refused.
+export function mapWasmBase64(value) {
+	const standard = /[+/]/.test(value);
+	const urlSafe = /[-_]/.test(value);
+	if (standard && urlSafe) throw new Error("wasm base64 literal mixes the standard and URL-safe alphabets");
+	const buf = Buffer.from(value, urlSafe ? "base64url" : "base64");
 	if (buf.subarray(0, 4).toString("latin1") !== "\0asm") return null;
+	const padded = value.endsWith("=");
+	const encode = bytes => {
+		let text = bytes.toString("base64");
+		if (urlSafe) text = text.replace(/\+/g, "-").replace(/\//g, "_");
+		return padded ? text : text.replace(/=+$/, "");
+	};
+	if (encode(buf) !== value) throw new Error("wasm base64 literal is not canonical; cannot map it safely");
 	const out = mapWasmBytes(buf);
 	if (out === buf) return null;
-	if (buf.toString("base64") !== value) throw new Error("wasm base64 literal is not canonical; cannot map it safely");
-	return out.toString("base64");
+	const mapped = encode(out);
+	if (!standard && !urlSafe && /[-_+/]/.test(mapped)) throw new Error("wasm base64 literal does not show its alphabet, and the mapped module needs one");
+	return mapped;
+}
+
+// A regular expression literal that names an engine matches the engine's own
+// strings (stomp's service worker escapes its server-timing entries,
+// `stomp-xhr` and the like, with /((?:^|,)\s*stomp-)/g, and its inject bundles
+// unescape them). Those strings are renamed, so the pattern is renamed with
+// them, by the same substitution: it then matches the renamed strings as the
+// original matched the originals. Only a name spelled by plain pattern
+// characters is renamed; a name that runs into an escape, a character class,
+// a group name or a backreference would change the pattern's meaning there,
+// and is refused instead of guessed at.
+export function mapProxyRegex(pattern, flags = "") {
+	if (!hasProxyName(pattern)) return pattern;
+	if (containsSharedName(pattern)) throw new Error(`regular expression /${pattern}/${flags} names an app-shared global`);
+	// plain[i]: the character at i stands for itself, outside any class
+	const plain = new Array(pattern.length).fill(false);
+	const unicodeSets = flags.includes("v");
+	let depth = 0;
+	for (let i = 0; i < pattern.length; i++) {
+		const ch = pattern[i];
+		if (ch === "\\") {
+			// \k<name> and \p{...} / \u{...} carry their own letters
+			const next = pattern[i + 1];
+			if (next === "k" && pattern[i + 2] === "<") i = pattern.indexOf(">", i);
+			else if ((next === "p" || next === "P" || next === "u") && pattern[i + 2] === "{") i = pattern.indexOf("}", i);
+			else i++;
+			if (i < 0) throw new Error(`cannot read the regular expression /${pattern}/${flags}`);
+			continue;
+		}
+		if (depth > 0) {
+			if (ch === "]") depth--;
+			else if (ch === "[" && unicodeSets) depth++;
+			continue;
+		}
+		if (ch === "[") {
+			depth++;
+			continue;
+		}
+		if (ch === "(" && pattern[i + 1] === "?" && pattern[i + 2] === "<" && pattern[i + 3] !== "=" && pattern[i + 3] !== "!") {
+			i = pattern.indexOf(">", i);
+			if (i < 0) throw new Error(`cannot read the regular expression /${pattern}/${flags}`);
+			continue;
+		}
+		plain[i] = true;
+	}
+	return pattern.replace(PROXY_RE_G, (match, at) => {
+		for (let k = at; k < at + match.length; k++) {
+			if (!plain[k]) throw new Error(`regular expression /${pattern}/${flags} spells ${match} across an escape, a class or a group name; rename it by hand`);
+		}
+		return proxyReplacement(match);
+	});
 }
 
 function collectProxyEdits(ast, comments, source, name, crypto, nameHint) {
@@ -791,7 +870,7 @@ function collectProxyEdits(ast, comments, source, name, crypto, nameHint) {
 
 	walk(ast, null, null, (node, parent, key) => {
 		const unlisted = unlistedStoreOpen(node);
-		if (unlisted !== null) throw new Error(`${nameHint} opens a database named ${unlisted}: list it in STORE_NAMES so it keeps its name across builds`);
+		if (unlisted !== null) throw new Error(`${nameHint} opens a database or cache named ${unlisted}: list it in STORE_NAMES so it keeps its name across builds`);
 		if (node.type === "Identifier" || node.type === "PrivateIdentifier") {
 			if (!hasProxyName(node.name)) return;
 			const pieces = APP_SHARED_NAMES.get(node.name);
@@ -860,12 +939,20 @@ function collectProxyEdits(ast, comments, source, name, crypto, nameHint) {
 			return;
 		}
 
+		if (node.type === "Literal" && node.regex) {
+			const { pattern, flags } = node.regex;
+			if (!hasProxyName(pattern)) return;
+			edits.push({ start: node.start, end: node.end, text: `/${mapProxyRegex(pattern, flags)}/${flags}` });
+			return;
+		}
+
 		if (node.type === "Literal" && typeof node.value === "string") {
 			const v = node.value;
 			if (shouldSkipLiteral(node, parent, key)) return;
 			// Embedded wasm (bare base64, or a data: URI): map its names in the binary
 			// and keep the blob encrypted. Its base64 text never shows a proxy name.
-			const wm = /(^|base64,)(AGFzbQ[A-Za-z0-9+/=]*)/.exec(v);
+			// Either base64 alphabet: mapWasmBase64 reads and writes the literal's own.
+			const wm = /(^|base64,)(AGFzbQ[A-Za-z0-9+/=_-]*)/.exec(v);
 			if (wm && v.length > 64) {
 				const mapped = mapWasmBase64(wm[2]);
 				const text = mapped === null ? v : v.slice(0, wm.index) + wm[1] + mapped + v.slice(wm.index + wm[0].length);
@@ -1048,6 +1135,20 @@ function neutralizeTitleMeta(html) {
 	return { html, changed };
 }
 
+// The proxy transform for an HTML page's markup: proxy names outside the
+// <script> elements renamed (same-length, as in the scripts), and a comment
+// that names one removed unless it is a legal notice. Script bodies are left
+// to the script transform.
+export function mapProxyMarkup(html) {
+	return html
+		.split(/(<script\b[^>]*>[\s\S]*?<\/script>)/i)
+		.map((part, i) => {
+			if (i % 2 === 1) return part;
+			return part.replace(/<!--[\s\S]*?-->/g, c => (hasProxyName(c) && !LEGAL_RE.test(c) ? "" : c)).replace(PROXY_RE_G, proxyReplacement);
+		})
+		.join("");
+}
+
 function processHtmlFile(full) {
 	let html = readFileSync(full, "utf8");
 	if (html.includes(MARKER)) return { skipped: "already-obfuscated" };
@@ -1072,13 +1173,24 @@ function processHtmlFile(full) {
 		return `<script${attrs}>${res.code}</script>`;
 	});
 
+	// A vendored engine page (stomp's controller frame) names the engine in its
+	// markup too: its title, and a meta its script reads by name. The markup
+	// outside the scripts gets the proxy transform's renaming, so that name
+	// agrees with the renamed script, and a comment naming the engine goes.
+	let markupMapped = false;
+	if (isProxyVendor(full)) {
+		const mapped = mapProxyMarkup(html);
+		markupMapped = mapped !== html;
+		html = mapped;
+	}
+
 	// Final safety: no canary may survive anywhere in the shell.
 	const leftover = CANARIES.filter(c => html.includes(c));
 	if (leftover.length) {
 		throw new Error(`canary still present in ${rel} after obfuscation: ${leftover.map(c => JSON.stringify(c)).join(", ")}`);
 	}
 
-	const changed = nt.changed || scriptCount > 0;
+	const changed = nt.changed || scriptCount > 0 || markupMapped;
 	if (changed) {
 		html = `<!--${MARKER}-->` + html;
 		writeFileSync(full, html);

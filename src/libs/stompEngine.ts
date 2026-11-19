@@ -40,13 +40,29 @@ export const STOMP_DIRECTORY = "/vendor/rt/";
  * file of the build before.
  */
 const stamped = (name: string) => name.replace(/\.(?=[^.]+$)/, `.${__BUILD_STAMP__}.`);
-/** The vendored file names (vite.config.ts STOMP_FILES). */
-const STOMP_ASSETS: Assets = {
+/**
+ * The vendored file names (vite.config.ts STOMP_FILES). Required: a file the
+ * engine gains in a release fails the type check here until it is vendored,
+ * instead of being asked for under its package name.
+ */
+const STOMP_ASSETS: Required<Assets> = {
 	serviceWorker: stamped("sw.js"),
 	injectDocument: stamped("doc.js"),
 	injectWorker: stamped("wk.js"),
+	injectDocumentFull: stamped("df.js"),
+	injectWorkerFull: stamped("wf.js"),
+	controllerFrame: stamped("fr.html"),
+	controllerFrameScript: stamped("fr.js"),
+	siteFrameScript: stamped("sf.js"),
 	transportWorker: stamped("tw.js"),
+	rtcWorker: stamped("cw.js"),
+	rtc: stamped("cn.wasm"),
+	rtcStack: stamped("cs.js"),
 	rewriteWorker: stamped("rw.js"),
+	core: stamped("rx.wasm"),
+	blocker: stamped("bk.wasm"),
+	adblockResources: stamped("bk.json"),
+	rewriterLib: stamped("rl.js"),
 };
 const CONTROLLER_MODULE = `${STOMP_DIRECTORY}${stamped("api.mjs")}`;
 /** The epoxy transport module (Fracital build), imported by stomp's transport worker, never by a page. */
@@ -65,6 +81,8 @@ export type StompStatus = "idle" | "booting" | "ready" | "failed";
 /** The origin presented to the Last.fm hosts below as the first party. */
 const FIRST_PARTY_ORIGIN = "https://fracital.xyz";
 const firstParty = { Origin: FIRST_PARTY_ORIGIN, Referer: `${FIRST_PARTY_ORIGIN}/` };
+/** Where Last.fm sends the browser back with its token (src/server/accounts.ts beginLastfmAuth: the origin the user is on). */
+const LASTFM_CALLBACK_PATH = "/api/auth/lastfm/callback";
 /**
  * Request rules applied in the service worker to the real URL, first match
  * wins; `onRequest` reports the index applied as `rule`. Narrow on purpose:
@@ -72,10 +90,17 @@ const firstParty = { Origin: FIRST_PARTY_ORIGIN, Referer: `${FIRST_PARTY_ORIGIN}
  * Fracital's first-party Origin and Referer, as a popup from fracital.xyz
  * would send; the login form (POST /login) and every other Last.fm page keep
  * the Origin the page itself implies, which their CSRF checks expect.
+ *
+ * The last rule blocks our own Last.fm callback: the engine proxies a URL of
+ * its own origin like any other site's (it refused them before powerMouse 5616d7cd),
+ * and the callback must never go out through the relay. The blocked request
+ * is still reported with its real URL, which is what lastfmProxy.ts waits
+ * for before it calls the callback first-party.
  */
 export const STOMP_RULES: RequestRule[] = [
 	{ match: { url: "https://www.last.fm/api/auth*" }, action: { requestHeaders: firstParty } },
 	{ match: { url: "https://ws.audioscrobbler.com/*" }, action: { requestHeaders: firstParty } },
+	{ match: { url: `${location.origin}${LASTFM_CALLBACK_PATH}` }, action: "block" },
 ];
 
 const REQUEST_LOG_SIZE = 200;

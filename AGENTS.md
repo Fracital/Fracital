@@ -131,6 +131,33 @@ regression, even if the site still works.
   visit after the swap loads a file of the build before or when an engine
   does not start.
 
+## Keeping STomp current (`.github/workflows/stomp-update.yml`)
+
+powerMouse publishes its `master` branch to npm as `@sysce/stomp@nightly`
+at 07:17 UTC, and only publishes a commit whose CI passed. At 08:43 and
+20:43 UTC, `stomp-update.yml` reads the nightly tag. If that version was
+published after the one `package.json` pins, the workflow bumps
+`package.json` and `package-lock.json` and runs the checks an engine bump
+needs: `npm test`, no tsc errors beyond the pinned version's,
+`scripts/deploy-check.mjs` (two full builds with the protection pipeline,
+then the swap between them) and `scripts/boot-check.mjs`. It also runs
+`scripts/stomp-check.mjs` on both versions and fails when a check that
+passed on the pinned version fails on the new one. The exit code alone
+cannot be the gate, because the pinned version does not pass every check.
+`stomp-lastfm-check.mjs` is left out, because it needs a database and a
+Last.fm key. If every check passes, `github-actions[bot]` commits the two
+files to `main` and starts `deploy.yml` with `gh workflow run`, because a
+push made with `GITHUB_TOKEN` starts no workflow. If `main` moved during the
+check, nothing is pushed, and the next run tries again on top of the new
+`main`. If a check fails, `main` keeps its pin and the workflow opens an
+issue titled "STomp update needs attention", or comments on the one already
+open. The next update that passes closes the issue. The job that runs npm
+and the build holds only a read token. The workflow needs no secrets beyond
+`GITHUB_TOKEN`. A release that changes which files the engine needs (see
+`STOMP_FILES` in vite.config.ts and `STOMP_ASSETS` in
+`src/libs/stompEngine.ts`) fails here until someone updates the
+integration by hand.
+
 ## Obfuscation and security (mandatory for all changes)
 
 The client is protected on purpose. Every change must preserve this. A change
@@ -166,7 +193,13 @@ in any user-facing copy.
   `scripts/obfuscate-build.mjs`), never code: a name list entry can match
   bytes in any vendored wasm (Ruffle's data spells `stomP`), and
   `WebAssembly.validate` depends on the build host's CPU (terp has no SSE4.1,
-  so V8 rejects Ruffle's SIMD build there). Never reintroduce a `/scramjet/`, `/stomp/`,
+  so V8 rejects Ruffle's SIMD build there). Embedded wasm is read and
+  written back in its literal's own base64 alphabet (stomp's codec module
+  is URL-safe). A regular expression literal that names an engine is
+  renamed with the strings it matches (`mapProxyRegex`), and a name it
+  spells across an escape, a class or a group name fails the build. A
+  vendored engine page (stomp's controller frame) gets the same renaming in
+  its markup (`mapProxyMarkup`). Never reintroduce a `/scramjet/`, `/stomp/`,
   `/controller/`, or similar fingerprint path, and never ship `.map`/`.d.ts`
   artifacts (`scripts/prune-dist.mjs` removes them; if it removed something,
   find out what shipped them).

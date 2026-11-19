@@ -14,7 +14,11 @@
  * id surviving a reload.
  *
  *   node scripts/stomp-check.mjs http://localhost:5173/
+ *
+ * STOMP_CHECK_RESULTS=<file> also writes every check's name and result there
+ * as JSON, even when the run stops early (stomp-update.yml compares two runs).
  */
+import { writeFileSync } from "node:fs";
 import { chromium } from "playwright-core";
 
 const base = process.argv[2];
@@ -25,6 +29,7 @@ if (!base) {
 
 const ENGINE_DIR = "/vendor/rt/";
 const results = [];
+if (process.env.STOMP_CHECK_RESULTS) process.on("exit", () => writeFileSync(process.env.STOMP_CHECK_RESULTS, `${JSON.stringify(results)}\n`));
 const check = (name, pass, detail = "") => {
 	results.push({ name, pass });
 	console.log(`${pass ? "PASS" : "FAIL"} ${name}${detail ? `: ${detail}` : ""}`);
@@ -190,7 +195,16 @@ info = await waitFor(
 	"the page to navigate itself to example.org",
 	45000,
 ).catch(() => null);
-address = await addressBar().inputValue();
+// The controller's frame has the new url as it dispatches the report; the
+// address bar follows with the render that report causes, some ms later.
+address = await waitFor(
+	async () => {
+		const value = await addressBar().inputValue();
+		return value === "https://example.org/" ? value : null;
+	},
+	"the address bar to follow the page",
+	5000,
+).catch(() => addressBar().inputValue());
 check("page-made navigation: tab follows to example.org", info?.url === "https://example.org/" && address === "https://example.org/", `${info?.url} / ${address}`);
 await go("https://example.com/");
 info = await waitFor(

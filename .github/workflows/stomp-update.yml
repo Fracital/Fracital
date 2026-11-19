@@ -1,0 +1,290 @@
+# Keep @sysce/stomp at the newest nightly.
+#
+# powerMouse (Fracital/powerMouse) publishes master as @sysce/stomp@nightly at 07:17 UTC, and on a
+# manual run, and only a commit whose CI passed (its nightly.yml). Twice a day this workflow looks
+# at the nightly tag. When it names a version published after the one package.json pins, the check
+# job bumps package.json and package-lock.json and runs what an engine bump needs (AGENTS.md):
+# the unit tests, no new tsc errors, deploy-check.mjs (two full builds with the protection
+# pipeline, then the swap between them in one browser profile, both engines) and boot-check.mjs.
+# It also runs stomp-check.mjs on the pinned version and on the new one and fails when a check
+# that passed before fails now (the pinned version does not pass every check, so its exit code
+# cannot be the gate).
+#
+# The check job holds no write token; it only reads. When it passes, the publish job commits the
+# two files as github-actions[bot] straight to main and starts deploy.yml (a push made with
+# GITHUB_TOKEN starts no workflow, a workflow_dispatch does). When main moved during the check,
+# nothing is pushed and the next run tests again on the new main. When the check fails, the report
+# job opens an issue, or comments on the open one, and main is not touched. A later update that
+# passes closes the issue.
+#
+# stomp-lastfm-check.mjs is not run: it needs a database and a Last.fm key.
+
+name: STomp update
+
+on:
+  schedule:
+    - cron: "43 8 * * *"
+    - cron: "43 20 * * *"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "A @sysce/stomp version to try instead of the nightly tag (empty: the nightly tag)"
+        required: false
+        default: ""
+
+concurrency:
+  group: stomp-update
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  ISSUE_TITLE: STomp update needs attention
+  YOUTUBE_DL_SKIP_DOWNLOAD: "1"
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    outputs:
+      update: ${{ steps.want.outputs.update }}
+      current: ${{ steps.want.outputs.current }}
+      version: ${{ steps.want.outputs.version }}
+      commit: ${{ steps.want.outputs.commit }}
+      base: ${{ steps.want.outputs.base }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: main
+          persist-credentials: false
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 26
+          cache: npm
+
+      - name: Newest nightly
+        id: want
+        env:
+          REQUESTED: ${{ inputs.version }}
+        run: |
+          current=$(node -p 'require("./package.json").dependencies["@sysce/stomp"]')
+          version=${REQUESTED:-$(npm view @sysce/stomp@nightly version)}
+          commit=$(npm view "@sysce/stomp@$version" gitHead)
+          {
+            echo "current=$current"
+            echo "version=$version"
+            echo "commit=$commit"
+            echo "base=$(git rev-parse HEAD)"
+          } >>"$GITHUB_OUTPUT"
+          if [[ $version == "$current" ]]; then
+            echo "::notice::@sysce/stomp $current is the newest nightly"
+            echo update=false >>"$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # never go back: the candidate must have been published after the pin
+          # (a manual run may name any version)
+          if [[ -z $REQUESTED ]]; then
+            npm view @sysce/stomp time --json >"$RUNNER_TEMP/times.json"
+            if ! node -e '
+              const t = require(process.argv[1]);
+              process.exit(Date.parse(t[process.argv[3]]) > Date.parse(t[process.argv[2]] ?? 0) ? 0 : 1);
+            ' "$RUNNER_TEMP/times.json" "$current" "$version"; then
+              echo "::warning::the nightly tag names $version, published before the pinned $current; not updating"
+              echo update=false >>"$GITHUB_OUTPUT"
+              exit 0
+            fi
+          fi
+          echo "::notice::@sysce/stomp $current -> $version (powerMouse $commit)"
+          echo update=true >>"$GITHUB_OUTPUT"
+
+      - name: Install the pinned version
+        if: steps.want.outputs.update == 'true'
+        run: npm ci
+
+      - name: tsc errors before
+        if: steps.want.outputs.update == 'true'
+        run: |
+          n=$( (npx tsc -p tsconfig.json --noEmit || true) | grep -c 'error TS' || true)
+          echo "TSC_BEFORE=$n" >>"$GITHUB_ENV"
+          echo "tsc: $n errors on the pinned version"
+
+      - name: stomp-check on the pinned version
+        if: steps.want.outputs.update == 'true'
+        run: |
+          npm run build
+          PORT=5231 setsid npx tsx backend.ts >"$RUNNER_TEMP/backend-before.log" 2>&1 &
+          pid=$!
+          for _ in $(seq 1 60); do curl -fsS -o /dev/null http://127.0.0.1:5231/ && break; sleep 1; done
+          STOMP_CHECK_RESULTS="$RUNNER_TEMP/stomp-before.json" node scripts/stomp-check.mjs http://127.0.0.1:5231/ || true
+          kill -- "-$pid" || true
+          # the comparison needs a run that got somewhere
+          # shellcheck disable=SC2016 # the single-quoted $ are JavaScript's
+          node -e 'const r = require(process.argv[1]); console.log(`pinned version: ${r.filter(c => c.pass).length} of ${r.length} checks pass`); process.exit(r.some(c => c.pass) ? 0 : 1)' "$RUNNER_TEMP/stomp-before.json"
+
+      - name: Bump @sysce/stomp
+        if: steps.want.outputs.update == 'true'
+        env:
+          VERSION: ${{ steps.want.outputs.version }}
+        run: |
+          npm install --save-exact "@sysce/stomp@$VERSION"
+          changed=$(git status --porcelain | awk '{print $2}' | sort | tr '\n' ' ')
+          if [[ $changed != "package-lock.json package.json " ]]; then
+            echo "::error::the bump changed more than package.json and package-lock.json: $changed"
+            exit 1
+          fi
+          mkdir -p "$RUNNER_TEMP/bump"
+          cp package.json package-lock.json "$RUNNER_TEMP/bump/"
+          # install from the new lockfile as the deploy does
+          npm ci
+
+      - uses: actions/upload-artifact@v4
+        if: steps.want.outputs.update == 'true'
+        with:
+          name: stomp-bump
+          path: ${{ runner.temp }}/bump/
+          retention-days: 7
+          if-no-files-found: error
+
+      - name: No new tsc errors
+        if: steps.want.outputs.update == 'true'
+        run: |
+          n=$( (npx tsc -p tsconfig.json --noEmit || true) | tee "$RUNNER_TEMP/tsc.log" | grep -c 'error TS' || true)
+          echo "tsc: $n errors (pinned version: $TSC_BEFORE)"
+          if (( n > TSC_BEFORE )); then
+            grep 'error TS' "$RUNNER_TEMP/tsc.log"
+            exit 1
+          fi
+
+      - name: Unit tests
+        if: steps.want.outputs.update == 'true'
+        run: npm test
+
+      # two full builds (npm run build, with the protection pipeline), then a deploy between them
+      - name: deploy-check
+        if: steps.want.outputs.update == 'true'
+        run: node scripts/deploy-check.mjs
+
+      - name: boot-check and stomp-check on the new version
+        if: steps.want.outputs.update == 'true'
+        run: |
+          test -f dist/index.html
+          PORT=5231 setsid npx tsx backend.ts >"$RUNNER_TEMP/backend-after.log" 2>&1 &
+          pid=$!
+          trap 'kill -- "-$pid" || true' EXIT
+          for _ in $(seq 1 60); do curl -fsS -o /dev/null http://127.0.0.1:5231/ && break; sleep 1; done
+          node scripts/boot-check.mjs http://127.0.0.1:5231/
+          STOMP_CHECK_RESULTS="$RUNNER_TEMP/stomp-after.json" node scripts/stomp-check.mjs http://127.0.0.1:5231/ || true
+          # a check that passed on the pinned version must pass now; one that is missing
+          # (the run stopped before it) counts as failed
+          # shellcheck disable=SC2016 # the single-quoted $ are JavaScript's
+          node -e '
+            const [before, after] = process.argv.slice(1).map(f => { try { return require(f); } catch { return []; } });
+            const passed = new Set(after.filter(r => r.pass).map(r => r.name));
+            const lost = before.filter(r => r.pass && !passed.has(r.name)).map(r => r.name);
+            const fixed = after.filter(r => r.pass && !before.some(b => b.pass && b.name === r.name)).map(r => r.name);
+            if (fixed.length) console.log(`passes now, failed before: ${fixed.join("; ")}`);
+            if (lost.length) { console.log(`::error::stomp-check: passed on the pinned version, fails now: ${lost.join("; ")}`); process.exit(1); }
+            console.log(`stomp-check: no check lost (${passed.size} pass)`);
+          ' "$RUNNER_TEMP/stomp-before.json" "$RUNNER_TEMP/stomp-after.json"
+
+  publish:
+    needs: check
+    if: needs.check.outputs.update == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      actions: write
+      issues: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      CURRENT: ${{ needs.check.outputs.current }}
+      VERSION: ${{ needs.check.outputs.version }}
+      COMMIT: ${{ needs.check.outputs.commit }}
+      BASE: ${{ needs.check.outputs.base }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.check.outputs.base }}
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: stomp-bump
+          path: ${{ runner.temp }}/bump/
+
+      - name: Commit and push to main
+        id: push
+        run: |
+          cp "$RUNNER_TEMP/bump/package.json" "$RUNNER_TEMP/bump/package-lock.json" .
+          changed=$(git status --porcelain | awk '{print $2}' | sort | tr '\n' ' ')
+          if [[ $changed != "package-lock.json package.json " ]]; then
+            echo "::error::unexpected changes: $changed"
+            exit 1
+          fi
+          git fetch --no-tags origin main
+          if [[ $(git rev-parse FETCH_HEAD) != "$BASE" ]]; then
+            echo "::warning::main moved while the update was checked; nothing pushed, the next run checks again"
+            echo pushed=false >>"$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git add package.json package-lock.json
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit -q --no-verify -m "Update STomp to $VERSION" -m "@sysce/stomp $CURRENT -> $VERSION, built from Fracital/powerMouse@$COMMIT."
+          git push origin HEAD:main
+          echo pushed=true >>"$GITHUB_OUTPUT"
+          echo "::notice::pushed $(git rev-parse HEAD) to main"
+
+      - name: Deploy
+        if: steps.push.outputs.pushed == 'true'
+        run: gh workflow run deploy.yml --ref main
+
+      - name: Close the failure issue
+        if: steps.push.outputs.pushed == 'true'
+        run: |
+          n=$(gh issue list --state open --author app/github-actions --json number,title \
+            --jq 'map(select(.title == env.ISSUE_TITLE))[0].number // empty')
+          if [[ -n $n ]]; then
+            gh issue close "$n" --comment "Updated to \`$VERSION\` in $(git rev-parse HEAD); deploy started."
+          fi
+
+  report:
+    needs: [check, publish]
+    if: always() && needs.check.outputs.update == 'true' && (needs.check.result == 'failure' || needs.publish.result == 'failure')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: read
+      issues: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      CURRENT: ${{ needs.check.outputs.current }}
+      VERSION: ${{ needs.check.outputs.version }}
+      COMMIT: ${{ needs.check.outputs.commit }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+    steps:
+      - name: Open or update the issue
+        run: |
+          # shellcheck disable=SC2016 # the single-quoted $ are jq's
+          steps=$(gh run view "$GITHUB_RUN_ID" --json jobs \
+            --jq '[.jobs[] | .name as $j | .steps[] | select(.conclusion == "failure") | "\($j): \(.name)"] | join(", ")')
+          marker="<!-- stomp-update-failed: $VERSION -->"
+          body=$(printf '%s\n\n%s\n\n%s\n\n%s\n' \
+            "Updating \`@sysce/stomp\` from \`$CURRENT\` to \`$VERSION\` (Fracital/powerMouse@$COMMIT) failed, so main still pins \`$CURRENT\`." \
+            "Failed: ${steps:-see the run}. Run: $RUN_URL" \
+            "To reproduce: \`npm install @sysce/stomp@$VERSION --save-exact\`, then \`npm run build\`, \`npm test\`, \`node scripts/deploy-check.mjs\` and \`node scripts/stomp-check.mjs <url>\` against the backend." \
+            "$marker")
+          n=$(gh issue list --state open --author app/github-actions --json number,title \
+            --jq 'map(select(.title == env.ISSUE_TITLE))[0].number // empty')
+          if [[ -z $n ]]; then
+            gh issue create --title "$ISSUE_TITLE" --body "$body"
+          elif ! gh issue view "$n" --json body,comments --jq '[.body, .comments[].body] | join("\n")' | grep -qF "$marker"; then
+            gh issue comment "$n" --body "$body"
+          else
+            echo "issue #$n already reports $VERSION"
+          fi
