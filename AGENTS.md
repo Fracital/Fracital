@@ -154,10 +154,11 @@ passed. `stomp-update.yml` moves Fracital to each new nightly by itself:
 - The check job holds no write token. It bumps `package.json` and
   `package-lock.json` and fails when anything else changed, or anything in
   `package.json` but the pin, so the updater never touches Fracital's own
-  settings: `src/libs/stompEngine.ts` ships `webTransport: false` on
-  purpose. Then it runs the checks an engine bump needs: `npm test`, no tsc
-  errors beyond the pinned version's, two full builds with the protection
-  pipeline (prune, obfuscate, canary check, dist-refs check),
+  settings: those in `src/libs/stompEngine.ts`, `webTransport` among
+  them, stay as `main` has them. Then it runs the checks an engine bump
+  needs: `npm test`, no tsc errors beyond the pinned version's, two full
+  builds with the protection pipeline (prune, obfuscate, canary check,
+  dist-refs check),
   `scripts/deploy-check.mjs` on those two builds, `scripts/boot-check.mjs`
   and `scripts/stomp-check.mjs`. Installs get four tries (a tarball can 404
   for a while after publish) and deploy-check two (it loads example.com

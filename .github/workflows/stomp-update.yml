@@ -26,8 +26,9 @@
 # error lines; main keeps its pin. A later update that passes, or a scheduled probe that finds main
 # current and deployed, closes the issue.
 #
-# Fracital's own settings are never the updater's to change: src/libs/stompEngine.ts ships
-# webTransport: false on purpose, and the check fails if the bump or the build touched it.
+# Fracital's own settings are never the updater's to change: src/libs/stompEngine.ts (its
+# webTransport setting among them) stays as main has it, and the check fails if the bump or the
+# build touched it.
 # stomp-lastfm-check.mjs is not run: it needs a database and a Last.fm key.
 
 name: STomp update
@@ -294,7 +295,7 @@ jobs:
           cp package.json package-lock.json "$RUNNER_TEMP/bump/"
 
       # package.json and package-lock.json, and in package.json only the pin; src/libs/stompEngine.ts
-      # (webTransport: false) and every other file stay as main has them
+      # (webTransport among its settings) and every other file stay as main has them
       - name: Only the pin changed
         run: |
           {

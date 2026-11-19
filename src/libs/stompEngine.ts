@@ -213,14 +213,15 @@ export const bootStomp = (): Promise<StompController> => {
 					module: TRANSPORT_MODULE,
 					options: [{ wisp: wispURL }],
 					http3: { module: H3_MODULE },
-					// Wisp over the relay's WebTransport session is off for now: a
-					// 20 MB download measured 148-160 Mbps over the WebSocket and
-					// 6.2 Mbps over the session, until holyWisp's congestion control
-					// is fixed. Off, the engine never reads what it remembered of a
-					// relay (stomp-wisp-carrier) and always takes the WebSocket.
-					// `true` turns it back on (https://<host>/pipe/<key>/, the same
-					// host and gated path as the WebSocket).
-					webTransport: false,
+					// Wisp over the relay's WebTransport session (QUIC, UDP) to
+					// https://<host>/pipe/<key>/, the same host and gated path as the
+					// WebSocket, and the WebSocket otherwise. A relay the engine has not
+					// met is used over the WebSocket while a session is tried beside it;
+					// what worked is remembered in stomp-wisp-carrier for the next start.
+					// It was off while holyWisp's session was slow (fixed with BBR) and a
+					// first visit to GitHub over it stalled (holyWisp's PMTU handling,
+					// fixed). `false` builds no carrier and always takes the WebSocket.
+					webTransport: true,
 				},
 				directory: STOMP_DIRECTORY,
 				assets: STOMP_ASSETS,
