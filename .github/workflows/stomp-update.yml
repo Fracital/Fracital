@@ -1,37 +1,60 @@
 # Keep @sysce/stomp at the newest nightly.
 #
 # powerMouse (Fracital/powerMouse) publishes master as @sysce/stomp@nightly at 07:17 UTC, and on a
-# manual run, and only a commit whose CI passed (its nightly.yml). Twice a day this workflow looks
-# at the nightly tag. When it names a version published after the one package.json pins, the check
-# job bumps package.json and package-lock.json and runs what an engine bump needs (AGENTS.md):
-# the unit tests, no new tsc errors, deploy-check.mjs (two full builds with the protection
-# pipeline, then the swap between them in one browser profile, both engines) and boot-check.mjs.
-# It also runs stomp-check.mjs on the pinned version and on the new one and fails when a check
-# that passed before fails now (the pinned version does not pass every check, so its exit code
-# cannot be the gate).
+# manual run, and only a commit whose CI passed (its nightly.yml). Right after it publishes, its
+# nightly.yml can send this repository a repository_dispatch, type stomp-nightly, with the version
+# in client_payload.version, so the update starts within minutes. Every 5 minutes the schedule
+# checks too, which is what catches a nightly while powerMouse has no dispatch token (and a lost
+# dispatch). The package only moves to a version published after the pinned one. A manual run may
+# name a version, and with dry_run it only tests (an older version only as a dry run).
 #
-# The check job holds no write token; it only reads. When it passes, the publish job commits the
-# two files as github-actions[bot] straight to main and starts deploy.yml (a push made with
-# GITHUB_TOKEN starts no workflow, a workflow_dispatch does). When main moved during the check,
-# nothing is pushed and the next run tests again on the new main. When the check fails, the report
-# job opens an issue, or comments on the open one, and main is not touched. A later update that
-# passes closes the issue.
+# The probe job reads the pin and npm and stops there when the pin is current (seconds, no
+# install). The check job holds no write token. It bumps package.json and package-lock.json, fails
+# when anything else changed, and runs what an engine bump needs (AGENTS.md): the unit tests, no
+# tsc errors beyond the pinned version's, two full builds (npm run build: prune, obfuscate, canary
+# check, dist-refs check), deploy-check.mjs on those two builds (the swap between them in one
+# browser profile, both engines), boot-check.mjs and stomp-check.mjs. stomp-check runs up to three
+# times, because Wikipedia answers a runner with 429 now and then; scripts/stomp-check-gate.mjs
+# then wants every check to have passed in one of the runs, except the known failures it lists.
 #
+# When it passes, the publish job commits the two files as github-actions[bot] straight to main,
+# starts deploy.yml (a push made with GITHUB_TOKEN starts no workflow, a workflow_dispatch does)
+# and waits for that deploy to pass. When main moved during the check, nothing is pushed: the
+# publish job starts this workflow again, which tests the update on top of the new main. When the
+# check or the deploy fails, the report job opens an issue, or comments on the open one, with the
+# error lines; main keeps its pin. A later update that passes, or a scheduled probe that finds main
+# current and deployed, closes the issue.
+#
+# Fracital's own settings are never the updater's to change: src/libs/stompEngine.ts ships
+# webTransport: false on purpose, and the check fails if the bump or the build touched it.
 # stomp-lastfm-check.mjs is not run: it needs a database and a Last.fm key.
 
 name: STomp update
 
 on:
+  repository_dispatch:
+    types: [stomp-nightly]
   schedule:
-    - cron: "43 8 * * *"
-    - cron: "43 20 * * *"
+    # GitHub runs no schedule more often than every 5 minutes; a current pin stops in seconds.
+    - cron: "*/5 * * * *"
   workflow_dispatch:
     inputs:
       version:
         description: "A @sysce/stomp version to try instead of the nightly tag (empty: the nightly tag)"
         required: false
         default: ""
+      dry_run:
+        description: "Only test: run every check (on the pin when it is current), push nothing, open no issue"
+        type: boolean
+        required: false
+        default: false
+      retry:
+        description: "Set by this workflow when main moved during a run (how many times it retried)"
+        required: false
+        default: "0"
 
+# one update at a time: a newer run waits for the one in flight, and replaces a run already waiting
+# (both read the nightly tag, which only moves forward)
 concurrency:
   group: stomp-update
   cancel-in-progress: false
@@ -39,26 +62,193 @@ concurrency:
 permissions:
   contents: read
 
+# bash with pipefail, so a check piped into tee still fails its step
+defaults:
+  run:
+    shell: bash
+
 env:
   ISSUE_TITLE: STomp update needs attention
+  PACKAGE_NAME: "@sysce/stomp"
+  UPSTREAM: Fracital/powerMouse
+  # never older than this, whatever a run is asked for (a dry run may test anything)
+  FLOOR: 4.2.0-nightly.202611190245.g6a59a1d
+  # how long a dispatched version may take to appear on the registry
+  NPM_WAIT_SECONDS: "1200"
+  # a version that failed is tested again by the schedule after this long (a new nightly at once)
+  RETEST_FAILED_HOURS: "6"
+  MAX_RETRIES: "3"
   YOUTUBE_DL_SKIP_DOWNLOAD: "1"
 
 jobs:
-  check:
+  probe:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 30
     permissions:
       contents: read
+      actions: read
+      issues: write
     outputs:
       update: ${{ steps.want.outputs.update }}
+      package: ${{ steps.want.outputs.package }}
       current: ${{ steps.want.outputs.current }}
       version: ${{ steps.want.outputs.version }}
       commit: ${{ steps.want.outputs.commit }}
       base: ${{ steps.want.outputs.base }}
+      requested: ${{ steps.want.outputs.requested }}
+      dry_run: ${{ steps.want.outputs.dry_run }}
+      retry: ${{ steps.want.outputs.retry }}
     steps:
+      # package.json is all the probe reads
       - uses: actions/checkout@v5
         with:
           ref: main
+          persist-credentials: false
+          sparse-checkout: package.json
+          sparse-checkout-cone-mode: false
+
+      - name: Newest nightly
+        id: want
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          EVENT: ${{ github.event_name }}
+          REQUESTED: ${{ inputs.version }}
+          DISPATCHED: ${{ github.event.client_payload.version }}
+          DRY_RUN_INPUT: ${{ inputs.dry_run == true }}
+          RETRY: ${{ inputs.retry }}
+        run: |
+          semver='^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'
+          # npm view, with a few tries for a registry hiccup
+          view() {
+            local n
+            for n in 1 2 3 4; do
+              npm view --prefer-online "$@" 2>"$RUNNER_TEMP/npm.err" && return 0
+              grep -q E404 "$RUNNER_TEMP/npm.err" && return 1
+              sleep $((n * 10))
+            done
+            cat "$RUNNER_TEMP/npm.err" >&2
+            return 1
+          }
+          # a version announced right after it was published can take minutes to reach the registry
+          wait_for() {
+            local deadline=$((SECONDS + NPM_WAIT_SECONDS))
+            until [[ $(view "$PACKAGE_NAME@$1" version 2>/dev/null) == "$1" ]]; do
+              if ((SECONDS >= deadline)); then
+                echo "::error::npm still has no $PACKAGE_NAME@$1 after ${NPM_WAIT_SECONDS}s"
+                return 1
+              fi
+              echo "waiting for npm to serve $PACKAGE_NAME@$1"
+              sleep 15
+            done
+          }
+          published() { node -e 'const t = require(process.argv[1]); console.log(Date.parse(t[process.argv[2]] ?? 0) || 0)' "$RUNNER_TEMP/times.json" "$1"; }
+
+          current=$(node -p 'require("./package.json").dependencies[process.env.PACKAGE_NAME]')
+          dry_run=false
+          [[ $EVENT == workflow_dispatch && $DRY_RUN_INPUT == true ]] && dry_run=true
+          [[ $RETRY =~ ^[0-9]+$ ]] || RETRY=0
+          if [[ -n $REQUESTED ]]; then
+            [[ $REQUESTED =~ $semver ]] || { echo "::error::not a version: $REQUESTED"; exit 1; }
+            wait_for "$REQUESTED"
+            version=$REQUESTED
+          else
+            if [[ -n $DISPATCHED ]]; then
+              [[ $DISPATCHED =~ $semver ]] || { echo "::error::the dispatch names no version: $DISPATCHED"; exit 1; }
+              wait_for "$DISPATCHED"
+            fi
+            version=$(view "$PACKAGE_NAME@nightly" version)
+          fi
+          view "$PACKAGE_NAME" time --json >"$RUNNER_TEMP/times.json"
+          # the dispatched version, unless the tag already names a newer one
+          if [[ -z $REQUESTED && -n $DISPATCHED ]] && (($(published "$DISPATCHED") > $(published "$version"))); then
+            version=$DISPATCHED
+          fi
+          commit=$(view "$PACKAGE_NAME@$version" gitHead)
+          package=false
+          if [[ $version != "$current" ]]; then
+            package=true
+            # never go back: the candidate must have been published after the pin and not before
+            # the floor; a manual run may test an older one, but only as a dry run
+            if (($(published "$version") <= $(published "$current") || $(published "$version") < $(published "$FLOOR"))); then
+              if [[ $dry_run == true && -n $REQUESTED ]]; then
+                echo "::notice::$version was published before the pinned $current; a dry run tests it anyway"
+              elif [[ -n $REQUESTED ]]; then
+                echo "::error::$version was published before the pinned $current (or before $FLOOR); the updater never goes back. Use dry_run to only test it."
+                exit 1
+              else
+                echo "::warning::npm names $version, published before the pinned $current; not updating"
+                package=false
+              fi
+            fi
+          fi
+          {
+            echo "current=$current"
+            echo "version=$version"
+            echo "commit=$commit"
+            echo "package=$package"
+            echo "base=$(git rev-parse HEAD)"
+            echo "requested=$REQUESTED"
+            echo "dry_run=$dry_run"
+            echo "retry=$RETRY"
+          } >>"$GITHUB_OUTPUT"
+
+          issue=$(gh issue list --state open --author app/github-actions --json number,title,updatedAt \
+            --jq 'map(select(.title == env.ISSUE_TITLE))[0] // empty')
+          if [[ $package == false && $dry_run == true ]]; then
+            # a dry run of the pin itself: the whole check, nothing bumped
+            echo "::notice::$PACKAGE_NAME $current is current; dry run of the pin"
+            echo update=true >>"$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [[ $package == false ]]; then
+            echo "::notice::$PACKAGE_NAME $current is current"
+            echo update=false >>"$GITHUB_OUTPUT"
+            # main is current; once its last deploy passed, nothing is left for the issue to report
+            if [[ -n $issue ]]; then
+              n=$(jq -r .number <<<"$issue")
+              read -r conclusion sha < <(gh run list --workflow deploy.yml --branch main --status completed -L 1 \
+                --json conclusion,headSha --jq '.[0] | "\(.conclusion) \(.headSha)"')
+              if [[ $conclusion == success ]]; then
+                gh issue close "$n" --comment "main has \`$PACKAGE_NAME@$current\`, the newest nightly, and its last deploy (${sha:0:7}) passed."
+              fi
+            fi
+            exit 0
+          fi
+          # the schedule does not retest a version that just failed; a new nightly, a dispatch or a
+          # manual run tests at once
+          if [[ $EVENT == schedule && -n $issue ]]; then
+            n=$(jq -r .number <<<"$issue")
+            updated=$(date -d "$(jq -r .updatedAt <<<"$issue")" +%s)
+            text=$(gh issue view "$n" --json body,comments --jq '[.body, .comments[].body] | join("\n")')
+            if grep -qF "<!-- stomp-update-failed: $version -->" <<<"$text" &&
+              (($(date +%s) - updated < RETEST_FAILED_HOURS * 3600)); then
+              echo "::notice::$version failed less than ${RETEST_FAILED_HOURS}h ago (#$n); the schedule tries it again later"
+              echo update=false >>"$GITHUB_OUTPUT"
+              exit 0
+            fi
+          fi
+          echo "::notice::$PACKAGE_NAME $current -> $version ($UPSTREAM@$commit)$([[ $dry_run == true ]] && echo ', dry run')"
+          echo update=true >>"$GITHUB_OUTPUT"
+
+  check:
+    needs: probe
+    if: needs.probe.outputs.update == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    permissions:
+      contents: read
+    outputs:
+      error: ${{ steps.explain.outputs.error }}
+    env:
+      BASE: ${{ needs.probe.outputs.base }}
+      BUMP: ${{ needs.probe.outputs.package }}
+      VERSION: ${{ needs.probe.outputs.version }}
+      PORT: "5231"
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.probe.outputs.base }}
           persist-credentials: false
 
       - uses: actions/setup-node@v5
@@ -66,151 +256,239 @@ jobs:
           node-version: 26
           cache: npm
 
-      - name: Newest nightly
-        id: want
-        env:
-          REQUESTED: ${{ inputs.version }}
+      - name: Retry helper
         run: |
-          current=$(node -p 'require("./package.json").dependencies["@sysce/stomp"]')
-          version=${REQUESTED:-$(npm view @sysce/stomp@nightly version)}
-          commit=$(npm view "@sysce/stomp@$version" gitHead)
-          {
-            echo "current=$current"
-            echo "version=$version"
-            echo "commit=$commit"
-            echo "base=$(git rev-parse HEAD)"
-          } >>"$GITHUB_OUTPUT"
-          if [[ $version == "$current" ]]; then
-            echo "::notice::@sysce/stomp $current is the newest nightly"
-            echo update=false >>"$GITHUB_OUTPUT"
-            exit 0
-          fi
-          # never go back: the candidate must have been published after the pin
-          # (a manual run may name any version)
-          if [[ -z $REQUESTED ]]; then
-            npm view @sysce/stomp time --json >"$RUNNER_TEMP/times.json"
-            if ! node -e '
-              const t = require(process.argv[1]);
-              process.exit(Date.parse(t[process.argv[3]]) > Date.parse(t[process.argv[2]] ?? 0) ? 0 : 1);
-            ' "$RUNNER_TEMP/times.json" "$current" "$version"; then
-              echo "::warning::the nightly tag names $version, published before the pinned $current; not updating"
-              echo update=false >>"$GITHUB_OUTPUT"
-              exit 0
-            fi
-          fi
-          echo "::notice::@sysce/stomp $current -> $version (powerMouse $commit)"
-          echo update=true >>"$GITHUB_OUTPUT"
+          # registry and network steps get four tries: a tarball can 404 for a while after publish
+          cat >"$RUNNER_TEMP/retry.sh" <<'EOF'
+          retry() {
+            local n
+            for n in 1 2 3 4; do
+              "$@" && return 0
+              ((n < 4)) || break
+              echo "::warning::try $n of 4 failed: $*; again in $((n * 30))s"
+              sleep $((n * 30))
+            done
+            return 1
+          }
+          EOF
 
       - name: Install the pinned version
-        if: steps.want.outputs.update == 'true'
-        run: npm ci
+        run: |
+          . "$RUNNER_TEMP/retry.sh"
+          retry npm ci 2>&1 | tee -a "$RUNNER_TEMP/gate.log"
 
       - name: tsc errors before
-        if: steps.want.outputs.update == 'true'
         run: |
           n=$( (npx tsc -p tsconfig.json --noEmit || true) | grep -c 'error TS' || true)
           echo "TSC_BEFORE=$n" >>"$GITHUB_ENV"
           echo "tsc: $n errors on the pinned version"
 
-      - name: stomp-check on the pinned version
-        if: steps.want.outputs.update == 'true'
+      - name: Bump
+        if: env.BUMP == 'true'
         run: |
-          npm run build
-          PORT=5231 setsid npx tsx backend.ts >"$RUNNER_TEMP/backend-before.log" 2>&1 &
-          pid=$!
-          for _ in $(seq 1 60); do curl -fsS -o /dev/null http://127.0.0.1:5231/ && break; sleep 1; done
-          STOMP_CHECK_RESULTS="$RUNNER_TEMP/stomp-before.json" node scripts/stomp-check.mjs http://127.0.0.1:5231/ || true
-          kill -- "-$pid" || true
-          # the comparison needs a run that got somewhere
-          # shellcheck disable=SC2016 # the single-quoted $ are JavaScript's
-          node -e 'const r = require(process.argv[1]); console.log(`pinned version: ${r.filter(c => c.pass).length} of ${r.length} checks pass`); process.exit(r.some(c => c.pass) ? 0 : 1)' "$RUNNER_TEMP/stomp-before.json"
-
-      - name: Bump @sysce/stomp
-        if: steps.want.outputs.update == 'true'
-        env:
-          VERSION: ${{ steps.want.outputs.version }}
-        run: |
-          npm install --save-exact "@sysce/stomp@$VERSION"
-          changed=$(git status --porcelain | awk '{print $2}' | sort | tr '\n' ' ')
-          if [[ $changed != "package-lock.json package.json " ]]; then
-            echo "::error::the bump changed more than package.json and package-lock.json: $changed"
-            exit 1
-          fi
+          . "$RUNNER_TEMP/retry.sh"
+          retry npm install --prefer-online --save-exact "$PACKAGE_NAME@$VERSION" 2>&1 | tee -a "$RUNNER_TEMP/gate.log"
+          test "$(node -p 'require("./package.json").dependencies[process.env.PACKAGE_NAME]')" = "$VERSION"
           mkdir -p "$RUNNER_TEMP/bump"
           cp package.json package-lock.json "$RUNNER_TEMP/bump/"
-          # install from the new lockfile as the deploy does
-          npm ci
+
+      # package.json and package-lock.json, and in package.json only the pin; src/libs/stompEngine.ts
+      # (webTransport: false) and every other file stay as main has them
+      - name: Only the pin changed
+        run: |
+          {
+            changed=$(git status --porcelain | awk '{ print $2 }' | sort | tr '\n' ' ')
+            for path in $changed; do
+              case $path in
+                package.json | package-lock.json) ;;
+                *) echo "::error::the bump changed $path"; exit 1 ;;
+              esac
+            done
+            git diff --exit-code "$BASE" -- src/libs/stompEngine.ts
+            git show "$BASE:package.json" >"$RUNNER_TEMP/package.base.json"
+            # shellcheck disable=SC2016 # the single-quoted $ are JavaScript's
+            node -e '
+              const sorted = v => (v && typeof v === "object" && !Array.isArray(v) ? Object.fromEntries(Object.keys(v).sort().map(k => [k, sorted(v[k])])) : v);
+              const [baseFile, name, version] = process.argv.slice(1);
+              const want = require(baseFile);
+              want.dependencies[name] = version;
+              const now = require(`${process.cwd()}/package.json`);
+              if (JSON.stringify(sorted(want)) !== JSON.stringify(sorted(now))) {
+                console.log(`::error::package.json changed beyond the ${name} pin`);
+                process.exit(1);
+              }
+              const lock = require(`${process.cwd()}/package-lock.json`).packages[""];
+              if (lock.dependencies?.[name] !== version) {
+                console.log(`::error::package-lock.json does not pin ${name} ${version}`);
+                process.exit(1);
+              }
+              console.log(`only the ${name} pin changed (${version})`);
+            ' "$RUNNER_TEMP/package.base.json" "$PACKAGE_NAME" "$VERSION"
+          } 2>&1 | tee -a "$RUNNER_TEMP/gate.log"
 
       - uses: actions/upload-artifact@v4
-        if: steps.want.outputs.update == 'true'
+        if: env.BUMP == 'true' && needs.probe.outputs.dry_run != 'true'
         with:
           name: stomp-bump
           path: ${{ runner.temp }}/bump/
           retention-days: 7
           if-no-files-found: error
 
+      # install from the new lockfile, as the deploy does
+      - name: Install the new version
+        if: env.BUMP == 'true'
+        run: |
+          . "$RUNNER_TEMP/retry.sh"
+          retry npm ci 2>&1 | tee -a "$RUNNER_TEMP/gate.log"
+
       - name: No new tsc errors
-        if: steps.want.outputs.update == 'true'
         run: |
           n=$( (npx tsc -p tsconfig.json --noEmit || true) | tee "$RUNNER_TEMP/tsc.log" | grep -c 'error TS' || true)
           echo "tsc: $n errors (pinned version: $TSC_BEFORE)"
-          if (( n > TSC_BEFORE )); then
-            grep 'error TS' "$RUNNER_TEMP/tsc.log"
+          if ((n > TSC_BEFORE)); then
+            { echo "::error::tsc: $n errors, $TSC_BEFORE on the pinned version"; grep 'error TS' "$RUNNER_TEMP/tsc.log"; } | tee -a "$RUNNER_TEMP/gate.log"
             exit 1
           fi
 
       - name: Unit tests
-        if: steps.want.outputs.update == 'true'
-        run: npm test
+        run: npm test 2>&1 | tee -a "$RUNNER_TEMP/gate.log"
 
-      # two full builds (npm run build, with the protection pipeline), then a deploy between them
+      # npm run build is vite build and the protection pipeline (prune, obfuscate, canary check,
+      # dist-refs check), which fails on any leak; two builds, for deploy-check's swap
+      - name: Two builds with the protection pipeline
+        run: |
+          if [[ -n ${SHIELD_MODE:-} ]]; then
+            echo "::error::SHIELD_MODE is set ($SHIELD_MODE); the update builds in compile mode only" | tee -a "$RUNNER_TEMP/gate.log"
+            exit 1
+          fi
+          for build in a b; do
+            echo "::group::build $build"
+            npm run build 2>&1 | tee -a "$RUNNER_TEMP/gate.log"
+            echo "::endgroup::"
+            test -f dist/index.html
+            rm -rf "$RUNNER_TEMP/build-$build"
+            cp -a dist "$RUNNER_TEMP/build-$build"
+          done
+          # the canary and reference checks again on each copy (read-only)
+          for build in a b; do
+            node scripts/check-plaintext-leaks.mjs "$RUNNER_TEMP/build-$build" 2>&1 | tail -n 3 | tee -a "$RUNNER_TEMP/gate.log"
+            node scripts/check-dist-refs.mjs "$RUNNER_TEMP/build-$build" 2>&1 | tee -a "$RUNNER_TEMP/gate.log"
+          done
+
+      # the swap between the two builds in one browser profile, through both engines; it loads
+      # example.com through the relay, so it gets a second try
       - name: deploy-check
-        if: steps.want.outputs.update == 'true'
-        run: node scripts/deploy-check.mjs
+        run: |
+          for n in 1 2; do
+            if node scripts/deploy-check.mjs --builds "$RUNNER_TEMP/build-a" "$RUNNER_TEMP/build-b" 2>&1 | tee "$RUNNER_TEMP/deploy-check-$n.log"; then
+              ok=1
+              break
+            fi
+            ((n < 2)) && { echo "::warning::deploy-check failed (try $n of 2); again in 60s"; sleep 60; }
+          done
+          if [[ -z ${ok:-} ]]; then
+            grep -E '^FAIL|FAILED|Error' "$RUNNER_TEMP/deploy-check-$n.log" | tee -a "$RUNNER_TEMP/gate.log"
+            exit 1
+          fi
+          # serve the second build from here on
+          rm -rf dist
+          cp -a "$RUNNER_TEMP/build-b" dist
 
-      - name: boot-check and stomp-check on the new version
-        if: steps.want.outputs.update == 'true'
+      - name: boot-check and stomp-check
         run: |
           test -f dist/index.html
-          PORT=5231 setsid npx tsx backend.ts >"$RUNNER_TEMP/backend-after.log" 2>&1 &
+          setsid npx tsx backend.ts >"$RUNNER_TEMP/backend.log" 2>&1 &
           pid=$!
-          trap 'kill -- "-$pid" || true' EXIT
-          for _ in $(seq 1 60); do curl -fsS -o /dev/null http://127.0.0.1:5231/ && break; sleep 1; done
-          node scripts/boot-check.mjs http://127.0.0.1:5231/
-          STOMP_CHECK_RESULTS="$RUNNER_TEMP/stomp-after.json" node scripts/stomp-check.mjs http://127.0.0.1:5231/ || true
-          # a check that passed on the pinned version must pass now; one that is missing
-          # (the run stopped before it) counts as failed
-          # shellcheck disable=SC2016 # the single-quoted $ are JavaScript's
-          node -e '
-            const [before, after] = process.argv.slice(1).map(f => { try { return require(f); } catch { return []; } });
-            const passed = new Set(after.filter(r => r.pass).map(r => r.name));
-            const lost = before.filter(r => r.pass && !passed.has(r.name)).map(r => r.name);
-            const fixed = after.filter(r => r.pass && !before.some(b => b.pass && b.name === r.name)).map(r => r.name);
-            if (fixed.length) console.log(`passes now, failed before: ${fixed.join("; ")}`);
-            if (lost.length) { console.log(`::error::stomp-check: passed on the pinned version, fails now: ${lost.join("; ")}`); process.exit(1); }
-            console.log(`stomp-check: no check lost (${passed.size} pass)`);
-          ' "$RUNNER_TEMP/stomp-before.json" "$RUNNER_TEMP/stomp-after.json"
+          trap 'kill -- "-$pid" 2>/dev/null || true' EXIT
+          for _ in $(seq 1 60); do curl -fsS -o /dev/null "http://127.0.0.1:$PORT/" && break; sleep 1; done
+          if ! curl -fsS -o /dev/null "http://127.0.0.1:$PORT/"; then
+            { echo "::error::the backend did not answer on :$PORT"; tail -n 40 "$RUNNER_TEMP/backend.log"; } | tee -a "$RUNNER_TEMP/gate.log"
+            exit 1
+          fi
+          node scripts/boot-check.mjs "http://127.0.0.1:$PORT/" 2>&1 | tee -a "$RUNNER_TEMP/gate.log"
+          # up to three runs; a check passes when it passed in one of them (Wikipedia rate limits a
+          # runner now and then). The gate lists the known failures it does not count.
+          results=()
+          for n in 1 2 3; do
+            echo "::group::stomp-check, run $n"
+            STOMP_CHECK_RESULTS="$RUNNER_TEMP/stomp-$n.json" timeout 900 node scripts/stomp-check.mjs "http://127.0.0.1:$PORT/" 2>&1 |
+              tee "$RUNNER_TEMP/stomp-$n.log" || true
+            echo "::endgroup::"
+            results+=("$RUNNER_TEMP/stomp-$n.json")
+            if node scripts/stomp-check-gate.mjs "${results[@]}" >"$RUNNER_TEMP/stomp-gate.log" 2>&1; then
+              tee -a "$RUNNER_TEMP/gate.log" <"$RUNNER_TEMP/stomp-gate.log"
+              exit 0
+            fi
+            cat "$RUNNER_TEMP/stomp-gate.log"
+            ((n < 3)) && { echo "::warning::stomp-check: not every check passed yet (run $n of 3); again in $((n * 90))s"; sleep $((n * 90)); }
+          done
+          {
+            cat "$RUNNER_TEMP/stomp-gate.log"
+            grep -E '^FAIL|Error' "$RUNNER_TEMP/stomp-3.log" || true
+          } | tee -a "$RUNNER_TEMP/gate.log"
+          exit 1
+
+      # the build writes only ignored files
+      - name: The build left the source alone
+        run: |
+          {
+            git diff --exit-code "$BASE" -- src/libs/stompEngine.ts
+            changed=$(git status --porcelain | awk '{ print $2 }' | sort | tr '\n' ' ')
+            for path in $changed; do
+              case $path in
+                package.json | package-lock.json) ;;
+                *) echo "::error::the check changed $path"; exit 1 ;;
+              esac
+            done
+          } 2>&1 | tee -a "$RUNNER_TEMP/gate.log"
+
+      # the lines the issue quotes: failed checks, leaks, thrown errors, tsc and npm errors
+      - name: Explain the failure
+        id: explain
+        if: failure()
+        run: |
+          [[ -f $RUNNER_TEMP/gate.log ]] || exit 0
+          # each matching line, and the indented lines under it (without stack frames)
+          # shellcheck disable=SC2016 # the single-quoted $0 is awk's
+          sed 's/\x1b\[[0-9;]*m//g' "$RUNNER_TEMP/gate.log" |
+            awk '/^FAIL|FAILED|^LEAK|Error:|error TS|^error|::error::|npm error|ERR!|NAVIGATION FAILURE|shield errors: [^n]|✖/ { print; under = 8; next }
+              under > 0 && /^[ \t]/ && !/^[ \t]+at / { print; under--; next }
+              { under = 0 }' |
+            cut -c 1-400 | awk '!seen[$0]++' | head -n 60 | sed 's/```/` ` `/g' >"$RUNNER_TEMP/error.txt" || true
+          {
+            echo "error<<STOMP_UPDATE_EOF"
+            cat "$RUNNER_TEMP/error.txt"
+            echo "STOMP_UPDATE_EOF"
+          } >>"$GITHUB_OUTPUT"
+          # shellcheck disable=SC2016 # the backticks are literal
+          printf '### The update failed\n\n```text\n%s\n```\n' "$(cat "$RUNNER_TEMP/error.txt")" >>"$GITHUB_STEP_SUMMARY"
 
   publish:
-    needs: check
-    if: needs.check.outputs.update == 'true'
+    needs: [probe, check]
+    if: needs.probe.outputs.update == 'true' && needs.probe.outputs.package == 'true' && needs.probe.outputs.dry_run != 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 60
     permissions:
       contents: write
       actions: write
       issues: write
+    outputs:
+      pushed: ${{ steps.push.outputs.pushed }}
+      sha: ${{ steps.push.outputs.sha }}
+      deploy: ${{ steps.deploy.outputs.url }}
     env:
       GH_TOKEN: ${{ github.token }}
       GH_REPO: ${{ github.repository }}
-      CURRENT: ${{ needs.check.outputs.current }}
-      VERSION: ${{ needs.check.outputs.version }}
-      COMMIT: ${{ needs.check.outputs.commit }}
-      BASE: ${{ needs.check.outputs.base }}
+      CURRENT: ${{ needs.probe.outputs.current }}
+      VERSION: ${{ needs.probe.outputs.version }}
+      COMMIT: ${{ needs.probe.outputs.commit }}
+      BASE: ${{ needs.probe.outputs.base }}
+      REQUESTED: ${{ needs.probe.outputs.requested }}
+      RETRY: ${{ needs.probe.outputs.retry }}
     steps:
       - uses: actions/checkout@v5
         with:
-          ref: ${{ needs.check.outputs.base }}
+          ref: ${{ needs.probe.outputs.base }}
 
       - uses: actions/download-artifact@v4
         with:
@@ -221,40 +499,104 @@ jobs:
         id: push
         run: |
           cp "$RUNNER_TEMP/bump/package.json" "$RUNNER_TEMP/bump/package-lock.json" .
-          changed=$(git status --porcelain | awk '{print $2}' | sort | tr '\n' ' ')
+          git add package.json package-lock.json
+          changed=$(git diff --cached --name-only | sort | tr '\n' ' ')
           if [[ $changed != "package-lock.json package.json " ]]; then
             echo "::error::unexpected changes: $changed"
             exit 1
           fi
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit -q --no-verify -m "Update STomp to $VERSION" -m "$PACKAGE_NAME $CURRENT -> $VERSION, built from $UPSTREAM@$COMMIT."
+          # main must still be the commit the check tested on; a push can also lose that race
           git fetch --no-tags origin main
-          if [[ $(git rev-parse FETCH_HEAD) != "$BASE" ]]; then
-            echo "::warning::main moved while the update was checked; nothing pushed, the next run checks again"
-            echo pushed=false >>"$GITHUB_OUTPUT"
+          if [[ $(git rev-parse FETCH_HEAD) == "$BASE" ]] && git push origin HEAD:main; then
+            echo pushed=true >>"$GITHUB_OUTPUT"
+            echo "sha=$(git rev-parse HEAD)" >>"$GITHUB_OUTPUT"
+            echo "::notice::pushed $(git rev-parse HEAD) to main"
             exit 0
           fi
-          git add package.json package-lock.json
-          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
-            commit -q --no-verify -m "Update STomp to $VERSION" -m "@sysce/stomp $CURRENT -> $VERSION, built from Fracital/powerMouse@$COMMIT."
-          git push origin HEAD:main
-          echo pushed=true >>"$GITHUB_OUTPUT"
-          echo "::notice::pushed $(git rev-parse HEAD) to main"
+          echo pushed=false >>"$GITHUB_OUTPUT"
+          # test the update again on top of the new main: a fresh run bumps from there
+          if ((RETRY < MAX_RETRIES)); then
+            gh workflow run stomp-update.yml --ref main -f version="$REQUESTED" -f retry=$((RETRY + 1))
+            echo "::notice::main moved while the update was checked; nothing pushed, started a new run on the new main (retry $((RETRY + 1)) of $MAX_RETRIES)"
+          else
+            echo "::warning::main moved while the update was checked, $MAX_RETRIES retries in a row; nothing pushed, the schedule tries again"
+          fi
 
       - name: Deploy
+        id: deploy
         if: steps.push.outputs.pushed == 'true'
-        run: gh workflow run deploy.yml --ref main
+        env:
+          SHA: ${{ steps.push.outputs.sha }}
+        run: |
+          contains() {
+            local status
+            status=$(gh api "repos/$GH_REPO/compare/$SHA...$1" --jq .status)
+            [[ $status == identical || $status == ahead ]]
+          }
+          # the deploy run this workflow started; find ours by its id not being there before
+          ids() { gh run list --workflow deploy.yml --event workflow_dispatch -L 20 --json databaseId --jq '.[].databaseId' | sort; }
+          ids >"$RUNNER_TEMP/before"
+          gh workflow run deploy.yml --ref main
+          run=
+          for _ in $(seq 1 24); do
+            sleep 5
+            run=$(ids | comm -13 "$RUNNER_TEMP/before" - | head -n 1) || true
+            [[ -n $run ]] && break
+          done
+          if [[ -z $run ]]; then
+            echo "::error::deploy.yml was dispatched but no run appeared"
+            exit 1
+          fi
+          # deploy.yml cancels a deploy in progress when a newer one starts; follow the newer one
+          # while it still contains the update
+          for _ in 1 2 3 4; do
+            url=$(gh run view "$run" --json url --jq .url)
+            head=$(gh run view "$run" --json headSha --jq .headSha)
+            echo "url=$url" >>"$GITHUB_OUTPUT"
+            echo "::notice::deploy of ${head:0:7}: $url"
+            if ! contains "$head"; then
+              echo "::error::the deploy runs $head, which does not contain $SHA"
+              exit 1
+            fi
+            gh run watch "$run" --interval 20 >/dev/null || true
+            conclusion=$(gh run view "$run" --json conclusion --jq .conclusion)
+            if [[ $conclusion == success ]]; then
+              echo "::notice::deployed $SHA"
+              exit 0
+            fi
+            if [[ $conclusion != cancelled ]]; then
+              echo "::error::the deploy of $SHA failed ($conclusion): $url"
+              exit 1
+            fi
+            next=$(gh run list --workflow deploy.yml --branch main -L 1 --json databaseId --jq '.[0].databaseId')
+            if [[ -z $next || $next == "$run" ]]; then
+              echo "::error::the deploy of $SHA was cancelled and no newer deploy runs: $url"
+              exit 1
+            fi
+            echo "::notice::the deploy was cancelled by a newer one, $next; following it"
+            run=$next
+          done
+          echo "::error::the deploy of $SHA was cancelled too many times"
+          exit 1
 
       - name: Close the failure issue
         if: steps.push.outputs.pushed == 'true'
+        env:
+          URL: ${{ steps.deploy.outputs.url }}
         run: |
           n=$(gh issue list --state open --author app/github-actions --json number,title \
             --jq 'map(select(.title == env.ISSUE_TITLE))[0].number // empty')
           if [[ -n $n ]]; then
-            gh issue close "$n" --comment "Updated to \`$VERSION\` in $(git rev-parse HEAD); deploy started."
+            gh issue close "$n" --comment "Updated to \`$VERSION\` ($UPSTREAM@$COMMIT) in $(git rev-parse HEAD) and deployed: $URL"
           fi
 
   report:
-    needs: [check, publish]
-    if: always() && needs.check.outputs.update == 'true' && (needs.check.result == 'failure' || needs.publish.result == 'failure')
+    needs: [probe, check, publish]
+    if: >-
+      always() && needs.probe.outputs.update == 'true' && needs.probe.outputs.dry_run != 'true' &&
+      (needs.check.result == 'failure' || needs.publish.result == 'failure')
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -263,9 +605,13 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
       GH_REPO: ${{ github.repository }}
-      CURRENT: ${{ needs.check.outputs.current }}
-      VERSION: ${{ needs.check.outputs.version }}
-      COMMIT: ${{ needs.check.outputs.commit }}
+      CURRENT: ${{ needs.probe.outputs.current }}
+      VERSION: ${{ needs.probe.outputs.version }}
+      COMMIT: ${{ needs.probe.outputs.commit }}
+      PUSHED: ${{ needs.publish.outputs.pushed }}
+      SHA: ${{ needs.publish.outputs.sha }}
+      DEPLOY: ${{ needs.publish.outputs.deploy }}
+      ERROR: ${{ needs.check.outputs.error }}
       RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
     steps:
       - name: Open or update the issue
@@ -273,18 +619,34 @@ jobs:
           # shellcheck disable=SC2016 # the single-quoted $ are jq's
           steps=$(gh run view "$GITHUB_RUN_ID" --json jobs \
             --jq '[.jobs[] | .name as $j | .steps[] | select(.conclusion == "failure") | "\($j): \(.name)"] | join(", ")')
-          marker="<!-- stomp-update-failed: $VERSION -->"
-          body=$(printf '%s\n\n%s\n\n%s\n\n%s\n' \
-            "Updating \`@sysce/stomp\` from \`$CURRENT\` to \`$VERSION\` (Fracital/powerMouse@$COMMIT) failed, so main still pins \`$CURRENT\`." \
-            "Failed: ${steps:-see the run}. Run: $RUN_URL" \
-            "To reproduce: \`npm install @sysce/stomp@$VERSION --save-exact\`, then \`npm run build\`, \`npm test\`, \`node scripts/deploy-check.mjs\` and \`node scripts/stomp-check.mjs <url>\` against the backend." \
-            "$marker")
+          if [[ $PUSHED == true ]]; then
+            marker="<!-- stomp-update-deploy-failed: $SHA -->"
+            body=$(printf '%s\n\n%s\n\n%s\n' \
+              "main has \`$PACKAGE_NAME@$VERSION\` in $SHA, but its deploy did not pass: ${DEPLOY:-no deploy run was found}." \
+              "Failed: ${steps:-see the run}. Run: $RUN_URL. Run the Deploy workflow again once the cause is fixed." \
+              "$marker")
+          else
+            marker="<!-- stomp-update-failed: $VERSION -->"
+            error=
+            # shellcheck disable=SC2016 # the backticks are literal
+            [[ -n $ERROR ]] && error=$(printf '```text\n%s\n```' "$ERROR")
+            body=$(printf '%s\n\n%s\n\n%s\n\n%s\n\n%s\n' \
+              "Updating \`$PACKAGE_NAME\` from \`$CURRENT\` to \`$VERSION\` ($UPSTREAM@$COMMIT) failed, so main still pins \`$CURRENT\`." \
+              "Failed: ${steps:-see the run}. Run: $RUN_URL" \
+              "${error:-No error lines were captured; see the run.}" \
+              "To reproduce: \`npm install $PACKAGE_NAME@$VERSION --save-exact\`, then \`npm run build\`, \`npm test\`, \`node scripts/deploy-check.mjs\`, and against the backend \`node scripts/boot-check.mjs <url>\` and \`STOMP_CHECK_RESULTS=r.json node scripts/stomp-check.mjs <url>; node scripts/stomp-check-gate.mjs r.json\`." \
+              "$marker")
+          fi
           n=$(gh issue list --state open --author app/github-actions --json number,title \
             --jq 'map(select(.title == env.ISSUE_TITLE))[0].number // empty')
           if [[ -z $n ]]; then
             gh issue create --title "$ISSUE_TITLE" --body "$body"
-          elif ! gh issue view "$n" --json body,comments --jq '[.body, .comments[].body] | join("\n")' | grep -qF "$marker"; then
+            exit 0
+          fi
+          text=$(gh issue view "$n" --json body,comments --jq '[.body, .comments[].body] | join("\n")')
+          if ! grep -qF "$marker" <<<"$text"; then
             gh issue comment "$n" --body "$body"
           else
-            echo "issue #$n already reports $VERSION"
+            # the schedule retests a failed version every few hours; say it still fails
+            gh issue comment "$n" --body "Still failing: $RUN_URL (${steps:-see the run})."
           fi

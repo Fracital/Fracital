@@ -134,29 +134,65 @@ regression, even if the site still works.
 ## Keeping STomp current (`.github/workflows/stomp-update.yml`)
 
 powerMouse publishes its `master` branch to npm as `@sysce/stomp@nightly`
-at 07:17 UTC, and only publishes a commit whose CI passed. At 08:43 and
-20:43 UTC, `stomp-update.yml` reads the nightly tag. If that version was
-published after the one `package.json` pins, the workflow bumps
-`package.json` and `package-lock.json` and runs the checks an engine bump
-needs: `npm test`, no tsc errors beyond the pinned version's,
-`scripts/deploy-check.mjs` (two full builds with the protection pipeline,
-then the swap between them) and `scripts/boot-check.mjs`. It also runs
-`scripts/stomp-check.mjs` on both versions and fails when a check that
-passed on the pinned version fails on the new one. The exit code alone
-cannot be the gate, because the pinned version does not pass every check.
-`stomp-lastfm-check.mjs` is left out, because it needs a database and a
-Last.fm key. If every check passes, `github-actions[bot]` commits the two
-files to `main` and starts `deploy.yml` with `gh workflow run`, because a
-push made with `GITHUB_TOKEN` starts no workflow. If `main` moved during the
-check, nothing is pushed, and the next run tries again on top of the new
-`main`. If a check fails, `main` keeps its pin and the workflow opens an
-issue titled "STomp update needs attention", or comments on the one already
-open. The next update that passes closes the issue. The job that runs npm
-and the build holds only a read token. The workflow needs no secrets beyond
-`GITHUB_TOKEN`. A release that changes which files the engine needs (see
-`STOMP_FILES` in vite.config.ts and `STOMP_ASSETS` in
-`src/libs/stompEngine.ts`) fails here until someone updates the
-integration by hand.
+at 07:17 UTC and on a manual run, and only publishes a commit whose CI
+passed. `stomp-update.yml` moves Fracital to each new nightly by itself:
+
+- Triggers. powerMouse's nightly workflow can send this repository a
+  `repository_dispatch` of type `stomp-nightly` with the version it
+  published in `client_payload.version`, so the update starts within
+  minutes of the publish. The schedule checks every 5 minutes (GitHub's
+  shortest), the fallback for a lost dispatch and while powerMouse has no
+  dispatch token. "Run workflow" tries now, optionally with a specific
+  `version` and with `dry_run`, which runs every check (on the pin itself
+  when it is current) and pushes nothing.
+- The probe job reads the pin on `main` and npm, and stops in seconds when
+  the pin is current. A dispatched version can take minutes to reach the
+  registry, so the probe waits for it, up to 20 minutes. The pin only moves
+  to a version published after the pinned one, and never to one older than
+  `4.2.0-nightly.202611190245.g6a59a1d` (`FLOOR`); a manual run may test an
+  older version only as a dry run.
+- The check job holds no write token. It bumps `package.json` and
+  `package-lock.json` and fails when anything else changed, or anything in
+  `package.json` but the pin, so the updater never touches Fracital's own
+  settings: `src/libs/stompEngine.ts` ships `webTransport: false` on
+  purpose. Then it runs the checks an engine bump needs: `npm test`, no tsc
+  errors beyond the pinned version's, two full builds with the protection
+  pipeline (prune, obfuscate, canary check, dist-refs check),
+  `scripts/deploy-check.mjs` on those two builds, `scripts/boot-check.mjs`
+  and `scripts/stomp-check.mjs`. Installs get four tries (a tarball can 404
+  for a while after publish) and deploy-check two (it loads example.com
+  through the relay).
+- stomp-check runs up to three times, because Wikipedia answers a runner
+  with 429 now and then. `scripts/stomp-check-gate.mjs` then wants every
+  check `stomp-check.mjs` names to have passed in one of the runs, except
+  the known failures in its `KNOWN` list, which also fail on the pinned
+  version (today only "address bar: the page's own url reloads it"). Any
+  other failure fails the update. When a known failure passes again, the
+  gate says so; take it out of `KNOWN`.
+- If all of that passes, `github-actions[bot]` commits the two files to
+  `main`. A push made with `GITHUB_TOKEN` starts no workflow, so the publish
+  job starts `deploy.yml` with `gh workflow run`, finds that run and waits
+  for it to pass (following a newer deploy that cancelled it, as long as
+  that one contains the update).
+- If `main` moved during the check, nothing is pushed: the publish job
+  starts the workflow again, which bumps and tests on top of the new
+  `main`, up to three times in a row. Runs wait for each other (one
+  concurrency group), so two updates never race.
+- If a check fails, `main` keeps its pin and the workflow opens an issue
+  titled "STomp update needs attention", or comments on the one already
+  open, with the error lines, the failed step and how to reproduce it. If
+  the deploy fails, the issue says so. The schedule retests a version that
+  failed every 6 hours; a new nightly, a dispatch or a manual run tests at
+  once. The next update that passes closes the issue, as does a scheduled
+  probe that finds `main` current and its last deploy passed.
+
+The workflow needs no secrets beyond `GITHUB_TOKEN`. The dispatch is sent
+from powerMouse with a token of its own; without it the 5-minute schedule
+still picks up every nightly within minutes. `stomp-lastfm-check.mjs` is
+left out, because it needs a database and a Last.fm key. A release that
+changes which files the engine needs (see `STOMP_FILES` in vite.config.ts
+and `STOMP_ASSETS` in `src/libs/stompEngine.ts`) fails here until someone
+updates the integration by hand.
 
 ## Obfuscation and security (mandatory for all changes)
 
