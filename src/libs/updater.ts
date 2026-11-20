@@ -24,7 +24,7 @@ export const DEFAULT_QUICK_LINKS = [
 	{ title: "YouTube", icon: "/youtube.svg", color: "#ff4242", href: "https://www.youtube.com" },
 	{ title: "Google", icon: "/google.svg", color: "#ffffff", href: "https://google.com" },
 	{ title: "Krunker", icon: "/krunker.png", color: "#ffd95c", href: "https://krunk.io" },
-	{ title: "Estro AI Chat", icon: "/estro.svg", color: "#9a5ae7", href: "https://estro.help/" },
+	{ title: "estrogen", icon: "/estrogen.png", color: "#33b5e5", href: "https://estro.help/" },
 	{ title: "Fracital Music", icon: "/fm.svg", color: "#FFE1F0", href: "about:music" },
 ];
 
@@ -163,7 +163,7 @@ const MIGRATIONS: { id: string; run: () => void | Promise<void> }[] = [
 		id: "quicklinks-v2",
 		// Browsers that already ran this before the updater existed have the old flag.
 		run: () => {
-			if (!localStorage.getItem("quicklinks-v2")) addDefaultLinks(["Krunker", "Estro AI Chat"]);
+			if (!localStorage.getItem("quicklinks-v2")) addDefaultLinks(["Krunker", "estrogen"]);
 		},
 	},
 	{ id: "quicklinks-fracital-music", run: () => addDefaultLinks(["Fracital Music"]) },
@@ -192,6 +192,18 @@ const MIGRATIONS: { id: string; run: () => void | Promise<void> }[] = [
 			if (!saved || !music) return;
 			if (!saved.some(l => l.href === music.href && l.color?.toLowerCase() === "#e25bec")) return;
 			writeQuickLinks(saved.map(l => (l.href === music.href && l.color?.toLowerCase() === "#e25bec" ? { ...l, color: music.color } : l)));
+		},
+	},
+	{
+		// The estro.help tile was mislabeled "Estro AI Chat"; it is the Estrogen JS obfuscator.
+		// Update a tile the user left at the old default (title, icon, color); a renamed one keeps theirs.
+		id: "quicklinks-estro-to-estrogen",
+		run: () => {
+			const saved = readQuickLinks();
+			const estro = DEFAULT_QUICK_LINKS.find(l => l.href === "https://estro.help/");
+			if (!saved || !estro) return;
+			if (!saved.some(l => l.href === estro.href && l.title === "Estro AI Chat")) return;
+			writeQuickLinks(saved.map(l => (l.href === estro.href && l.title === "Estro AI Chat" ? { ...l, title: estro.title, icon: estro.icon, color: estro.color } : l)));
 		},
 	},
 ];
