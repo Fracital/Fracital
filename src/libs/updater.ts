@@ -24,6 +24,7 @@ export const DEFAULT_QUICK_LINKS = [
 	{ title: "YouTube", icon: "/youtube.svg", color: "#ff4242", href: "https://www.youtube.com" },
 	{ title: "Google", icon: "/google.svg", color: "#ffffff", href: "https://google.com" },
 	{ title: "Krunker", icon: "/krunker.png", color: "#ffd95c", href: "https://krunk.io" },
+	{ title: "Flying Gorilla", icon: "/flying-gorilla.png", color: "#1B7F3B", href: "https://pages.eli.gift/fg/" },
 	{ title: "estrogen", icon: "/estrogen.png", color: "#33b5e5", href: "https://estro.help/" },
 	{ title: "Fracital Music", icon: "/fm.svg", color: "#FFE1F0", href: "about:music" },
 ];
